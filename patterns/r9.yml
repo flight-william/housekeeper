@@ -1,12 +1,18 @@
 # R9 "nothing silenced; fix the root cause".
 # Run: semgrep scan --metrics=off --config patterns/r9.yml <targets>
 # Caveats, on purpose (smallest thing that works):
-# - pattern-regex rules (comment and attribute ones) also match the same text
-#   inside a string literal.
+# - Comment and attribute rules are text (pattern-regex). They never match inside
+#   a string literal (pattern-not-inside a string). Rust attributes count only at
+#   the start of a line, so `// #[allow(x)]` in a comment does not; `try?` counts
+#   only before any `//` on its line.
 # - "in tests" means: Swift files named *Tests.swift or under a *Tests/ or
-#   Tests/ folder; Rust code inside `mod tests { ... }` or under tests/.
+#   Tests/ folder; Rust code inside `mod tests { ... }` or under tests/, or a
+#   tests.rs file.
 # - Rust `let _ = ` cannot see types, so it reports every `let _ =` in tests,
-#   not only those on a Result.
+#   not only those on a Result. Cleanup is exempt, where there is nobody to hand
+#   the error to: a `Drop` impl, a `defer!` block, and a function named teardown
+#   or tear_down. Swift `try?` is exempt in the same places: `defer`, `deinit`,
+#   and tearDown/tearDownWithError.
 rules:
   # ---- Python ----
   - id: r9-python-noqa
@@ -15,7 +21,9 @@ rules:
     message: "a `# noqa` comment silences a lint finding"
     metadata:
       fix: "remove the noqa comment and fix what the linter reports"
-    pattern-regex: '(?i)#\s*noqa\b'
+    patterns:
+      - pattern-regex: '(?i)#\s*(ruff:\s*)?noqa\b'
+      - pattern-not-inside: '"..."'
 
   - id: r9-python-type-ignore
     languages: [python]
@@ -23,29 +31,71 @@ rules:
     message: "a `# type: ignore` comment silences a type error"
     metadata:
       fix: "remove the type: ignore comment and fix the type error"
-    pattern-regex: '#\s*type:\s*ignore\b'
+    patterns:
+      - pattern-regex: '#\s*type:\s*ignore\b'
+      - pattern-not-inside: '"..."'
+
+  - id: r9-python-pylint-disable
+    languages: [python]
+    severity: WARNING
+    message: "a `# pylint: disable` comment silences Pylint"
+    metadata:
+      fix: "remove the pylint: disable comment and fix what Pylint reports"
+    patterns:
+      - pattern-regex: '#\s*pylint:\s*disable'
+      - pattern-not-inside: '"..."'
+
+  - id: r9-python-no-cover
+    languages: [python]
+    severity: WARNING
+    message: "a `# pragma: no cover` comment hides code from coverage"
+    metadata:
+      fix: "remove the pragma: no cover comment and test that code, or delete it"
+    patterns:
+      - pattern-regex: '#\s*pragma:\s*no\s*cover\b'
+      - pattern-not-inside: '"..."'
 
   - id: r9-python-pytest-skip
     languages: [python]
     severity: WARNING
-    message: "a pytest skip mark turns a test off"
+    message: "a pytest skip or xfail turns a test off"
     metadata:
-      fix: "remove the skip mark and make the test pass"
+      fix: "remove the skip or xfail and make the test pass"
     pattern-either:
       - pattern: "@pytest.mark.skip"
       - pattern: "@pytest.mark.skip(...)"
       - pattern: "@pytest.mark.skipif(...)"
+      - pattern: "@pytest.mark.xfail"
+      - pattern: "@pytest.mark.xfail(...)"
+      - pattern: pytest.skip(...)
+      - pattern: pytest.xfail(...)
 
   - id: r9-python-unittest-skip
     languages: [python]
     severity: WARNING
-    message: "a unittest skip decorator turns a test off"
+    message: "a unittest skip turns a test off"
     metadata:
-      fix: "remove the skip decorator and make the test pass"
+      fix: "remove the skip and make the test pass"
+    # As calls, so a skip decorator kept in a name (`needs_x = unittest.skipUnless(...)`)
+    # counts too.
     pattern-either:
-      - pattern: "@unittest.skip(...)"
-      - pattern: "@unittest.skipIf(...)"
-      - pattern: "@unittest.skipUnless(...)"
+      - pattern: unittest.skip(...)
+      - pattern: unittest.skipIf(...)
+      - pattern: unittest.skipUnless(...)
+      - pattern: "@unittest.expectedFailure"
+      - pattern: unittest.SkipTest(...)
+      - pattern: $SELF.skipTest(...)
+
+  # ---- Shell ----
+  - id: r9-shell-shellcheck-disable
+    languages: [bash]
+    severity: WARNING
+    message: "a `# shellcheck disable` comment silences ShellCheck"
+    metadata:
+      fix: "remove the shellcheck disable comment and fix what ShellCheck reports"
+    # A directive is a comment line of its own; a line inside a string or a
+    # heredoc that only mentions one does not start with it.
+    pattern-regex: '(?m)^[ \t]*#[ \t]*shellcheck[ \t]+disable\b'
 
   # ---- Swift ----
   - id: r9-swift-swiftlint-disable
@@ -54,7 +104,19 @@ rules:
     message: "a `swiftlint:disable` comment silences SwiftLint"
     metadata:
       fix: "remove the swiftlint:disable comment and fix what SwiftLint reports"
-    pattern-regex: '(//|/\*)\s*swiftlint:disable\b'
+    patterns:
+      - pattern-regex: '(//|/\*)\s*swiftlint:disable\b'
+      - pattern-not-inside: '"..."'
+
+  - id: r9-swift-tool-ignore
+    languages: [swift]
+    severity: WARNING
+    message: "a `swiftformat:disable` or `periphery:ignore` comment silences a tool"
+    metadata:
+      fix: "remove the comment and fix what the tool reports"
+    patterns:
+      - pattern-regex: '(//|/\*)\s*(swiftformat:disable|periphery:ignore)\b'
+      - pattern-not-inside: '"..."'
 
   - id: r9-swift-xctskip
     languages: [swift]
@@ -67,6 +129,16 @@ rules:
       - pattern: XCTSkipIf(...)
       - pattern: XCTSkipUnless(...)
 
+  - id: r9-swift-expected-failure
+    languages: [swift]
+    severity: WARNING
+    message: "an expected-failure marker lets a failing test pass"
+    metadata:
+      fix: "remove XCTExpectFailure or withKnownIssue and fix the failure"
+    pattern-either:
+      - pattern: XCTExpectFailure(...)
+      - pattern: withKnownIssue(...)
+
   - id: r9-swift-testing-disabled
     languages: [swift]
     severity: WARNING
@@ -76,7 +148,9 @@ rules:
     # Only as a trait argument inside @Test(...) or @Suite(...), so SwiftUI's
     # `.disabled(!x)` view modifier is not matched. One level of nested
     # parentheses is allowed before the trait, e.g. @Test("name", .tags(.a), .disabled()).
-    pattern-regex: '@(Test|Suite)\b\s*\((?:[^()]|\([^()]*\))*?\.disabled\s*\('
+    patterns:
+      - pattern-regex: '@(Test|Suite)\b\s*\((?:[^()]|\([^()]*\))*?\.disabled\s*\('
+      - pattern-not-inside: '"..."'
 
   - id: r9-swift-try-optional-in-tests
     languages: [swift]
@@ -89,18 +163,30 @@ rules:
         - "*Tests.swift"
         - "**/*Tests/**"
         - "**/Tests/**"
-    # Semgrep's Swift AST treats `try?` and `try` alike, so this is text.
-    pattern-regex: '\btry\?(?=\s)'
-
+    # Semgrep's Swift AST treats `try?` and `try` alike, so this is text; `\K`
+    # starts the match at `try?`, and only when no `//` comes before it on the line.
+    patterns:
+      - pattern-regex: '(?m)^(?:(?!//)[^\n])*?\K\btry\?(?=\s)'
+      - pattern-not-inside: '"..."'
+      - pattern-not-inside: "defer { ... }"
+      - pattern-not-inside: "func tearDown() { ... }"
+      - pattern-not-inside: "func tearDownWithError() { ... }"
+      # Semgrep's Swift patterns cannot name a deinit, so it is text (one level
+      # of nested braces inside).
+      - pattern-not-regex: '\bdeinit\s*\{(?:[^{}]|\{[^{}]*\})*\}'
 
   # ---- Rust ----
   - id: r9-rust-allow
     languages: [rust]
     severity: WARNING
-    message: "an `#[allow(...)]` attribute silences a lint"
+    message: "an `#[allow(...)]` or `#[expect(...)]` attribute silences a lint"
     metadata:
-      fix: "remove the allow attribute and fix what the lint reports"
-    pattern-regex: '#!?\[\s*allow\s*\('
+      fix: "remove the attribute and fix what the lint reports"
+    patterns:
+      - pattern-either:
+          - pattern-regex: '(?m)^[ \t]*#!?\[\s*(allow|expect)\s*\('
+          - pattern-regex: '(?m)^[ \t]*#!?\[\s*cfg_attr\s*\([^\]]*\b(allow|expect)\s*\('
+      - pattern-not-inside: '"..."'
 
   - id: r9-rust-ignore
     languages: [rust]
@@ -108,7 +194,11 @@ rules:
     message: "an `#[ignore]` attribute turns a test off"
     metadata:
       fix: "remove the ignore attribute and make the test pass"
-    pattern-regex: '#\[\s*ignore\b'
+    patterns:
+      - pattern-either:
+          - pattern-regex: '(?m)^[ \t]*#\[\s*ignore\b'
+          - pattern-regex: '(?m)^[ \t]*#\[\s*cfg_attr\s*\([^\]]*\bignore\b'
+      - pattern-not-inside: '"..."'
 
   - id: r9-rust-let-underscore-in-test-mod
     languages: [rust]
@@ -120,6 +210,10 @@ rules:
       - pattern-inside: |
           mod tests { ... }
       - pattern: let _ = $X;
+      - pattern-not-inside: "impl Drop for $T { ... }"
+      - pattern-not-inside: "defer! { ... }"
+      - pattern-not-inside: "fn teardown(...) { ... }"
+      - pattern-not-inside: "fn tear_down(...) { ... }"
 
   - id: r9-rust-let-underscore-in-tests-dir
     languages: [rust]
@@ -130,4 +224,10 @@ rules:
     paths:
       include:
         - "**/tests/**"
-    pattern: let _ = $X;
+        - "**/tests.rs"
+    patterns:
+      - pattern: let _ = $X;
+      - pattern-not-inside: "impl Drop for $T { ... }"
+      - pattern-not-inside: "defer! { ... }"
+      - pattern-not-inside: "fn teardown(...) { ... }"
+      - pattern-not-inside: "fn tear_down(...) { ... }"

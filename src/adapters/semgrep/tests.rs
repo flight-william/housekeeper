@@ -34,7 +34,7 @@ fn lines_of(findings: &[Finding], file: &str) -> Vec<(u32, String)> {
 }
 
 #[test]
-fn skips_when_no_python_swift_or_rust_file() {
+fn skips_when_no_python_swift_rust_or_shell_file() {
     assert_eq!(Semgrep.command(&ctx(&["README.md", "a.toml"])), None);
 }
 
@@ -46,6 +46,8 @@ fn command_passes_the_pattern_file_and_only_the_concerned_files() {
             "tests/test_a.py",
             "Tests/ATests.swift",
             "src/lib.rs",
+            "scripts/build.sh",
+            "scripts/setup.bash",
         ]))
         .expect("command");
     assert_eq!(cmd.program, "semgrep");
@@ -69,7 +71,13 @@ fn command_passes_the_pattern_file_and_only_the_concerned_files() {
     );
     assert_eq!(
         cmd.args[config + 4..],
-        ["tests/test_a.py", "Tests/ATests.swift", "src/lib.rs"]
+        [
+            "tests/test_a.py",
+            "Tests/ATests.swift",
+            "src/lib.rs",
+            "scripts/build.sh",
+            "scripts/setup.bash"
+        ]
     );
 }
 
@@ -212,7 +220,7 @@ fn crash_without_json_cannot_check() {
 #[test]
 fn every_pattern_rule_has_a_fix_and_warning_severity() {
     let rules = R8.matches("  - id: ").count();
-    assert_eq!(rules, 7);
+    assert_eq!(rules, 32);
     assert_eq!(R8.matches("\n      fix: ").count(), rules);
     assert_eq!(R8.matches("\n    severity: WARNING").count(), rules);
 }

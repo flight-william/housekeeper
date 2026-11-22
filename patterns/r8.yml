@@ -1,27 +1,59 @@
-# House R8: tests are deterministic. No sleeping, no unseeded randomness and no
-# wall-clock reads inside test files. Each rule's metadata.fix is the fix line
-# house replies with.
+# House R8: tests are deterministic. A test must not sleep, wait on a timeout,
+# read the clock, draw unseeded randomness, touch the network, read the machine's
+# locale or time zone, read the home folder, the keychain or a machine path, or
+# rerun itself until it passes. Each rule's metadata.fix is the fix line house
+# replies with.
+#
+# Test code is:
+# - Python: test_*.py, *_test.py, and any .py under a tests/ or test/ folder.
+# - Swift: *Tests.swift, and any .swift under a folder whose name ends in Tests.
+# - Rust: any .rs under a tests/ folder, *_test.rs and tests.rs; and, in any other
+#   .rs file, code inside `mod tests { ... }` or `mod test { ... }`. Each Rust rule
+#   has a `rust-test-mod-*` twin for that inline module with the same patterns,
+#   written out in full (Semgrep's --validate refuses YAML anchors). The test
+#   tests/semgrep_r8.rs runs both on the same planted code, so they cannot drift.
+#
+# Known limits, on purpose (smallest thing that works): a call through an alias
+# or a wrapper the test defines is not seen; a string pattern matches only a
+# string literal that starts with the path, not a path built at run time.
 rules:
+  # ---- Python ----
   - id: python-test-sleep
     languages: [python]
     severity: WARNING
-    message: test sleeps with time.sleep, so it is slow and timing-dependent
+    message: test sleeps, so it is slow and timing-dependent
     metadata:
       fix: wait on the event or inject a fake clock instead of sleeping
     paths:
-      include: ["**/test_*.py", "**/tests/**/*.py"]
-    pattern: time.sleep(...)
+      include:
+        - "**/test_*.py"
+        - "**/*_test.py"
+        - "**/tests/**/*.py"
+        - "**/test/**/*.py"
+    pattern-either:
+      - pattern: time.sleep(...)
+      - pattern: asyncio.sleep(...)
 
   - id: python-test-unseeded-random
     languages: [python]
     severity: WARNING
-    message: test uses random.random() without a seed
+    message: test draws from the random module without a seed
     metadata:
       fix: use random.Random(<seed>) with a fixed seed
     paths:
-      include: ["**/test_*.py", "**/tests/**/*.py"]
+      include:
+        - "**/test_*.py"
+        - "**/*_test.py"
+        - "**/tests/**/*.py"
+        - "**/test/**/*.py"
     patterns:
-      - pattern: random.random()
+      - pattern-either:
+          - patterns:
+              - pattern: random.$F(...)
+              - metavariable-regex:
+                  metavariable: $F
+                  regex: '^(random|randint|randrange|choice|choices|shuffle|sample|uniform|getrandbits)$'
+          - pattern: os.urandom(...)
       - pattern-not-inside: |
           random.seed(...)
           ...
@@ -33,12 +65,163 @@ rules:
     metadata:
       fix: pass a fixed time or inject a fake clock
     paths:
-      include: ["**/test_*.py", "**/tests/**/*.py"]
+      include:
+        - "**/test_*.py"
+        - "**/*_test.py"
+        - "**/tests/**/*.py"
+        - "**/test/**/*.py"
     pattern-either:
       - pattern: datetime.now(...)
       - pattern: datetime.datetime.now(...)
+      - pattern: datetime.datetime.utcnow()
+      - pattern: datetime.datetime.today()
+      - pattern: datetime.date.today()
+      - pattern: date.today()
       - pattern: time.time()
+      - pattern: time.time_ns()
 
+  - id: python-test-locale
+    languages: [python]
+    severity: WARNING
+    message: test reads the machine's locale or time zone
+    metadata:
+      fix: pass a fixed locale or time zone (for example UTC) instead of the machine's
+    paths:
+      include:
+        - "**/test_*.py"
+        - "**/*_test.py"
+        - "**/tests/**/*.py"
+        - "**/test/**/*.py"
+    pattern-either:
+      - pattern: locale.getlocale(...)
+      - pattern: locale.getdefaultlocale(...)
+      - pattern: locale.setlocale($C)
+      - pattern: locale.setlocale($C, "")
+      - pattern: time.localtime(...)
+      - pattern: time.mktime(...)
+      - pattern: time.strftime($F)
+      - pattern: time.tzname
+      - pattern: $D.astimezone()
+
+  - id: python-test-home
+    languages: [python]
+    severity: WARNING
+    message: test reads the home folder of the machine it runs on
+    metadata:
+      fix: make a temp folder in the test and pass it in instead of reading HOME
+    paths:
+      include:
+        - "**/test_*.py"
+        - "**/*_test.py"
+        - "**/tests/**/*.py"
+        - "**/test/**/*.py"
+    patterns:
+      - pattern-either:
+          - pattern: pathlib.Path.home()
+          - pattern: os.path.expanduser(...)
+          - pattern: $P.expanduser()
+          - pattern: os.path.expandvars("=~/[$][{]?HOME([^A-Za-z0-9_]|$)/")
+          - pattern: os.environ["HOME"]
+          - pattern: os.environ.get("HOME", ...)
+          - pattern: os.getenv("HOME", ...)
+          - pattern: getpass.getuser()
+          - pattern: pwd.getpwuid(...)
+      # Pointing HOME at a temp folder is the fix, not a read.
+      - pattern-not-inside: os.environ["HOME"] = $V
+
+  - id: python-test-keychain
+    languages: [python]
+    severity: WARNING
+    # A string counts where it is written, not where a variable carries it.
+    options:
+      constant_propagation: false
+    message: test reads or writes the keychain of the machine it runs on
+    metadata:
+      fix: inject a fake secret store instead of calling the keychain
+    paths:
+      include:
+        - "**/test_*.py"
+        - "**/*_test.py"
+        - "**/tests/**/*.py"
+        - "**/test/**/*.py"
+    pattern-either:
+      - pattern: subprocess.$F(["security", ...], ...)
+      - pattern: subprocess.$F(["/usr/bin/security", ...], ...)
+      - pattern: subprocess.$F("=~/^(\/usr\/bin\/)?security\s/", ...)
+      - pattern: keyring.$F(...)
+      - pattern: '"=~/^(security[ ]+)?(find|add|delete)-(generic|internet)-password([^-a-z]|$)/"'
+
+  - id: python-test-network
+    languages: [python]
+    severity: WARNING
+    message: test opens a network connection without a stub
+    metadata:
+      fix: stub the network (responses, requests_mock, mock.patch or a fake transport) instead of calling it
+    paths:
+      include:
+        - "**/test_*.py"
+        - "**/*_test.py"
+        - "**/tests/**/*.py"
+        - "**/test/**/*.py"
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: requests.$F(...)
+                  - pattern: httpx.$F(...)
+              - metavariable-regex:
+                  metavariable: $F
+                  regex: '^(get|post|put|patch|delete|head|options|request|stream)$'
+          - pattern: aiohttp.ClientSession(...)
+          - pattern: socket.socket(...)
+          - pattern: socket.create_connection(...)
+          - pattern: urllib.request.urlopen(...)
+          - pattern: http.client.HTTPConnection(...)
+          - pattern: http.client.HTTPSConnection(...)
+      - pattern-not-inside: |
+          @responses.activate
+          def $T(...):
+            ...
+      - pattern-not-inside: |
+          @requests_mock.Mocker(...)
+          def $T(...):
+            ...
+      - pattern-not-inside: |
+          @mock.patch(...)
+          def $T(...):
+            ...
+      - pattern-not-inside: |
+          with responses.RequestsMock(...):
+            ...
+      - pattern-not-inside: |
+          with requests_mock.Mocker(...):
+            ...
+      - pattern-not-inside: |
+          with mock.patch(...):
+            ...
+      - pattern-not-inside: |
+          with mock.patch.object(...):
+            ...
+
+  - id: python-test-rerun
+    languages: [python]
+    severity: WARNING
+    message: test is marked to rerun until it passes
+    metadata:
+      fix: remove the flaky mark and fix what makes the test fail
+    paths:
+      include:
+        - "**/test_*.py"
+        - "**/*_test.py"
+        - "**/tests/**/*.py"
+        - "**/test/**/*.py"
+    pattern-either:
+      - pattern: "@pytest.mark.flaky"
+      - pattern: "@pytest.mark.flaky(...)"
+      - pattern: "@flaky.flaky"
+      - pattern: "@flaky.flaky(...)"
+
+  # ---- Swift ----
   - id: swift-test-sleep
     languages: [swift]
     severity: WARNING
@@ -46,42 +229,537 @@ rules:
     metadata:
       fix: await the expectation or inject a fake clock instead of sleeping
     paths:
-      include: ["**/*Tests.swift", "**/Tests/**/*.swift"]
+      include:
+        - "**/*Tests.swift"
+        - "**/*Tests/**/*.swift"
     pattern-either:
       - pattern: Thread.sleep(...)
       - pattern: usleep(...)
+      - pattern: sleep(...)
       - pattern: Task.sleep(...)
+      - pattern: $Q.asyncAfter(...)
+
+  - id: swift-test-wait-timeout
+    languages: [swift]
+    severity: WARNING
+    message: test waits on a timeout, so it is slow and timing-dependent
+    metadata:
+      fix: await the async work directly, or drive it with a fake clock, instead of waiting on a timeout
+    paths:
+      include:
+        - "**/*Tests.swift"
+        - "**/*Tests/**/*.swift"
+    pattern-either:
+      - pattern: "wait(for: $E, timeout: $T)"
+      - pattern: "$W.wait(for: $E, timeout: $T)"
+      - pattern: "fulfillment(of: $E, timeout: $T)"
 
   - id: swift-test-wall-clock
     languages: [swift]
     severity: WARNING
-    message: test reads the wall clock with Date()
+    message: test reads the wall clock
     metadata:
       fix: pass a fixed Date or inject a fake clock
     paths:
-      include: ["**/*Tests.swift", "**/Tests/**/*.swift"]
-    pattern: Date()
+      include:
+        - "**/*Tests.swift"
+        - "**/*Tests/**/*.swift"
+    pattern-either:
+      - pattern: Date()
+      - pattern: Date.now
+      # The implicit member, as in `to: .now`; `fakeClock.now` is not matched.
+      - pattern: .now
+      - pattern: "Date(timeIntervalSinceNow: $X)"
+      - pattern: ContinuousClock.now
+      - pattern: SuspendingClock.now
+      - pattern: ContinuousClock()
+      - pattern: SuspendingClock()
+      - pattern: DispatchTime.now()
+      - pattern: DispatchWallTime.now()
+      - pattern: CFAbsoluteTimeGetCurrent()
 
+  - id: swift-test-unseeded-random
+    languages: [swift]
+    severity: WARNING
+    message: test draws random values from the system generator
+    metadata:
+      fix: "pass a seeded generator with using: instead of the system one"
+    paths:
+      include:
+        - "**/*Tests.swift"
+        - "**/*Tests/**/*.swift"
+    pattern-either:
+      - pattern: "$T.random(in: $R)"
+      - pattern: $T.random()
+      - pattern: $X.randomElement()
+      - pattern: $X.shuffled()
+      - pattern: $X.shuffle()
+
+  - id: swift-test-locale
+    languages: [swift]
+    severity: WARNING
+    message: test reads the machine's locale, calendar or time zone
+    metadata:
+      fix: pass a fixed Locale, Calendar or TimeZone (for example en_US_POSIX and UTC) instead of the machine's
+    paths:
+      include:
+        - "**/*Tests.swift"
+        - "**/*Tests/**/*.swift"
+    pattern-either:
+      - pattern: Locale.current
+      - pattern: Locale.autoupdatingCurrent
+      - pattern: Locale.preferredLanguages
+      - pattern: TimeZone.current
+      - pattern: TimeZone.autoupdatingCurrent
+      - pattern: Calendar.current
+      - pattern: Calendar.autoupdatingCurrent
+
+  - id: swift-test-home
+    languages: [swift]
+    severity: WARNING
+    message: test reads the home folder of the machine it runs on
+    metadata:
+      fix: make a temp folder in the test (FileManager.default.temporaryDirectory) and pass it in
+    paths:
+      include:
+        - "**/*Tests.swift"
+        - "**/*Tests/**/*.swift"
+    pattern-either:
+      - pattern: NSHomeDirectory()
+      - pattern: NSHomeDirectoryForUser(...)
+      - pattern: $FM.homeDirectoryForCurrentUser
+      - pattern: "$FM.homeDirectory(forUser: $U)"
+      - pattern: URL.homeDirectory
+      - pattern: $S.expandingTildeInPath
+      - pattern: ProcessInfo.processInfo.environment["HOME"]
+      - pattern: getenv("HOME")
+
+  - id: swift-test-keychain
+    languages: [swift]
+    severity: WARNING
+    # A string counts where it is written, not where a variable carries it.
+    options:
+      constant_propagation: false
+    message: test reads or writes the keychain of the machine it runs on
+    metadata:
+      fix: inject a fake secret store instead of calling the keychain
+    paths:
+      include:
+        - "**/*Tests.swift"
+        - "**/*Tests/**/*.swift"
+    pattern-either:
+      - pattern: SecItemCopyMatching(...)
+      - pattern: SecItemAdd(...)
+      - pattern: SecItemUpdate(...)
+      - pattern: SecItemDelete(...)
+      - pattern: '"=~/^[/]usr[/]bin[/]security$/"'
+      - pattern: '"=~/^(security[ ]+)?(find|add|delete)-(generic|internet)-password([^-a-z]|$)/"'
+
+  - id: swift-test-network
+    languages: [swift]
+    severity: WARNING
+    message: test opens a network connection without a stub
+    metadata:
+      fix: give the session a stub URLProtocol (configuration.protocolClasses) or inject a fake client
+    paths:
+      include:
+        - "**/*Tests.swift"
+        - "**/*Tests/**/*.swift"
+    patterns:
+      - pattern-either:
+          - pattern: URLSession.shared
+          - pattern: "URLSession(configuration: $C)"
+          - pattern: "URLSession(configuration: $C, delegate: $D, delegateQueue: $Q)"
+          - pattern: NWConnection(...)
+      - pattern-not-inside: |
+          $C.protocolClasses = $P
+          ...
+      - pattern-not-inside: |
+          URLProtocol.registerClass($P)
+          ...
+
+  # ---- Every language: machine paths ----
+  - id: test-machine-path
+    languages: [python, swift, rust]
+    severity: WARNING
+    # A string counts where it is written, not where a variable carries it.
+    options:
+      constant_propagation: false
+    message: test names a path on one machine (a home or user folder)
+    metadata:
+      fix: make a temp folder in the test and build the path from it
+    paths:
+      include:
+        - "**/test_*.py"
+        - "**/*_test.py"
+        - "**/tests/**/*.py"
+        - "**/test/**/*.py"
+        - "**/*Tests.swift"
+        - "**/*Tests/**/*.swift"
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
+    # Only a literal that starts with the path: a fixture text that mentions one does not count.
+    pattern: '"=~/^(\/Users\/|\/home\/|~\/)/"'
+
+  # ---- Rust ----
   - id: rust-test-sleep
     languages: [rust]
     severity: WARNING
-    message: test sleeps with thread::sleep, so it is slow and timing-dependent
+    message: test sleeps, so it is slow and timing-dependent
     metadata:
       fix: wait on a channel or inject a fake clock instead of sleeping
     paths:
-      include: ["**/tests/**/*.rs", "**/*_test.rs"]
+      include:
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
     pattern-either:
       - pattern: std::thread::sleep(...)
       - pattern: thread::sleep(...)
+      - pattern: tokio::time::sleep(...)
 
   - id: rust-test-wall-clock
     languages: [rust]
     severity: WARNING
-    message: test reads the wall clock with SystemTime::now()
+    message: test reads the clock
     metadata:
       fix: pass a fixed time or inject a fake clock
     paths:
-      include: ["**/tests/**/*.rs", "**/*_test.rs"]
+      include:
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
     pattern-either:
       - pattern: std::time::SystemTime::now()
       - pattern: SystemTime::now()
+      - pattern: std::time::Instant::now()
+      - pattern: Instant::now()
+      - pattern: chrono::Utc::now()
+      - pattern: Utc::now()
+      - pattern: chrono::Local::now()
+      - pattern: Local::now()
+
+  - id: rust-test-unseeded-random
+    languages: [rust]
+    severity: WARNING
+    message: test draws random values from an unseeded generator
+    metadata:
+      fix: use a generator made from a fixed seed (seed_from_u64)
+    paths:
+      include:
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
+    pattern-either:
+      - pattern: rand::thread_rng()
+      - pattern: thread_rng()
+      - pattern: rand::rng()
+      - pattern: rand::random()
+      - pattern: rand::random::<$T>()
+      - pattern: $R::from_entropy()
+      - pattern: $R::from_os_rng()
+
+  - id: rust-test-locale
+    languages: [rust]
+    severity: WARNING
+    message: test reads the machine's locale or time zone
+    metadata:
+      fix: pass a fixed time zone (for example Utc) or locale instead of the machine's
+    paths:
+      include:
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
+    patterns:
+      - pattern-either:
+          - pattern: chrono::Local.$F(...)
+          - pattern: Local.$F(...)
+          - pattern: $T.with_timezone(&chrono::Local)
+          - pattern: $T.with_timezone(&Local)
+          - pattern: iana_time_zone::get_timezone()
+          - pattern: sys_locale::get_locale()
+      # Local::now reads the clock too; the wall-clock rule reports it.
+      - pattern-not: chrono::Local::now()
+      - pattern-not: Local::now()
+
+  - id: rust-test-home
+    languages: [rust]
+    severity: WARNING
+    message: test reads the home folder of the machine it runs on
+    metadata:
+      fix: make a temp folder in the test and pass it in instead of reading HOME
+    paths:
+      include:
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
+    # Only reads: `cmd.env("HOME", dir)`, which points a child at a temp HOME, is not matched.
+    pattern-either:
+      - pattern: std::env::var("HOME")
+      - pattern: env::var("HOME")
+      - pattern: var("HOME")
+      - pattern: std::env::var_os("HOME")
+      - pattern: env::var_os("HOME")
+      - pattern: var_os("HOME")
+      - pattern: std::env::home_dir()
+      - pattern: env::home_dir()
+      - pattern: home::home_dir()
+      - pattern: dirs::home_dir()
+
+  - id: rust-test-keychain
+    languages: [rust]
+    severity: WARNING
+    # A string counts where it is written, not where a variable carries it.
+    options:
+      constant_propagation: false
+    message: test reads or writes the keychain of the machine it runs on
+    metadata:
+      fix: inject a fake secret store instead of calling the keychain
+    paths:
+      include:
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
+    pattern-either:
+      - pattern: Command::new("security")
+      - pattern: Command::new("/usr/bin/security")
+      - pattern: std::process::Command::new("security")
+      - pattern: std::process::Command::new("/usr/bin/security")
+      - pattern: keyring::Entry::new(...)
+      - pattern: '"=~/^(security[ ]+)?(find|add|delete)-(generic|internet)-password([^-a-z]|$)/"'
+
+  - id: rust-test-network
+    languages: [rust]
+    severity: WARNING
+    message: test opens a network connection without a stub
+    metadata:
+      fix: connect to a local listener the test starts, or inject a fake client
+    paths:
+      include:
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
+    patterns:
+      - pattern-either:
+          - pattern: std::net::TcpStream::connect(...)
+          - pattern: TcpStream::connect(...)
+          - pattern: std::net::TcpStream::connect_timeout(...)
+          - pattern: TcpStream::connect_timeout(...)
+          - pattern: reqwest::get(...)
+          - pattern: reqwest::blocking::get(...)
+          - pattern: reqwest::Client::new()
+          - pattern: reqwest::blocking::Client::new()
+          - pattern: ureq::get(...)
+      # A local listener the test started is the stub.
+      - pattern-not: $C::connect("=~/^(127\.0\.0\.1|localhost|\[::1\])(:|$)/")
+      - pattern-not: $C::connect(<... $L.local_addr() ...>)
+      - pattern-not: $C::connect_timeout(<... $L.local_addr() ...>, $T)
+      - pattern-not-inside: |
+          let $A = <... $L.local_addr() ...>;
+          ...
+          $C::connect($A)
+
+  # Rust: the same rules for an inline `mod tests` in any other .rs file.
+  - id: rust-test-mod-sleep
+    languages: [rust]
+    severity: WARNING
+    message: test sleeps, so it is slow and timing-dependent
+    metadata:
+      fix: wait on a channel or inject a fake clock instead of sleeping
+    paths:
+      exclude:
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
+    patterns:
+      - pattern-either:
+          - pattern-inside: "mod tests { ... }"
+          - pattern-inside: "mod test { ... }"
+      - pattern-either:
+          - pattern: std::thread::sleep(...)
+          - pattern: thread::sleep(...)
+          - pattern: tokio::time::sleep(...)
+
+  - id: rust-test-mod-wall-clock
+    languages: [rust]
+    severity: WARNING
+    message: test reads the clock
+    metadata:
+      fix: pass a fixed time or inject a fake clock
+    paths:
+      exclude:
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
+    patterns:
+      - pattern-either:
+          - pattern-inside: "mod tests { ... }"
+          - pattern-inside: "mod test { ... }"
+      - pattern-either:
+          - pattern: std::time::SystemTime::now()
+          - pattern: SystemTime::now()
+          - pattern: std::time::Instant::now()
+          - pattern: Instant::now()
+          - pattern: chrono::Utc::now()
+          - pattern: Utc::now()
+          - pattern: chrono::Local::now()
+          - pattern: Local::now()
+
+  - id: rust-test-mod-unseeded-random
+    languages: [rust]
+    severity: WARNING
+    message: test draws random values from an unseeded generator
+    metadata:
+      fix: use a generator made from a fixed seed (seed_from_u64)
+    paths:
+      exclude:
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
+    patterns:
+      - pattern-either:
+          - pattern-inside: "mod tests { ... }"
+          - pattern-inside: "mod test { ... }"
+      - pattern-either:
+          - pattern: rand::thread_rng()
+          - pattern: thread_rng()
+          - pattern: rand::rng()
+          - pattern: rand::random()
+          - pattern: rand::random::<$T>()
+          - pattern: $R::from_entropy()
+          - pattern: $R::from_os_rng()
+
+  - id: rust-test-mod-locale
+    languages: [rust]
+    severity: WARNING
+    message: test reads the machine's locale or time zone
+    metadata:
+      fix: pass a fixed time zone (for example Utc) or locale instead of the machine's
+    paths:
+      exclude:
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
+    patterns:
+      - pattern-either:
+          - pattern-inside: "mod tests { ... }"
+          - pattern-inside: "mod test { ... }"
+      - pattern-either:
+          - pattern: chrono::Local.$F(...)
+          - pattern: Local.$F(...)
+          - pattern: $T.with_timezone(&chrono::Local)
+          - pattern: $T.with_timezone(&Local)
+          - pattern: iana_time_zone::get_timezone()
+          - pattern: sys_locale::get_locale()
+      # Local::now reads the clock too; the wall-clock rule reports it.
+      - pattern-not: chrono::Local::now()
+      - pattern-not: Local::now()
+
+  - id: rust-test-mod-home
+    languages: [rust]
+    severity: WARNING
+    message: test reads the home folder of the machine it runs on
+    metadata:
+      fix: make a temp folder in the test and pass it in instead of reading HOME
+    paths:
+      exclude:
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
+    patterns:
+      - pattern-either:
+          - pattern-inside: "mod tests { ... }"
+          - pattern-inside: "mod test { ... }"
+      - pattern-either:
+          - pattern: std::env::var("HOME")
+          - pattern: env::var("HOME")
+          - pattern: var("HOME")
+          - pattern: std::env::var_os("HOME")
+          - pattern: env::var_os("HOME")
+          - pattern: var_os("HOME")
+          - pattern: std::env::home_dir()
+          - pattern: env::home_dir()
+          - pattern: home::home_dir()
+          - pattern: dirs::home_dir()
+
+  - id: rust-test-mod-keychain
+    languages: [rust]
+    severity: WARNING
+    # A string counts where it is written, not where a variable carries it.
+    options:
+      constant_propagation: false
+    message: test reads or writes the keychain of the machine it runs on
+    metadata:
+      fix: inject a fake secret store instead of calling the keychain
+    paths:
+      exclude:
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
+    patterns:
+      - pattern-either:
+          - pattern-inside: "mod tests { ... }"
+          - pattern-inside: "mod test { ... }"
+      - pattern-either:
+          - pattern: Command::new("security")
+          - pattern: Command::new("/usr/bin/security")
+          - pattern: std::process::Command::new("security")
+          - pattern: std::process::Command::new("/usr/bin/security")
+          - pattern: keyring::Entry::new(...)
+          - pattern: '"=~/^(security[ ]+)?(find|add|delete)-(generic|internet)-password([^-a-z]|$)/"'
+
+  - id: rust-test-mod-network
+    languages: [rust]
+    severity: WARNING
+    message: test opens a network connection without a stub
+    metadata:
+      fix: connect to a local listener the test starts, or inject a fake client
+    paths:
+      exclude:
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
+    patterns:
+      - pattern-either:
+          - pattern-inside: "mod tests { ... }"
+          - pattern-inside: "mod test { ... }"
+      - patterns:
+          - pattern-either:
+              - pattern: std::net::TcpStream::connect(...)
+              - pattern: TcpStream::connect(...)
+              - pattern: std::net::TcpStream::connect_timeout(...)
+              - pattern: TcpStream::connect_timeout(...)
+              - pattern: reqwest::get(...)
+              - pattern: reqwest::blocking::get(...)
+              - pattern: reqwest::Client::new()
+              - pattern: reqwest::blocking::Client::new()
+              - pattern: ureq::get(...)
+          # A local listener the test started is the stub.
+          - pattern-not: $C::connect("=~/^(127\.0\.0\.1|localhost|\[::1\])(:|$)/")
+          - pattern-not: $C::connect(<... $L.local_addr() ...>)
+          - pattern-not: $C::connect_timeout(<... $L.local_addr() ...>, $T)
+          - pattern-not-inside: |
+              let $A = <... $L.local_addr() ...>;
+              ...
+              $C::connect($A)
+
+  - id: rust-test-mod-machine-path
+    languages: [rust]
+    severity: WARNING
+    # A string counts where it is written, not where a variable carries it.
+    options:
+      constant_propagation: false
+    message: test names a path on one machine (a home or user folder)
+    metadata:
+      fix: make a temp folder in the test and build the path from it
+    paths:
+      exclude:
+        - "**/tests/**/*.rs"
+        - "**/*_test.rs"
+        - "**/tests.rs"
+    patterns:
+      - pattern-either:
+          - pattern-inside: "mod tests { ... }"
+          - pattern-inside: "mod test { ... }"
+      - pattern: '"=~/^(\/Users\/|\/home\/|~\/)/"'

@@ -14,7 +14,7 @@ mod tests;
 
 pub struct Semgrep;
 
-const EXTENSIONS: [&str; 3] = [".py", ".swift", ".rs"];
+const EXTENSIONS: [&str; 5] = [".py", ".swift", ".rs", ".sh", ".bash"];
 
 /// Semgrep exits 0 after a scan (with or without results), 1 with results only
 /// under --error (not passed); 2 and up are failures (bad config, bad rule, crash).

@@ -1,0 +1,18 @@
+# Per rule, a line that must give no finding: rule path: the whole line, trimmed.
+r9-python-noqa python/test_clean.py: lint = "x = 1  # noqa: F401"
+r9-python-type-ignore python/test_clean.py: typed = 'y = 2  # type: ignore'
+r9-python-pylint-disable python/test_clean.py: pylint = f"z = 3  # pylint: disable=invalid-name {lint}"
+r9-python-no-cover python/test_clean.py: def f():  # pragma: no cover
+r9-python-pytest-skip python/test_clean.py: @pytest.mark.parametrize("n", [1, 2])
+r9-python-unittest-skip python/test_clean.py: with unittest.mock.patch("os.getcwd"):
+r9-shell-shellcheck-disable shell/clean.sh: echo "# shellcheck disable=SC2086"
+r9-swift-swiftlint-disable swift/AppTests/CleanupTests.swift: let text = "try? decode() // swiftlint:disable all"
+r9-swift-tool-ignore swift/AppTests/CleanupTests.swift: let tools = "// swiftformat:disable // periphery:ignore"
+r9-swift-xctskip swift/AppTests/CleanupTests.swift: let markers = "XCTSkip(\"later\") XCTExpectFailure withKnownIssue"
+r9-swift-expected-failure swift/AppTests/CleanupTests.swift: let markers = "XCTSkip(\"later\") XCTExpectFailure withKnownIssue"
+r9-swift-testing-disabled swift/App/ContentView.swift: .disabled(!ok)
+r9-swift-try-optional-in-tests swift/AppTests/CleanupTests.swift: defer { try? FileManager.default.removeItem(at: url) }
+r9-rust-allow rust/src/clean.rs: pub const SAMPLE: &str = "#[allow(dead_code)] fn x() {}";
+r9-rust-ignore rust/src/clean.rs: // #[allow(dead_code)] and #[ignore] here are words in a comment.
+r9-rust-let-underscore-in-test-mod rust/src/clean.rs: let _ = std::fs::remove_file(&self.0);
+r9-rust-let-underscore-in-tests-dir rust/tests/cleanup.rs: let _ = self.0.kill();

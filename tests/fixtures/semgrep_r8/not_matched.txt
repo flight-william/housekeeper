@@ -1,0 +1,33 @@
+# Per rule, a line that must give no finding: rule path: the whole line, trimmed.
+python-test-sleep python/src/app.py: time.sleep(1)
+python-test-unseeded-random python/tests/test_clean.py: assert random.randint(1, 6)
+python-test-wall-clock python/tests/test_clean.py: assert time.gmtime(0).tm_year == 1970
+python-test-locale python/tests/test_clean.py: assert time.strftime("%Y", time.gmtime(0)) == "1970"
+python-test-home python/tests/test_clean.py: os.environ["HOME"] = str(tmp_path)
+python-test-keychain python/tests/test_clean.py: subprocess.run(["git", "status"])
+python-test-network python/tests/test_clean.py: socket.socket()
+python-test-rerun python/tests/test_clean.py: @pytest.mark.slow
+swift-test-sleep swift/App/Clock.swift: Thread.sleep(forTimeInterval: 0)
+swift-test-wait-timeout swift/AppTests/CleanTests.swift: let value = await compute()
+swift-test-wall-clock swift/AppTests/CleanTests.swift: let date = Date(timeIntervalSince1970: 0)
+swift-test-unseeded-random swift/AppTests/CleanTests.swift: let roll = Int.random(in: 0..<6, using: &generator)
+swift-test-locale swift/AppTests/CleanTests.swift: let locale = Locale(identifier: "en_US_POSIX")
+swift-test-home swift/AppTests/CleanTests.swift: let folder = FileManager.default.temporaryDirectory
+swift-test-keychain swift/AppTests/CleanTests.swift: let tool = "/usr/bin/security-helper"
+swift-test-network swift/AppTests/CleanTests.swift: let session = URLSession(configuration: configuration)
+test-machine-path python/tests/test_clean.py: message = "files live under /Users/ on a Mac"
+rust-test-sleep rust/src/prod.rs: std::thread::sleep(std::time::Duration::from_millis(1));
+rust-test-wall-clock rust/tests/clean.rs: let _d = std::time::Duration::from_secs(1);
+rust-test-unseeded-random rust/tests/clean.rs: let _rng = StdRng::seed_from_u64(4);
+rust-test-locale rust/tests/clean.rs: let _t = chrono::Utc.timestamp_opt(0, 0);
+rust-test-home rust/tests/clean.rs: cmd.env("HOME", &home);
+rust-test-keychain rust/tests/clean.rs: let mut cmd = Command::new("env");
+rust-test-network rust/tests/clean.rs: let _b = TcpStream::connect(addr);
+rust-test-mod-sleep rust/src/inline_clean.rs: let note = "std::thread::sleep(d) Instant::now() env::var(\"HOME\") reqwest::get(u)";
+rust-test-mod-wall-clock rust/src/prod.rs: std::time::Instant::now()
+rust-test-mod-unseeded-random rust/src/inline_clean.rs: let _rng = StdRng::seed_from_u64(4);
+rust-test-mod-locale rust/src/inline_clean.rs: let _t = chrono::Utc.timestamp_opt(0, 0);
+rust-test-mod-home rust/src/inline_clean.rs: cmd.env("HOME", &home);
+rust-test-mod-keychain rust/src/inline_clean.rs: let mut cmd = Command::new("env");
+rust-test-mod-network rust/src/inline_clean.rs: let _b = TcpStream::connect(addr);
+rust-test-mod-machine-path rust/src/inline_clean.rs: let _m = "files live under /Users/ on a Mac";
