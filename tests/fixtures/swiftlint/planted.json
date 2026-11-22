@@ -1,0 +1,29 @@
+[
+  {
+    "character" : 1,
+    "file" : "/tmp/house-fixture/swiftlint/Many.swift",
+    "line" : 5,
+    "reason" : "Function should have complexity 1 or less; currently complexity is 3",
+    "rule_id" : "cyclomatic_complexity",
+    "severity" : "Warning",
+    "type" : "Cyclomatic Complexity"
+  },
+  {
+    "character" : 1,
+    "file" : "/tmp/house-fixture/swiftlint/Many.swift",
+    "line" : 11,
+    "reason" : "File should contain 8 lines or less: currently contains 11",
+    "rule_id" : "file_length",
+    "severity" : "Warning",
+    "type" : "File Length"
+  },
+  {
+    "character" : 1,
+    "file" : "/tmp/house-fixture/swiftlint/Many.swift",
+    "line" : 5,
+    "reason" : "Function body should span 4 lines or less excluding comments and whitespace: currently spans 5 lines",
+    "rule_id" : "function_body_length",
+    "severity" : "Error",
+    "type" : "Function Body Length"
+  }
+]

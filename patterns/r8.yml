@@ -1,0 +1,87 @@
+# House R8: tests are deterministic. No sleeping, no unseeded randomness and no
+# wall-clock reads inside test files. Each rule's metadata.fix is the fix line
+# house replies with.
+rules:
+  - id: python-test-sleep
+    languages: [python]
+    severity: WARNING
+    message: test sleeps with time.sleep, so it is slow and timing-dependent
+    metadata:
+      fix: wait on the event or inject a fake clock instead of sleeping
+    paths:
+      include: ["**/test_*.py", "**/tests/**/*.py"]
+    pattern: time.sleep(...)
+
+  - id: python-test-unseeded-random
+    languages: [python]
+    severity: WARNING
+    message: test uses random.random() without a seed
+    metadata:
+      fix: use random.Random(<seed>) with a fixed seed
+    paths:
+      include: ["**/test_*.py", "**/tests/**/*.py"]
+    patterns:
+      - pattern: random.random()
+      - pattern-not-inside: |
+          random.seed(...)
+          ...
+
+  - id: python-test-wall-clock
+    languages: [python]
+    severity: WARNING
+    message: test reads the wall clock
+    metadata:
+      fix: pass a fixed time or inject a fake clock
+    paths:
+      include: ["**/test_*.py", "**/tests/**/*.py"]
+    pattern-either:
+      - pattern: datetime.now(...)
+      - pattern: datetime.datetime.now(...)
+      - pattern: time.time()
+
+  - id: swift-test-sleep
+    languages: [swift]
+    severity: WARNING
+    message: test sleeps, so it is slow and timing-dependent
+    metadata:
+      fix: await the expectation or inject a fake clock instead of sleeping
+    paths:
+      include: ["**/*Tests.swift", "**/Tests/**/*.swift"]
+    pattern-either:
+      - pattern: Thread.sleep(...)
+      - pattern: usleep(...)
+      - pattern: Task.sleep(...)
+
+  - id: swift-test-wall-clock
+    languages: [swift]
+    severity: WARNING
+    message: test reads the wall clock with Date()
+    metadata:
+      fix: pass a fixed Date or inject a fake clock
+    paths:
+      include: ["**/*Tests.swift", "**/Tests/**/*.swift"]
+    pattern: Date()
+
+  - id: rust-test-sleep
+    languages: [rust]
+    severity: WARNING
+    message: test sleeps with thread::sleep, so it is slow and timing-dependent
+    metadata:
+      fix: wait on a channel or inject a fake clock instead of sleeping
+    paths:
+      include: ["**/tests/**/*.rs", "**/*_test.rs"]
+    pattern-either:
+      - pattern: std::thread::sleep(...)
+      - pattern: thread::sleep(...)
+
+  - id: rust-test-wall-clock
+    languages: [rust]
+    severity: WARNING
+    message: test reads the wall clock with SystemTime::now()
+    metadata:
+      fix: pass a fixed time or inject a fake clock
+    paths:
+      include: ["**/tests/**/*.rs", "**/*_test.rs"]
+    pattern-either:
+      - pattern: std::time::SystemTime::now()
+      - pattern: SystemTime::now()

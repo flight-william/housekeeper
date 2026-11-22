@@ -1,0 +1,22 @@
+[
+ {
+  "RuleID": "aws-access-token",
+  "Description": "Identified a pattern that may indicate AWS credentials, risking unauthorized cloud resource access and data breaches on AWS platforms.",
+  "StartLine": 1,
+  "EndLine": 1,
+  "StartColumn": 12,
+  "EndColumn": 31,
+  "Match": "REDACTED",
+  "Secret": "REDACTED",
+  "File": "conf.txt",
+  "SymlinkFile": "",
+  "Commit": "",
+  "Entropy": 3.6841838,
+  "Author": "",
+  "Email": "",
+  "Date": "0001-01-01T00:00:00Z",
+  "Message": "",
+  "Tags": [],
+  "Fingerprint": "conf.txt:aws-access-token:1"
+ }
+]

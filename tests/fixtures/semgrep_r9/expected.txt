@@ -1,0 +1,22 @@
+# semgrep 1.186.0 --metrics=off on this folder with patterns/r9.yml: rule path:line
+r9-python-noqa python/test_planted.py:6
+r9-python-type-ignore python/test_planted.py:8
+r9-python-pytest-skip python/test_planted.py:11
+r9-python-pytest-skip python/test_planted.py:16
+r9-python-pytest-skip python/test_planted.py:21
+r9-python-unittest-skip python/test_planted.py:27
+r9-python-unittest-skip python/test_planted.py:31
+r9-python-unittest-skip python/test_planted.py:35
+r9-rust-allow rust/src/lib.rs:1
+r9-rust-allow rust/src/lib.rs:3
+r9-rust-ignore rust/src/lib.rs:17
+r9-rust-let-underscore-in-test-mod rust/src/lib.rs:19
+r9-rust-ignore rust/src/lib.rs:23
+r9-rust-let-underscore-in-tests-dir rust/tests/it.rs:3
+r9-swift-swiftlint-disable swift/AppTests/PlantedTests.swift:4
+r9-swift-testing-disabled swift/AppTests/PlantedTests.swift:5
+r9-swift-testing-disabled swift/AppTests/PlantedTests.swift:11
+r9-swift-testing-disabled swift/AppTests/PlantedTests.swift:14
+r9-swift-try-optional-in-tests swift/AppTests/PlantedTests.swift:20
+r9-swift-xctskip swift/AppTests/PlantedTests.swift:27
+r9-swift-xctskip swift/AppTests/PlantedTests.swift:31

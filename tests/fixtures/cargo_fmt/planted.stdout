@@ -1,0 +1,17 @@
+Diff in /tmp/house-fixture/planted/src/lib.rs:1:
+[31m-pub fn  badly_formatted( x:i32)->i32{ x+1 }
+(B[m[32m+pub fn badly_formatted(x: i32) -> i32 {
+(B[m[32m+    x + 1
+(B[m[32m+}
+(B[m 
+ pub fn seven(a: i32, b: i32, c: i32, d: i32, e: i32, f: i32, g: i32) -> i32 {
+     a + b + c + d + e + f + g
+Diff in /tmp/house-fixture/planted/src/lib.rs:89:
+     total
+ }
+ 
+[31m-pub fn   also_bad(){}
+(B[m[32m+pub fn also_bad() {}
+(B[m 
+ pub fn needless(v: &Vec<i32>) -> usize {
+     let x = v.len();

@@ -1,0 +1,5 @@
+{"file": "funcs.py", "kind": "function", "name": "big", "lines": 62, "limit": 60}
+{"file": "funcs.py", "kind": "function", "name": "K.method", "lines": 62, "limit": 60}
+{"file": "long_file.py", "kind": "file", "name": "", "lines": 401, "limit": 400}
+{"file": "long.rs", "kind": "file", "name": "", "lines": 401, "limit": 400}
+{"file": "long.swift", "kind": "file", "name": "", "lines": 450, "limit": 400}

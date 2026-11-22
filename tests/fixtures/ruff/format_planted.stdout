@@ -1,0 +1,72 @@
+[
+  {
+    "cell": null,
+    "code": "unformatted",
+    "end_location": {
+      "column": 7,
+      "row": 14
+    },
+    "filename": "/tmp/house-fixture/ruffplant/src/bad.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "",
+          "end_location": {
+            "column": 7,
+            "row": 14
+          },
+          "location": {
+            "column": 6,
+            "row": 14
+          }
+        }
+      ],
+      "message": null
+    },
+    "location": {
+      "column": 6,
+      "row": 14
+    },
+    "message": "File would be reformatted",
+    "name": "unformatted",
+    "noqa_row": null,
+    "severity": "error",
+    "url": null
+  },
+  {
+    "cell": null,
+    "code": "unformatted",
+    "end_location": {
+      "column": 6,
+      "row": 1
+    },
+    "filename": "/tmp/house-fixture/ruffplant/src/ugly.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": "=",
+          "end_location": {
+            "column": 6,
+            "row": 1
+          },
+          "location": {
+            "column": 3,
+            "row": 1
+          }
+        }
+      ],
+      "message": null
+    },
+    "location": {
+      "column": 3,
+      "row": 1
+    },
+    "message": "File would be reformatted",
+    "name": "unformatted",
+    "noqa_row": null,
+    "severity": "error",
+    "url": null
+  }
+]

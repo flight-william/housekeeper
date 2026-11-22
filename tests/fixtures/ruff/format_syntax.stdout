@@ -1,0 +1,21 @@
+[
+  {
+    "cell": null,
+    "code": "invalid-syntax",
+    "end_location": {
+      "column": 6,
+      "row": 1
+    },
+    "filename": "/tmp/house-fixture/ruffplant/src/broken.py",
+    "fix": null,
+    "location": {
+      "column": 5,
+      "row": 1
+    },
+    "message": "Expected an identifier",
+    "name": "invalid-syntax",
+    "noqa_row": null,
+    "severity": "error",
+    "url": null
+  }
+]

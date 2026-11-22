@@ -1,0 +1,7 @@
+Diff in /tmp/house-fixture/nested/tools/inner/crates/a/src/lib.rs:2:
+     return v.len();
+ }
+ 
+[31m-pub fn  g() {}
+(B[m[32m+pub fn g() {}
+(B[m 

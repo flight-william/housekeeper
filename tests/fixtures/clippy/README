@@ -1,0 +1,6 @@
+Captured 2026-11-22 with clippy 0.1.100 (cargo 1.100.0, Homebrew) on planted crates under /tmp/house-fixture.
+Command: cargo clippy --offline --message-format=json --quiet -- -D warnings -D clippy::too_many_lines -D clippy::too_many_arguments
+planted.stdout: exit 101, clippy.toml thresholds 60/6. clean.stdout: exit 0. broken.stdout/.stderr: exit 101, a type error (E0308).
+nested.stdout: captured 2026-11-22, same clippy, a repo at /tmp/house-fixture/nested with a workspace in tools/inner (member crates/a); run from the repo root with
+`cargo clippy --offline --message-format=json --quiet --manifest-path tools/inner/Cargo.toml -- -D warnings`, exit 101. file_name is relative to the workspace (crates/a/src/lib.rs), not the repo.
+The capture folder is written as /tmp/house-fixture in every file here; the real temporary folder named the machine.

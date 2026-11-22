@@ -1,0 +1,133 @@
+# R9 "nothing silenced; fix the root cause".
+# Run: semgrep scan --metrics=off --config patterns/r9.yml <targets>
+# Caveats, on purpose (smallest thing that works):
+# - pattern-regex rules (comment and attribute ones) also match the same text
+#   inside a string literal.
+# - "in tests" means: Swift files named *Tests.swift or under a *Tests/ or
+#   Tests/ folder; Rust code inside `mod tests { ... }` or under tests/.
+# - Rust `let _ = ` cannot see types, so it reports every `let _ =` in tests,
+#   not only those on a Result.
+rules:
+  # ---- Python ----
+  - id: r9-python-noqa
+    languages: [python]
+    severity: WARNING
+    message: "a `# noqa` comment silences a lint finding"
+    metadata:
+      fix: "remove the noqa comment and fix what the linter reports"
+    pattern-regex: '(?i)#\s*noqa\b'
+
+  - id: r9-python-type-ignore
+    languages: [python]
+    severity: WARNING
+    message: "a `# type: ignore` comment silences a type error"
+    metadata:
+      fix: "remove the type: ignore comment and fix the type error"
+    pattern-regex: '#\s*type:\s*ignore\b'
+
+  - id: r9-python-pytest-skip
+    languages: [python]
+    severity: WARNING
+    message: "a pytest skip mark turns a test off"
+    metadata:
+      fix: "remove the skip mark and make the test pass"
+    pattern-either:
+      - pattern: "@pytest.mark.skip"
+      - pattern: "@pytest.mark.skip(...)"
+      - pattern: "@pytest.mark.skipif(...)"
+
+  - id: r9-python-unittest-skip
+    languages: [python]
+    severity: WARNING
+    message: "a unittest skip decorator turns a test off"
+    metadata:
+      fix: "remove the skip decorator and make the test pass"
+    pattern-either:
+      - pattern: "@unittest.skip(...)"
+      - pattern: "@unittest.skipIf(...)"
+      - pattern: "@unittest.skipUnless(...)"
+
+  # ---- Swift ----
+  - id: r9-swift-swiftlint-disable
+    languages: [swift]
+    severity: WARNING
+    message: "a `swiftlint:disable` comment silences SwiftLint"
+    metadata:
+      fix: "remove the swiftlint:disable comment and fix what SwiftLint reports"
+    pattern-regex: '(//|/\*)\s*swiftlint:disable\b'
+
+  - id: r9-swift-xctskip
+    languages: [swift]
+    severity: WARNING
+    message: "XCTSkip turns a test off"
+    metadata:
+      fix: "remove the XCTSkip and make the test pass"
+    pattern-either:
+      - pattern: XCTSkip(...)
+      - pattern: XCTSkipIf(...)
+      - pattern: XCTSkipUnless(...)
+
+  - id: r9-swift-testing-disabled
+    languages: [swift]
+    severity: WARNING
+    message: "a `.disabled(...)` trait on @Test or @Suite turns a test off"
+    metadata:
+      fix: "remove the .disabled trait and make the test pass"
+    # Only as a trait argument inside @Test(...) or @Suite(...), so SwiftUI's
+    # `.disabled(!x)` view modifier is not matched. One level of nested
+    # parentheses is allowed before the trait, e.g. @Test("name", .tags(.a), .disabled()).
+    pattern-regex: '@(Test|Suite)\b\s*\((?:[^()]|\([^()]*\))*?\.disabled\s*\('
+
+  - id: r9-swift-try-optional-in-tests
+    languages: [swift]
+    severity: WARNING
+    message: "`try?` in a test swallows the error"
+    metadata:
+      fix: "use try so a thrown error fails the test"
+    paths:
+      include:
+        - "*Tests.swift"
+        - "**/*Tests/**"
+        - "**/Tests/**"
+    # Semgrep's Swift AST treats `try?` and `try` alike, so this is text.
+    pattern-regex: '\btry\?(?=\s)'
+
+
+  # ---- Rust ----
+  - id: r9-rust-allow
+    languages: [rust]
+    severity: WARNING
+    message: "an `#[allow(...)]` attribute silences a lint"
+    metadata:
+      fix: "remove the allow attribute and fix what the lint reports"
+    pattern-regex: '#!?\[\s*allow\s*\('
+
+  - id: r9-rust-ignore
+    languages: [rust]
+    severity: WARNING
+    message: "an `#[ignore]` attribute turns a test off"
+    metadata:
+      fix: "remove the ignore attribute and make the test pass"
+    pattern-regex: '#\[\s*ignore\b'
+
+  - id: r9-rust-let-underscore-in-test-mod
+    languages: [rust]
+    severity: WARNING
+    message: "`let _ =` in a test drops a result unchecked"
+    metadata:
+      fix: "unwrap or assert on the result so an error fails the test"
+    patterns:
+      - pattern-inside: |
+          mod tests { ... }
+      - pattern: let _ = $X;
+
+  - id: r9-rust-let-underscore-in-tests-dir
+    languages: [rust]
+    severity: WARNING
+    message: "`let _ =` in a test drops a result unchecked"
+    metadata:
+      fix: "unwrap or assert on the result so an error fails the test"
+    paths:
+      include:
+        - "**/tests/**"
+    pattern: let _ = $X;

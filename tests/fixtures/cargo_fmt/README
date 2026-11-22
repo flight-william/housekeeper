@@ -1,0 +1,5 @@
+Captured 2026-11-22 with cargo 1.100.0 (Homebrew), rustfmt 1.11.0, on a planted crate at /tmp/house-fixture/planted.
+planted.stdout: `cargo fmt --check` (exit 1). broken.stderr: same on a file with an unclosed delimiter (exit 1, empty stdout).
+nested.stdout: captured 2026-11-22 with cargo 1.100.0 (Homebrew), a repo at /tmp/house-fixture/nested with a workspace in tools/inner; run from the repo root with
+`cargo fmt --check --manifest-path tools/inner/Cargo.toml`, exit 1. Paths are absolute.
+The capture folder is written as /tmp/house-fixture in every file here; the real temporary folder named the machine.

@@ -1,0 +1,9 @@
+error: this file contains an unclosed delimiter
+ --> /tmp/house-fixture/broken/src/lib.rs:5:15
+  |
+5 | pub fn two( {
+  |           - -^
+  |           | |
+  |           | unclosed delimiter
+  |           unclosed delimiter
+

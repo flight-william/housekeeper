@@ -1,0 +1,16 @@
+# house checking house: the tools each stage runs, by adapter name.
+# Rust (the crate) and Python (scripts/); the Swift files are planted test fixtures.
+[tools]
+commit = ["cargo-fmt", "clippy", "ruff", "ruff-format", "r3", "gitleaks", "semgrep"]
+push = ["cargo-fmt", "clippy", "ruff", "ruff-format", "r3", "gitleaks", "semgrep"]
+
+# The planted samples the tests read: findings on purpose, never handed to a tool.
+[paths]
+exclude = ["tests/fixtures/"]
+
+# For `house commit-msg`: the model ids a Co-Authored-By line may name, and the
+# author every commit is made as.
+[commit]
+models = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "gpt-6.1-sol"]
+author = "William"
+email = "3828737+flight-william@users.noreply.github.com"

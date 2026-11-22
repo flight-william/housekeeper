@@ -1,0 +1,56 @@
+[
+  {
+    "cell": null,
+    "code": "invalid-syntax",
+    "end_location": {
+      "column": 13,
+      "row": 1
+    },
+    "filename": "/tmp/house-fixture/ruffplant/tests/broken.py",
+    "fix": null,
+    "location": {
+      "column": 12,
+      "row": 1
+    },
+    "message": "Expected a parameter or the end of the parameter list",
+    "name": "invalid-syntax",
+    "noqa_row": null,
+    "severity": "error",
+    "url": null
+  },
+  {
+    "cell": null,
+    "code": "unformatted",
+    "end_location": {
+      "column": 3,
+      "row": 1
+    },
+    "filename": "/tmp/house-fixture/ruffplant/ugly.py",
+    "fix": {
+      "applicability": "safe",
+      "edits": [
+        {
+          "content": " = ",
+          "end_location": {
+            "column": 3,
+            "row": 1
+          },
+          "location": {
+            "column": 2,
+            "row": 1
+          }
+        }
+      ],
+      "message": null
+    },
+    "location": {
+      "column": 2,
+      "row": 1
+    },
+    "message": "File would be reformatted",
+    "name": "unformatted",
+    "noqa_row": null,
+    "severity": "error",
+    "url": null
+  }
+]

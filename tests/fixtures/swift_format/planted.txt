@@ -1,0 +1,6 @@
+Bad.swift:1:6: error: [Spacing] add 1 space
+Bad.swift:1:7: error: [Spacing] add 1 space
+Bad.swift:2:8: error: [Spacing] remove 1 space
+Bad.swift:2:11: error: [Spacing] add 1 space
+Bad.swift:2:14: error: [Spacing] remove 1 space
+Bad.swift:2:18: error: [Spacing] remove 2 spaces

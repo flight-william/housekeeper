@@ -1,0 +1,4 @@
+# The Rust version house is built and tested with (rustup reads this file).
+[toolchain]
+channel = "1.100.0"
+components = ["rustfmt", "clippy"]
