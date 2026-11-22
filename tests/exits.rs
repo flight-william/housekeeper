@@ -11,6 +11,7 @@ fn ctx() -> Context {
         stage: Stage::Commit,
         files: vec![],
         push_range: None,
+        languages: Default::default(),
     }
 }
 

@@ -6,6 +6,7 @@
 //! hands back the captured output, so every adapter is a pure, testable parser.
 
 use crate::finding::Finding;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 /// When house runs.
@@ -26,6 +27,25 @@ pub struct Context {
     /// At push: `<base>..<local sha>`, the commits the push sends. `None` at commit,
     /// and at a push with no `origin/main`, where the whole history is pushed.
     pub push_range: Option<String>,
+    /// The language of each of `files` whose name has no known extension, read by the
+    /// core from the file's first line (`files::languages`); a file not here has none.
+    /// Adapters choose files by extension or by this map, and never read a file.
+    pub languages: BTreeMap<String, Language>,
+}
+
+impl Context {
+    /// Whether `file` is in `language` by its first line (`languages`).
+    pub fn first_line_is(&self, file: &str, language: Language) -> bool {
+        self.languages.get(file) == Some(&language)
+    }
+}
+
+/// A language a file's first line can name: `#!/usr/bin/env python3`, `#!/bin/sh`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Language {
+    Python,
+    /// sh, bash, dash or ksh: what ShellCheck reads. Not zsh.
+    Shell,
 }
 
 /// A command for the core to run, in `root`, with no shell.

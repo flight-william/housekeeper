@@ -3,7 +3,7 @@
 
 use crate::adapter::{Adapter, CannotCheck, Context, Stage};
 use crate::config;
-use crate::files::{repo_root, tracked};
+use crate::files::{languages, repo_root, tracked};
 use crate::run::git;
 use std::path::{Path, PathBuf};
 
@@ -148,10 +148,12 @@ fn starter_config(root: &Path, all: Vec<Box<dyn Adapter>>) -> Result<String, Can
             config::FILE
         ));
     }
+    let files = tracked(root)?;
     let ctx = Context {
         root: root.to_path_buf(),
         stage: Stage::Commit,
-        files: tracked(root)?,
+        languages: languages(root, &files),
+        files,
         push_range: None,
     };
     let names: Vec<String> = all

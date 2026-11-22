@@ -1,9 +1,10 @@
 //! Which files a stage checks: commit, the staged files; push, the files the push sends.
 
-use crate::adapter::{CannotCheck, Stage};
+use crate::adapter::{CannotCheck, Language, Stage};
 use crate::approval::glob_matches;
 use crate::run::git;
-use std::io::{IsTerminal, Read};
+use std::collections::BTreeMap;
+use std::io::{BufRead, IsTerminal, Read};
 use std::path::{Path, PathBuf};
 
 /// The repo's top folder, from any folder inside it.
@@ -186,4 +187,55 @@ pub(crate) fn split_nul(text: &str) -> Vec<String> {
         .filter(|s| !s.is_empty())
         .map(str::to_string)
         .collect()
+}
+
+/// The extensions the adapters choose files by. A file with any other name has its
+/// first line read (`languages`).
+const KNOWN: [&str; 6] = [".py", ".pyi", ".sh", ".bash", ".rs", ".swift"];
+
+/// The longest first line read: a shebang longer than this names no language.
+const FIRST_LINE_MAX: u64 = 256;
+
+/// The language of each of `files` (relative to `root`) whose name has no known
+/// extension, from its first line (`language_of`). Each such file is opened once and
+/// at most its first line read; a file that cannot be read, or whose first line is not
+/// text (a binary file), has none.
+pub fn languages(root: &Path, files: &[String]) -> BTreeMap<String, Language> {
+    files
+        .iter()
+        .filter(|f| !KNOWN.iter().any(|ext| f.ends_with(ext)))
+        .filter_map(|f| {
+            let file = std::fs::File::open(root.join(f)).ok()?;
+            let mut line = Vec::new();
+            std::io::BufReader::new(file.take(FIRST_LINE_MAX))
+                .read_until(b'\n', &mut line)
+                .ok()?;
+            let cut = line.len() as u64 == FIRST_LINE_MAX && !line.ends_with(b"\n");
+            let text = std::str::from_utf8(&line).ok()?;
+            if cut || text.contains('\0') {
+                return None;
+            }
+            Some((f.clone(), language_of(text.trim_end())?))
+        })
+        .collect()
+}
+
+/// The language a first line names: `#!` then the interpreter, by its name, directly
+/// or through `env` (`#!/usr/bin/env python3`). python, python3, python3.13: Python;
+/// sh, bash, dash, ksh: shell. Anything else, zsh among them, is none.
+pub fn language_of(first_line: &str) -> Option<Language> {
+    let mut words = first_line.strip_prefix("#!")?.split_whitespace();
+    let name = |path: &str| path.rsplit('/').next().unwrap_or(path).to_string();
+    let mut program = name(words.next()?);
+    if program == "env" {
+        program = name(words.find(|w| !w.starts_with('-') && !w.contains('='))?);
+    }
+    match program.as_str() {
+        "sh" | "bash" | "dash" | "ksh" => Some(Language::Shell),
+        _ => {
+            let version = program.strip_prefix("python")?;
+            let digits = version.chars().all(|c| c.is_ascii_digit() || c == '.');
+            digits.then_some(Language::Python)
+        }
+    }
 }

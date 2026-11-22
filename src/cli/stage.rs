@@ -86,6 +86,7 @@ pub(super) fn check_from(root: &Path, mode: Mode, all: Vec<Box<dyn Adapter>>) ->
             let ctx = Context {
                 root: root.to_path_buf(),
                 stage,
+                languages: files::languages(root, &scope.files),
                 files: scope.files,
                 push_range: scope.push_range,
             };
