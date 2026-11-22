@@ -2,8 +2,8 @@
 
 house runs the tools that check a repo's rules at commit and at push, replies to agents in
 one format, and records every run. It never judges code itself: each rule maps to the tools
-that check it (ruff, cargo fmt and clippy, SwiftLint and swift format, ShellCheck, gitleaks,
-Semgrep, its own size counter, commit-message and approval checks).
+that check it (ruff, cargo fmt, clippy and cargo-deny, SwiftLint and swift format, ShellCheck,
+gitleaks, Semgrep, its own size counter, commit-message and approval checks).
 
 ## The rules (✓ checked by 0.1.0)
 
