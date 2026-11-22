@@ -17,6 +17,9 @@
 **/setup.cfg @flight-william
 **/.semgrepignore @flight-william
 **/.gitleaks.toml @flight-william
+**/.gitleaksignore @flight-william
+**/.shellcheckrc @flight-william
+**/shellcheckrc @flight-william
 **/deny.toml @flight-william
 **/.cargo/config.toml @flight-william
 **/.cargo/config @flight-william
