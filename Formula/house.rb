@@ -2,13 +2,13 @@
 #   brew tap flight-william/housekeeper https://github.com/flight-william/housekeeper
 #   brew install house
 #
-# It builds the v0.2.2 tag of this repo.
+# It builds the v0.2.3 tag of this repo.
 class House < Formula
   desc "Runs the tools that check the house rules and replies to agents in one format"
   homepage "https://github.com/flight-william/housekeeper"
   url "https://github.com/flight-william/housekeeper.git",
-      tag: "v0.2.2"
-  version "0.2.2"
+      tag: "v0.2.3"
+  version "0.2.3"
   license any_of: ["MIT", "Apache-2.0"]
   head "https://github.com/flight-william/housekeeper.git", branch: "main"
 

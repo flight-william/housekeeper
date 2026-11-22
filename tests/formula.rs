@@ -10,7 +10,7 @@ fn the_formula_installs_the_tagged_release_from_the_public_repo() {
         "{FORMULA}"
     );
     let version = env!("CARGO_PKG_VERSION");
-    assert_eq!(version, "0.2.2");
+    assert_eq!(version, "0.2.3");
     assert!(
         FORMULA.contains(&format!("      tag: \"v{version}\"\n")),
         "{FORMULA}"
