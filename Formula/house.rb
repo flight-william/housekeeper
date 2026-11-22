@@ -9,7 +9,7 @@ class House < Formula
   url "https://github.com/flight-william/housekeeper.git",
       tag: "v0.2.0"
   version "0.2.0"
-  license :cannot_represent
+  license any_of: ["MIT", "Apache-2.0"]
   head "https://github.com/flight-william/housekeeper.git", branch: "main"
 
   depends_on "rust" => :build

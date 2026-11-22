@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2024"
 rust-version = "1.100"
 description = "Runs the tools that check the rules we care about, replies to agents in one format, records every run."
-license = "UNLICENSED"
+license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]

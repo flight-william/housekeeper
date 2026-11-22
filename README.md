@@ -68,4 +68,6 @@ most 56 days after that day (after today for a new entry).
 
 ## Licence
 
-UNLICENSED (as in Cargo.toml): no licence is granted yet.
+house is dual-licensed under MIT or Apache-2.0, at your option. See LICENSE-MIT and LICENSE-APACHE.
+
+Contributions are accepted under the same terms.
