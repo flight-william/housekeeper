@@ -20,6 +20,9 @@ pub struct Scope {
     /// Every changed path but deletes, links and excluded paths kept: what the
     /// policy checks (`approval::wrong_case`) judge.
     pub changed: Vec<String>,
+    /// The test step runs: at push when the push changes any path (`Push::touched`),
+    /// else when there is a file to check.
+    pub run_tests: bool,
     pub push_range: Option<String>,
     pub unbounded: bool,
 }
@@ -53,6 +56,7 @@ pub fn for_stage_excluding(
                 "stage or stash the rest: git add the file, or git stash push --keep-index",
             )?;
             Ok(Scope {
+                run_tests: !files.is_empty(),
                 files,
                 changed,
                 push_range: None,
@@ -79,6 +83,7 @@ pub fn for_stage_excluding(
             Ok(Scope {
                 files: without_excluded(push.files, exclude),
                 changed: push.changed,
+                run_tests: push.touched,
                 push_range: push.range,
                 unbounded: push.unbounded,
             })

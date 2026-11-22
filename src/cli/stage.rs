@@ -92,6 +92,7 @@ pub(super) fn check_from(
                 checked.base = None;
             }
             let scope_changed = scope.changed;
+            let tests_due = scope.run_tests;
             let ctx = Context {
                 root: root.to_path_buf(),
                 stage,
@@ -102,7 +103,7 @@ pub(super) fn check_from(
             tools.extend(chosen.iter().map(|a| run_one(a.as_ref(), &ctx)));
             tools.extend(lints::run(&ctx));
             tools.extend(settings_case(&scope_changed, rules));
-            for test in run_tests(&ctx, &tests) {
+            for test in run_tests(&ctx, &tests, tests_due) {
                 tools.push(test.tool);
                 checked.failed_tests.extend(test.failed);
             }
@@ -142,19 +143,22 @@ fn every_file(root: &Path, exclude: &[String]) -> Result<files::Scope, CannotChe
         .into_iter()
         .filter(|f| root.join(f).is_file())
         .collect();
+    let files = files::without_excluded(present, exclude);
     Ok(files::Scope {
-        files: files::without_excluded(present, exclude),
+        run_tests: !files.is_empty(),
+        files,
         changed,
         push_range: None,
         unbounded: false,
     })
 }
 
-/// The test step after the adapters: skipped when there is no file to check.
-fn run_tests(ctx: &Context, tests: &[Vec<String>]) -> Vec<TestRun> {
+/// The test step after the adapters: skipped unless `due` (`Scope::run_tests`): at push
+/// when the push changes any path, at commit and `--all` when there is a file to check.
+fn run_tests(ctx: &Context, tests: &[Vec<String>], due: bool) -> Vec<TestRun> {
     if tests.is_empty() {
         Vec::new()
-    } else if ctx.files.is_empty() {
+    } else if !due {
         vec![tests_step::skipped()]
     } else {
         tests_step::run(&ctx.root, tests, run::HANG_GUARD)

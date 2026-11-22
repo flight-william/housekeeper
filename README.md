@@ -47,7 +47,9 @@ and the git hooks. Commit them. Files listed under `[paths] exclude` in `.house.
 `commit = [["cargo", "test"]]` and `push = [...]` (push falls back to commit) list test
 commands, each a program and its arguments with no shell, run from the repo root after the
 tools; a failing one is an R7 finding, and the last 20 lines of its output go to the run
-record. An unknown table or key in `.house.toml` is a "cannot check" naming it.
+record. At push the tests run whenever the push changes anything, a deletion alone
+included, though no file is left for the tools; a push with no change skips them. An
+unknown table or key in `.house.toml` is a "cannot check" naming it.
 
 `[house] minimum = "0.2.3"` names the oldest house the rules run on: an older house is a
 "cannot check" naming both versions, and the same or a newer one runs. A house older than
