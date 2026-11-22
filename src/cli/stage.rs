@@ -3,32 +3,39 @@
 use crate::adapter::{Adapter, CannotCheck, Context, Stage};
 use crate::finding::Finding;
 use crate::reply::{Report, ToolRun};
+use crate::tests_step::{self, FailedOutput};
 use crate::{config, files, run};
 use std::path::Path;
 use std::time::Instant;
 
-/// Run the stage's adapters in `root` and collect the report.
+/// Run the stage's adapters, then its test commands, in `root` and collect the report.
 pub fn check(root: &Path, stage: Stage, all: Vec<Box<dyn Adapter>>) -> Report {
-    check_from(root, stage, all).0
+    check_from(root, stage, all).report
 }
 
-/// `check`, and the commit the excuse list is compared with: HEAD at commit, the
-/// push range's base at push, HEAD when nothing is pushed, and `None` (no prior
-/// list) on an unbounded push, a first push without origin/main.
-pub(super) fn check_from(
-    root: &Path,
-    stage: Stage,
-    all: Vec<Box<dyn Adapter>>,
-) -> (Report, Option<String>) {
+/// What a check gives the cli beyond the report.
+pub(super) struct Checked {
+    pub report: Report,
+    /// The commit the excuse list is compared with: HEAD at commit, the push range's
+    /// base at push, HEAD when nothing is pushed, and `None` (no prior list) on an
+    /// unbounded push, a first push without origin/main.
+    pub base: Option<String>,
+    /// The test commands that failed, with their output's tails, for the record.
+    pub failed_tests: Vec<FailedOutput>,
+}
+
+pub(super) fn check_from(root: &Path, stage: Stage, all: Vec<Box<dyn Adapter>>) -> Checked {
     let mut base = Some("HEAD".to_string());
     let start = Instant::now();
     let mut tools = Vec::new();
-    let (chosen, exclude, config_cannot) = match config::load(root) {
+    let mut failed_tests = Vec::new();
+    let (chosen, exclude, tests, config_cannot) = match config::load(root) {
         Ok(cfg) => {
+            let tests = config::tests_for(&cfg, stage).to_vec();
             let (chosen, unknown) = config::select(&cfg, stage, all);
-            (chosen, cfg.paths.exclude, unknown)
+            (chosen, cfg.paths.exclude, tests, unknown)
         }
-        Err(c) => (all, Vec::new(), vec![c]),
+        Err(c) => (all, Vec::new(), Vec::new(), vec![c]),
     };
     for c in config_cannot {
         tools.push(cannot_run("house", c));
@@ -52,6 +59,17 @@ pub(super) fn check_from(
                 push_range,
             };
             tools.extend(chosen.iter().map(|a| run_one(a.as_ref(), &ctx)));
+            let tests = if tests.is_empty() {
+                Vec::new()
+            } else if ctx.files.is_empty() {
+                vec![tests_step::skipped()]
+            } else {
+                tests_step::run(root, &tests, run::HANG_GUARD)
+            };
+            for test in tests {
+                tools.push(test.tool);
+                failed_tests.extend(test.failed);
+            }
         }
         Err(c) => tools.push(cannot_run("git", c)),
     }
@@ -60,7 +78,11 @@ pub(super) fn check_from(
         seconds: start.elapsed().as_secs_f64(),
         tools,
     };
-    (report, base)
+    Checked {
+        report,
+        base,
+        failed_tests,
+    }
 }
 
 /// Two findings are one when rule, place, line and tool rule match.

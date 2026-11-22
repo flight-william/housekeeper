@@ -32,7 +32,11 @@ house init
 
 `house init` writes `.house.toml` (the tools per stage), CODEOWNERS for the protected files
 and the git hooks. Commit them. Files listed under `[paths] exclude` in `.house.toml`
-(prefix globs, such as `tests/fixtures/`) are never handed to a tool.
+(prefix globs, such as `tests/fixtures/`) are never handed to a tool. Under `[tests]`,
+`commit = [["cargo", "test"]]` and `push = [...]` (push falls back to commit) list test
+commands, each a program and its arguments with no shell, run from the repo root after the
+tools; a failing one is an R7 finding, and the last 20 lines of its output go to the run
+record. An unknown table or key in `.house.toml` is a "cannot check" naming it.
 
 ## The reply
 

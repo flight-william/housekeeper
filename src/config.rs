@@ -15,7 +15,13 @@
 //!
 //! [paths]
 //! exclude = ["tests/fixtures/"]     # never handed to a tool (`files::without_excluded`)
+//!
+//! [tests]                           # the test step (`tests_step`), after the tools
+//! commit = [["cargo", "test", "--offline"]]   # each a program and its arguments, no shell
+//! push = [["cargo", "test"]]        # optional; falls back to `commit`
 //! ```
+//!
+//! Every table and key is known: any other is a cannot-check naming it.
 //!
 //! Without the file (or without the stage's list) every adapter in `all()` runs,
 //! and each skips itself when no file concerns it.
@@ -37,6 +43,26 @@ pub struct Config {
     pub protected: Protected,
     #[serde(default)]
     pub paths: Paths,
+    #[serde(default)]
+    pub tests: Tests,
+}
+
+/// `[tests]`: commands for the test step, each a program and its arguments.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Tests {
+    pub commit: Option<Vec<Vec<String>>>,
+    pub push: Option<Vec<Vec<String>>>,
+}
+
+/// The test commands to run at `stage`; push falls back to `commit`, as `[tools]` does.
+pub fn tests_for(config: &Config, stage: Stage) -> &[Vec<String>] {
+    let tests = &config.tests;
+    let list = match stage {
+        Stage::Commit => tests.commit.as_ref(),
+        Stage::Push => tests.push.as_ref().or(tests.commit.as_ref()),
+    };
+    list.map_or(&[], Vec::as_slice)
 }
 
 /// `[paths]`: `exclude` lists prefix globs (a folder, a file, `*` and `**/` as in
@@ -89,13 +115,22 @@ pub fn load(root: &Path) -> Result<Config, CannotCheck> {
 /// Parse `.house.toml`. Every table and key is known: a misspelled one (`[tool]`)
 /// is a cannot-check naming it and its line, never a setting silently ignored.
 pub fn parse(text: &str) -> Result<Config, CannotCheck> {
-    toml::from_str(text).map_err(|e| {
+    let config: Config = toml::from_str(text).map_err(|e| {
         let at = e
             .span()
             .map(|s| format!(" (line {})", text[..s.start].matches('\n').count() + 1))
             .unwrap_or_default();
         bad(format!("{FILE} is not valid: {}{at}", one_line(&e)))
-    })
+    })?;
+    let (commit, push) = (&config.tests.commit, &config.tests.push);
+    for (stage, list) in [("commit", commit), ("push", push)] {
+        if list.iter().flatten().any(Vec::is_empty) {
+            return Err(bad(format!(
+                "{FILE} [tests] {stage} has an empty command: give a program and its arguments"
+            )));
+        }
+    }
+    Ok(config)
 }
 
 /// The adapters to run at `stage`, in the config's order; unknown names are cannot-checks.

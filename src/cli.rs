@@ -107,8 +107,9 @@ fn check_and_record(cwd: &Path, stage: Stage, json: bool) -> i32 {
     let Some(root) = root_or_say(cwd, label) else {
         return 2;
     };
-    let (mut report, base) = check_from(&root, stage, adapters::all());
-    let excused = excuse(&mut report, &root, today(), base.as_deref());
+    let checked = check_from(&root, stage, adapters::all());
+    let mut report = checked.report;
+    let excused = excuse(&mut report, &root, today(), checked.base.as_deref());
     if json {
         let mut value = report.json();
         if let Some(m) = value.as_object_mut() {
@@ -118,7 +119,15 @@ fn check_and_record(cwd: &Path, stage: Stage, json: bool) -> i32 {
     } else {
         print!("{}", report.text_as(label, excused));
     }
-    write_record(&root, start, &report, label, excused);
+    let tests = serde_json::to_value(&checked.failed_tests).unwrap_or_default();
+    write_record(
+        &root,
+        start,
+        &report,
+        label,
+        excused,
+        &[("test_output", tests)],
+    );
     report.exit()
 }
 
@@ -138,13 +147,15 @@ pub(crate) fn root_or_say(cwd: &Path, label: &str) -> Option<std::path::PathBuf>
     }
 }
 
-/// Append the run's record line, its stage shown as `label`, with the excused count.
+/// Append the run's record line, its stage shown as `label`, with the excused count
+/// and the `extra` fields (a check's failed test commands and their output's tails).
 pub(crate) fn write_record(
     root: &Path,
     start: SystemTime,
     report: &Report,
     label: &str,
     excused: usize,
+    extra: &[(&str, Value)],
 ) {
     let info = record::RunInfo {
         start,
@@ -159,6 +170,9 @@ pub(crate) fn write_record(
     if let Value::Object(m) = &mut line {
         m.insert("stage".into(), label.into());
         m.insert("excused".into(), excused.into());
+        for (key, value) in extra {
+            m.insert((*key).into(), value.clone());
+        }
     }
     match record::log_dir() {
         Some(dir) => {
