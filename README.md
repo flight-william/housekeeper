@@ -1,5 +1,7 @@
 # house
 
+**house lets one developer working with agents scale without losing quality.**
+
 ## Why house
 
 - **Quality is a property of the system, not of a person:** same rules, tests and record.
