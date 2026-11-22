@@ -10,9 +10,10 @@
 #   tests.rs file.
 # - Rust `let _ = ` cannot see types, so it reports every `let _ =` in tests,
 #   not only those on a Result. Cleanup is exempt, where there is nobody to hand
-#   the error to: a `Drop` impl, a `defer!` block, and a function named teardown
-#   or tear_down. Swift `try?` is exempt in the same places: `defer`, `deinit`,
-#   and tearDown/tearDownWithError.
+#   the error to: a `Drop` impl, a `defer!` block, a function named teardown
+#   or tear_down, and anywhere a `let _ =` whose last call is kill, wait,
+#   try_wait, remove_file, remove_dir_all, send, flush, shutdown or join.
+#   Swift `try?` is exempt in `defer`, `deinit` and tearDown/tearDownWithError.
 rules:
   # ---- Python ----
   - id: r9-python-noqa
@@ -214,6 +215,9 @@ rules:
       - pattern-not-inside: "defer! { ... }"
       - pattern-not-inside: "fn teardown(...) { ... }"
       - pattern-not-inside: "fn tear_down(...) { ... }"
+      # Cleanup anywhere: the statement's last call is one of these (text, since
+      # Semgrep cannot see the type; one level of nested parentheses in its arguments).
+      - pattern-not-regex: '\blet\s+_\s*=\s*[\w:.&*()\s]*?\b(kill|wait|try_wait|remove_file|remove_dir_all|send|flush|shutdown|join)\s*\((?:[^()]|\([^()]*\))*\)\s*;'
 
   - id: r9-rust-let-underscore-in-tests-dir
     languages: [rust]
@@ -231,3 +235,6 @@ rules:
       - pattern-not-inside: "defer! { ... }"
       - pattern-not-inside: "fn teardown(...) { ... }"
       - pattern-not-inside: "fn tear_down(...) { ... }"
+      # Cleanup anywhere: the statement's last call is one of these (text, since
+      # Semgrep cannot see the type; one level of nested parentheses in its arguments).
+      - pattern-not-regex: '\blet\s+_\s*=\s*[\w:.&*()\s]*?\b(kill|wait|try_wait|remove_file|remove_dir_all|send|flush|shutdown|join)\s*\((?:[^()]|\([^()]*\))*\)\s*;'

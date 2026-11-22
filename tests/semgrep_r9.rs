@@ -67,6 +67,7 @@ fn semgrep_finds_every_planted_silencer_and_nothing_in_clean_code() {
         "test_clean.py",
         "clean.rs",
         "cleanup.rs",
+        "exempt.rs",
         "clean.sh",
     ];
     for name in clean {

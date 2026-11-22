@@ -29,6 +29,14 @@ mod tests {
     }
 
     #[test]
+    fn stops_its_child() {
+        let mut child = std::process::Command::new("true").spawn().unwrap();
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = std::fs::remove_dir_all("d");
+    }
+
+    #[test]
     fn adds() {
         assert_eq!(add(1, 2), 3);
         let _file = TempFile(std::env::temp_dir().join("x"));

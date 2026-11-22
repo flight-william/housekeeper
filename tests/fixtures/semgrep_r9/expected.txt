@@ -27,6 +27,9 @@ r9-rust-allow rust/src/lib.rs:29
 r9-rust-allow rust/src/lib.rs:34
 r9-rust-ignore rust/src/lib.rs:40
 r9-rust-let-underscore-in-tests-dir rust/tests/it.rs:3
+r9-rust-let-underscore-in-tests-dir rust/tests/it.rs:5
+r9-rust-let-underscore-in-tests-dir rust/tests/it.rs:7
+r9-rust-let-underscore-in-tests-dir rust/tests/it.rs:8
 r9-shell-shellcheck-disable shell/planted.sh:2
 r9-shell-shellcheck-disable shell/planted.sh:4
 r9-swift-swiftlint-disable swift/AppTests/PlantedTests.swift:4
