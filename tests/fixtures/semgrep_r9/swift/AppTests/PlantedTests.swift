@@ -31,3 +31,20 @@ final class OldTests: XCTestCase {
         try XCTSkipIf(true, "never")
     }
 }
+
+// swiftformat:disable all
+// periphery:ignore
+final class KnownIssueTests: XCTestCase {
+    func testExpected() {
+        XCTExpectFailure("known bug")
+        XCTAssertTrue(false)
+    }
+}
+
+struct KnownIssues {
+    @Test func known() {
+        withKnownIssue {
+            Issue.record("known bug")
+        }
+    }
+}

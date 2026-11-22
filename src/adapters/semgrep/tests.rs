@@ -220,7 +220,7 @@ fn crash_without_json_cannot_check() {
 #[test]
 fn every_pattern_rule_has_a_fix_and_warning_severity() {
     let rules = R8.matches("  - id: ").count();
-    assert_eq!(rules, 7);
+    assert_eq!(rules, 32);
     assert_eq!(R8.matches("\n      fix: ").count(), rules);
     assert_eq!(R8.matches("\n    severity: WARNING").count(), rules);
 }

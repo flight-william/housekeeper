@@ -25,3 +25,18 @@ mod tests {
         helper().unwrap();
     }
 }
+
+#[expect(clippy::needless_return)]
+fn returns() -> i32 {
+    return 1;
+}
+
+#[cfg_attr(test, allow(dead_code))]
+fn maybe_dead() {}
+
+#[cfg(test)]
+mod more_tests {
+    #[test]
+    #[cfg_attr(not(feature = "net"), ignore)]
+    fn needs_net() {}
+}
