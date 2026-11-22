@@ -49,6 +49,10 @@ commands, each a program and its arguments with no shell, run from the repo root
 tools; a failing one is an R7 finding, and the last 20 lines of its output go to the run
 record. An unknown table or key in `.house.toml` is a "cannot check" naming it.
 
+`[house] minimum = "0.2.3"` names the oldest house the rules run on: an older house is a
+"cannot check" naming both versions, and the same or a newer one runs. A house older than
+0.2.3 does not know `[house]`, so it refuses the file as an unknown table.
+
 Each tool gets the files it reads, chosen by extension. A file with no known extension is
 chosen by its first line: `#!/usr/bin/env python3` goes to ruff, ruff format, r3 and Semgrep,
 and `#!/bin/sh` or `#!/usr/bin/env bash` to ShellCheck, r3 and Semgrep. A zsh script, which

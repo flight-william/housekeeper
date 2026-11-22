@@ -1,6 +1,9 @@
 //! The optional `.house.toml` at the repo root:
 //!
 //! ```toml
+//! [house]
+//! minimum = "0.2.3"                 # the oldest house these rules run on
+//!
 //! [tools]
 //! commit = ["ruff", "ruff-format"]
 //! push = ["ruff", "ruff-format"]   # optional; falls back to `commit`
@@ -21,7 +24,9 @@
 //! push = [["cargo", "test"]]        # optional; falls back to `commit`
 //! ```
 //!
-//! Every table and key is known: any other is a cannot-check naming it.
+//! Every table and key is known: any other is a cannot-check naming it. A house older
+//! than `[house] minimum` is a cannot-check naming both versions (a house from before
+//! `minimum` existed refuses the unknown `[house]` table, so it never runs either).
 //!
 //! Without the file (or without the stage's list) every adapter in `all()` runs,
 //! and each skips itself when no file concerns it.
@@ -36,6 +41,8 @@ pub const FILE: &str = ".house.toml";
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default)]
+    pub house: HouseTable,
+    #[serde(default)]
     pub tools: Tools,
     #[serde(default)]
     pub commit: CommitRules,
@@ -45,6 +52,46 @@ pub struct Config {
     pub paths: Paths,
     #[serde(default)]
     pub tests: Tests,
+}
+
+/// `[house]`: which house the rules are written for.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HouseTable {
+    /// The oldest house version, `MAJOR.MINOR.PATCH`, that may judge by these rules.
+    pub minimum: Option<String>,
+}
+
+/// `running` (this house's version) is at least `minimum`; both `MAJOR.MINOR.PATCH`,
+/// compared by number. Otherwise cannot-check naming both.
+pub fn minimum_met(minimum: &str, running: &str) -> Result<(), CannotCheck> {
+    let Some(wanted) = version(minimum) else {
+        return Err(CannotCheck {
+            what: format!("{FILE} [house] minimum `{minimum}` is not a MAJOR.MINOR.PATCH version"),
+            fix: format!("write it as in minimum = \"{running}\""),
+        });
+    };
+    if version(running).is_some_and(|have| have >= wanted) {
+        return Ok(());
+    }
+    Err(CannotCheck {
+        what: format!("{FILE} asks for house {minimum} or newer, and this is house {running}"),
+        fix: "upgrade house (brew upgrade house), then run again".into(),
+    })
+}
+
+/// `MAJOR.MINOR.PATCH`, each part digits only.
+fn version(text: &str) -> Option<(u64, u64, u64)> {
+    let parts: Vec<&str> = text.split('.').collect();
+    let [major, minor, patch] = parts[..] else {
+        return None;
+    };
+    let number = |p: &str| {
+        (!p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| p.parse().ok())
+            .flatten()
+    };
+    Some((number(major)?, number(minor)?, number(patch)?))
 }
 
 /// `[tests]`: commands for the test step, each a program and its arguments.
@@ -123,6 +170,9 @@ pub fn parse(text: &str) -> Result<Config, CannotCheck> {
             .unwrap_or_default();
         bad(format!("{FILE} is not valid: {}{at}", one_line(&e)))
     })?;
+    if let Some(minimum) = &config.house.minimum {
+        minimum_met(minimum, env!("CARGO_PKG_VERSION"))?;
+    }
     let (commit, push) = (&config.tests.commit, &config.tests.push);
     for (stage, list) in [("commit", commit), ("push", push)] {
         if list.iter().flatten().any(Vec::is_empty) {
