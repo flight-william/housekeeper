@@ -71,6 +71,11 @@ the changed ones, and is the only run that reports a stale excuse (an entry in
 An excuse may record `added = "YYYY-MM-DD"`, the day it was written: its deadline may be at
 most 56 days after that day (after today for a new entry).
 
+An excuse covers at most `count` findings of its rule in its file (and naming its `symbol`,
+when it gives one); `count` is 1 when the entry gives none. A matching finding beyond the
+count is to fix, so a new suppression beside an excused one is reported, though the list
+has not changed. Raising a count is the list growing.
+
 The list may only shrink: an entry added since the base (HEAD at commit, the push base at
 push), or a deadline moved later, is a finding. The first list, added where the base has
 none, is adoption, not growth. Its deadlines are still capped at 56 days, and it is a
