@@ -48,6 +48,7 @@ test-machine-path python/tests/test_planted.py:89
 test-machine-path python/tests/test_planted.py:90
 test-machine-path python/tests/test_planted.py:91
 python-test-rerun python/tests/test_planted.py:95
+python-test-keychain python/tests/test_planted.py:101
 rust-test-wall-clock rust/src/clock_test.rs:3
 rust-test-mod-sleep rust/src/inline_planted.rs:8
 rust-test-mod-sleep rust/src/inline_planted.rs:9
@@ -206,4 +207,5 @@ swift-test-network swift/AppTests/PlantedTests.swift:80
 test-machine-path swift/AppTests/PlantedTests.swift:84
 test-machine-path swift/AppTests/PlantedTests.swift:85
 test-machine-path swift/AppTests/PlantedTests.swift:86
+swift-test-keychain swift/AppTests/PlantedTests.swift:91
 swift-test-wall-clock swift/Tests/Support.swift:4

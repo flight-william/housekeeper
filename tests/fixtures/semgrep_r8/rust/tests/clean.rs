@@ -41,3 +41,14 @@ fn connects_to_its_own_listener() {
 fn mentions_a_path() {
     let _m = "files live under /Users/ on a Mac";
 }
+
+#[test]
+fn asserts_on_the_stand_in_log() {
+    let log = String::new();
+    assert!(log.contains("find-generic-password"));
+    assert_eq!(log, "add-generic-password -s svc");
+    assert_ne!(
+        log,
+        "delete-generic-password -s svc"
+    );
+}

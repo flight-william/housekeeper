@@ -86,4 +86,8 @@ final class PlantedTests: XCTestCase {
         let c = "~/project"
         XCTAssertNotNil([a, b, c])
     }
+
+    func testKeychainCallInsideAnAssert() {
+        XCTAssertEqual(SecItemCopyMatching(query, &result), errSecSuccess)
+    }
 }
