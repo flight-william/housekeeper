@@ -163,14 +163,7 @@ pub fn apply(findings: Vec<Finding>, excuses: &[Excuse], today: Date) -> Applied
     }
     for (e, used) in excuses.iter().zip(used) {
         if e.deadline < today {
-            out.problems.push(problem(
-                "house excuse-expired",
-                format!("excuse expired: {}, deadline {}", e.shown(), e.deadline),
-                format!(
-                    "fix the {} finding in {}, then delete the entry",
-                    e.rule, e.file
-                ),
-            ));
+            out.problems.push(expired_problem(e));
         } else if !used {
             out.problems.push(problem(
                 "house excuse-stale",
@@ -180,6 +173,26 @@ pub fn apply(findings: Vec<Finding>, excuses: &[Excuse], today: Date) -> Applied
         }
     }
     out
+}
+
+/// An "excuse expired" finding for each entry of `excuses` past its deadline.
+pub fn expired(excuses: &[Excuse], today: Date) -> Vec<Finding> {
+    excuses
+        .iter()
+        .filter(|e| e.deadline < today)
+        .map(expired_problem)
+        .collect()
+}
+
+fn expired_problem(e: &Excuse) -> Finding {
+    problem(
+        "house excuse-expired",
+        format!("excuse expired: {}, deadline {}", e.shown(), e.deadline),
+        format!(
+            "fix the {} finding in {}, then delete the entry",
+            e.rule, e.file
+        ),
+    )
 }
 
 /// The list may only shrink: each entry of `now` that `base` lacks (same rule, file and
@@ -312,25 +325,33 @@ pub fn parse(text: &str) -> Result<Vec<Excuse>, CannotCheck> {
 
 /// The list as committed at `rev` (`HEAD`, or a push base): `None` when `rev` is not
 /// a commit yet (a repo before its first commit) or holds no list, so the list is being
-/// adopted; a list there that cannot be read is cannot-check.
+/// adopted; a list there that is not a file or cannot be read is cannot-check.
 pub fn at_rev(root: &Path, rev: &str) -> Result<Option<Vec<Excuse>>, CannotCheck> {
-    if git(
+    let Ok(sha) = git(
         root,
         &["rev-parse", "--verify", "-q", &format!("{rev}^{{commit}}")],
-    )
-    .is_err()
-    {
+    ) else {
         return Ok(None);
-    }
-    let spec = format!("{rev}:{FILE}");
-    if git(root, &["cat-file", "-e", &spec]).is_err() {
+    };
+    let Some(text) = crate::rules::file_at(root, sha.stdout.trim(), FILE)? else {
         return Ok(None);
-    }
-    let text = git(root, &["show", &spec])?.stdout;
+    };
     parse(&text).map(Some).map_err(|c| CannotCheck {
         what: format!("the list at {rev}: {}", c.what),
         fix: c.fix,
     })
+}
+
+/// The list in the working tree at `root`: `None` when there is no file.
+pub fn in_tree(root: &Path) -> Result<Option<Vec<Excuse>>, CannotCheck> {
+    match std::fs::read_to_string(root.join(FILE)) {
+        Ok(text) => parse(&text).map(Some),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(CannotCheck {
+            what: format!("{FILE} cannot be read: {e}"),
+            fix: format!("make {FILE} readable"),
+        }),
+    }
 }
 
 fn one_line(message: &str) -> String {

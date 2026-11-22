@@ -4,6 +4,7 @@
 use crate::adapter::{Adapter, CannotCheck, Context, Stage};
 use crate::finding::Finding;
 use crate::reply::{Report, ToolRun};
+use crate::rules::Rules;
 use crate::tests_step::{self, FailedOutput, TestRun};
 use crate::{config, files, run};
 use std::path::Path;
@@ -11,12 +12,13 @@ use std::time::Instant;
 
 /// Run the stage's adapters, then its test commands, in `root` and collect the report.
 pub fn check(root: &Path, stage: Stage, all: Vec<Box<dyn Adapter>>) -> Report {
-    check_from(root, Mode::Stage(stage), all).report
+    let rules = Rules::working_tree(root);
+    check_from(root, Mode::Stage(stage), &rules, all).report
 }
 
 /// `house check --all`: the push stage's adapters and tests on every tracked file.
 pub fn check_all(root: &Path, all: Vec<Box<dyn Adapter>>) -> Report {
-    check_from(root, Mode::All, all).report
+    check_from(root, Mode::All, &Rules::working_tree(root), all).report
 }
 
 /// What a check runs on: a stage's files, or every tracked file (`--all`).
@@ -47,7 +49,13 @@ pub(super) struct Checked {
     pub failed_tests: Vec<FailedOutput>,
 }
 
-pub(super) fn check_from(root: &Path, mode: Mode, all: Vec<Box<dyn Adapter>>) -> Checked {
+/// Run by `rules`' `.house.toml`: its tools, excluded paths and test commands.
+pub(super) fn check_from(
+    root: &Path,
+    mode: Mode,
+    rules: &Rules,
+    all: Vec<Box<dyn Adapter>>,
+) -> Checked {
     let stage = mode.stage();
     let start = Instant::now();
     let mut checked = Checked {
@@ -60,13 +68,13 @@ pub(super) fn check_from(root: &Path, mode: Mode, all: Vec<Box<dyn Adapter>>) ->
         failed_tests: Vec::new(),
     };
     let tools = &mut checked.report.tools;
-    let (chosen, exclude, tests, config_cannot) = match config::load(root) {
+    let (chosen, exclude, tests, config_cannot) = match &rules.config {
         Ok(cfg) => {
-            let tests = config::tests_for(&cfg, stage).to_vec();
-            let (chosen, unknown) = config::select(&cfg, stage, all);
-            (chosen, cfg.paths.exclude, tests, unknown)
+            let tests = config::tests_for(cfg, stage).to_vec();
+            let (chosen, unknown) = config::select(cfg, stage, all);
+            (chosen, cfg.paths.exclude.clone(), tests, unknown)
         }
-        Err(c) => (all, Vec::new(), Vec::new(), vec![c]),
+        Err(c) => (all, Vec::new(), Vec::new(), vec![c.clone()]),
     };
     for c in config_cannot {
         tools.push(cannot_run("house", c));

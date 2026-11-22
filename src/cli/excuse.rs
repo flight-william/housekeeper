@@ -1,10 +1,10 @@
 //! The excuse list (`.house-excuses.toml`) applied to a stage's report.
 
 use super::stage::cannot_run;
-use crate::adapter::CannotCheck;
 use crate::excuses::{self, Date};
 use crate::finding::Finding;
 use crate::reply::{Report, ToolRun};
+use crate::rules::Rules;
 use std::path::Path;
 
 /// Apply `.house-excuses.toml` to `report`: excused findings leave the reply (their
@@ -17,7 +17,21 @@ use std::path::Path;
 /// no list is adoption: no entry is growth, but each deadline is still capped at 56 days
 /// from today, and the protected file still needs the owner's approval at commit-msg.
 pub fn excuse(report: &mut Report, root: &Path, today: Date, base: Option<&str>) -> usize {
-    apply_list(report, root, today, base, false)
+    let rules = Rules::working_tree(root);
+    apply_list(report, root, today, base, &rules, false)
+}
+
+/// `excuse` with the list from `rules`: with rules read at a revision, that list
+/// excuses the findings, while the pushed list (the working tree's) is what the
+/// growth, deadline and expiry checks judge.
+pub(super) fn excuse_by(
+    report: &mut Report,
+    root: &Path,
+    today: Date,
+    base: Option<&str>,
+    rules: &Rules,
+) -> usize {
+    apply_list(report, root, today, base, rules, false)
 }
 
 /// `excuse` for `house check --all`, the one run over every tracked file: it also
@@ -25,7 +39,8 @@ pub fn excuse(report: &mut Report, root: &Path, today: Date, base: Option<&str>)
 /// could not check (its findings are missing, so nothing can be judged stale). An
 /// expired entry is reported as expired only.
 pub fn excuse_all(report: &mut Report, root: &Path, today: Date, base: Option<&str>) -> usize {
-    apply_list(report, root, today, base, true)
+    let rules = Rules::working_tree(root);
+    apply_list(report, root, today, base, &rules, true)
 }
 
 fn apply_list(
@@ -33,18 +48,21 @@ fn apply_list(
     root: &Path,
     today: Date,
     base: Option<&str>,
+    rules: &Rules,
     full: bool,
 ) -> usize {
-    let list = match std::fs::read_to_string(root.join(excuses::FILE)) {
-        Ok(text) => excuses::parse(&text),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return 0,
-        Err(e) => Err(CannotCheck {
-            what: format!("{} cannot be read: {e}", excuses::FILE),
-            fix: format!("make {} readable", excuses::FILE),
-        }),
-    };
-    let list = match list {
-        Ok(list) => list,
+    let lists = rules.excuses.clone().and_then(|applied| {
+        let pushed = match rules.rev {
+            Some(_) => excuses::in_tree(root)?,
+            None => applied.clone(),
+        };
+        Ok((applied, pushed))
+    });
+    let (applied, pushed) = match lists {
+        Ok((None, None)) => return 0,
+        Ok((applied, pushed)) => (applied.unwrap_or_default(), pushed.unwrap_or_default()),
+        // A revision that cannot be read is reported once, by the check's config.
+        Err(c) if rules.config.as_ref().err() == Some(&c) => return 0,
         Err(c) => {
             report.tools.push(cannot_run("excuses", c));
             return 0;
@@ -63,7 +81,7 @@ fn apply_list(
         .flat_map(|t| t.findings.iter().cloned())
         .collect();
     let stale = if full && report.cannots().is_empty() {
-        let live: Vec<_> = list
+        let live: Vec<_> = applied
             .iter()
             .filter(|e| e.deadline >= today)
             .cloned()
@@ -72,25 +90,20 @@ fn apply_list(
     } else {
         Vec::new()
     };
-    let applied = excuses::apply(all, &list, today);
+    let sorted = excuses::apply(all, &applied, today);
     for t in &mut report.tools {
-        t.findings.retain(|f| !applied.excused.contains(f));
+        t.findings.retain(|f| !sorted.excused.contains(f));
     }
     let mut problems = match &base {
-        Some(base) => excuses::grew(base, &list),
+        Some(base) => excuses::grew(base, &pushed),
         None => Vec::new(),
     };
     problems.extend(excuses::too_far(
         base.as_deref().unwrap_or(&[]),
-        &list,
+        &pushed,
         today,
     ));
-    problems.extend(
-        applied
-            .problems
-            .into_iter()
-            .filter(|p| p.tool_rule != "house excuse-stale"),
-    );
+    problems.extend(excuses::expired(&pushed, today));
     problems.extend(stale);
     if !problems.is_empty() {
         report.tools.push(ToolRun {
@@ -103,5 +116,5 @@ fn apply_list(
             unread: Vec::new(),
         });
     }
-    applied.excused.len()
+    sorted.excused.len()
 }

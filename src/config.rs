@@ -101,7 +101,8 @@ pub struct Tools {
     pub push: Option<Vec<String>>,
 }
 
-/// Read `.house.toml` from `root`; absent is the default (every adapter).
+/// Read `.house.toml` from the working tree at `root`; absent is the default (every
+/// adapter). `rules::Rules::at` reads it from a revision instead.
 pub fn load(root: &Path) -> Result<Config, CannotCheck> {
     let path = root.join(FILE);
     let text = match std::fs::read_to_string(&path) {

@@ -14,6 +14,7 @@ pub mod init;
 pub mod push;
 pub mod record;
 pub mod reply;
+pub mod rules;
 pub mod run;
 pub mod runner;
 pub mod tests_step;

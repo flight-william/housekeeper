@@ -146,14 +146,16 @@ fn cli_parses_by_hand() {
         a(&["check", "--stage", "commit"]),
         Ok(cli::Cmd::Check {
             stage: Stage::Commit,
-            json: false
+            json: false,
+            config_from: None,
         })
     );
     assert_eq!(
         a(&["check", "--json", "--stage", "push"]),
         Ok(cli::Cmd::Check {
             stage: Stage::Push,
-            json: true
+            json: true,
+            config_from: None,
         })
     );
     assert_eq!(a(&["init"]), Ok(cli::Cmd::Init));

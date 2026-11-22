@@ -78,6 +78,16 @@ protected file, so the commit still needs the owner's approval line.
 
 ## On a runner
 
+A pull request can change `.house.toml` and `.house-excuses.toml`, so on a runner the rules
+come from the base: `house check --stage push --config-from <rev>` reads both files from
+that revision's git objects, never the working tree, and judges the pushed content with
+them. A file the revision does not hold is absent: the pull request's copy is not used in
+its place. A revision with no `.house.toml` at all is the first adoption: house prints
+`no base rules: the owner must approve this change` and uses the pushed rules, and the
+owner's approval comes from code-owner review. A revision or file that cannot be read is
+"cannot check". The pushed excuse list is still judged: growth, deadlines and expired
+entries.
+
 On a self-hosted GitHub Actions runner, house refuses to run for a public repository, or when
 it cannot read the event payload at `GITHUB_EVENT_PATH` (exit 2): there anyone's pull request
 code would run on the runner's machine.
