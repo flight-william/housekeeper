@@ -19,7 +19,7 @@ pub const FILE: &str = ".house-excuses.toml";
 /// The house rule the excuse list's own findings report (R9, nothing silenced).
 const RULE: &str = "R9";
 
-const SHAPE: &str = "fix .house-excuses.toml: each [[excuse]] has rule, file, deadline (YYYY-MM-DD) and reason, optional symbol and value";
+const SHAPE: &str = "fix .house-excuses.toml: each [[excuse]] has rule, file, deadline (YYYY-MM-DD) and reason, optional symbol, value and added (YYYY-MM-DD)";
 
 /// A calendar day. `today` is always passed in; nothing here reads the clock.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -64,6 +64,26 @@ impl fmt::Display for Date {
     }
 }
 
+/// The longest an excuse may run, in days, from the day it was added.
+pub const MAX_DAYS: i64 = 56;
+
+impl Date {
+    /// Days since 1970-01-01 (civil calendar), so dates subtract.
+    fn days(self) -> i64 {
+        let (y, m, d) = (
+            i64::from(self.year),
+            i64::from(self.month),
+            i64::from(self.day),
+        );
+        let y = if m <= 2 { y - 1 } else { y };
+        let era = y.div_euclid(400);
+        let yoe = y - era * 400;
+        let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+        era * 146_097 + doe - 719_468
+    }
+}
+
 /// One entry: findings of `rule` in `file` are excused until `deadline`, inclusive.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Excuse {
@@ -73,6 +93,8 @@ pub struct Excuse {
     pub value: Option<f64>,
     pub deadline: Date,
     pub reason: String,
+    /// The day the entry was added, when the entry records it.
+    pub added: Option<Date>,
 }
 
 impl Excuse {
@@ -187,6 +209,44 @@ pub fn grew(base: &[Excuse], now: &[Excuse]) -> Vec<Finding> {
         .collect()
 }
 
+/// An entry whose deadline is more than 56 days after the day it was added: today for an
+/// entry `base` lacks (same rule, file and symbol), its `added` date for one `base` has.
+/// An older entry that records no `added` date is not judged; `grew` already stops its
+/// deadline moving later.
+pub fn too_far(base: &[Excuse], now: &[Excuse], today: Date) -> Vec<Finding> {
+    let key = |e: &Excuse| (e.rule.clone(), e.file.clone(), e.symbol.clone());
+    now.iter()
+        .filter(|e| {
+            let is_new = !base.iter().any(|b| key(b) == key(e));
+            let from = if is_new { Some(today) } else { e.added };
+            from.is_some_and(|d| e.deadline.days() - d.days() > MAX_DAYS)
+        })
+        .map(|e| {
+            problem(
+                "house excuse-far",
+                format!("excuse deadline too far: {}", e.shown()),
+                format!("set a deadline within {MAX_DAYS} days"),
+            )
+        })
+        .collect()
+}
+
+/// Entries of `excuses` that match none of `findings`. Only a run over every tracked file
+/// (`house check --all`) may call this: a commit or push sees changed files only.
+pub fn stale(excuses: &[Excuse], findings: &[Finding]) -> Vec<Finding> {
+    excuses
+        .iter()
+        .filter(|e| !findings.iter().any(|f| e.matches(f)))
+        .map(|e| {
+            problem(
+                "house excuse-stale",
+                format!("stale excuse: {} matches no finding", e.shown()),
+                format!("delete it from {FILE}"),
+            )
+        })
+        .collect()
+}
+
 fn problem(tool_rule: &str, what: String, fix: String) -> Finding {
     Finding {
         rule: RULE.to_string(),
@@ -222,6 +282,14 @@ pub fn parse(text: &str) -> Result<Vec<Excuse>, CannotCheck> {
         if r.file.trim().is_empty() || r.reason.trim().is_empty() {
             return Err(bad(format!("{entry}: file and reason must not be empty")));
         }
+        let added = match &r.added {
+            None => None,
+            Some(a) => Some(Date::parse(a).ok_or_else(|| {
+                bad(format!(
+                    "{entry}: added `{a}` is not a real YYYY-MM-DD date"
+                ))
+            })?),
+        };
         let e = Excuse {
             rule: r.rule,
             file: r.file,
@@ -229,6 +297,7 @@ pub fn parse(text: &str) -> Result<Vec<Excuse>, CannotCheck> {
             value: r.value,
             deadline,
             reason: r.reason,
+            added,
         };
         if list
             .iter()
@@ -285,4 +354,5 @@ struct RawExcuse {
     value: Option<f64>,
     deadline: String,
     reason: String,
+    added: Option<String>,
 }
