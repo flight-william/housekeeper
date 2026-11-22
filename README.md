@@ -1,5 +1,14 @@
 # house
 
+## Why house
+
+- **Quality is a property of the system, not of a person:** same rules, tests and record.
+- **Feedback is fixed and immediate:** one format, a fix on every line, at every stage.
+- **The rules themselves improve:** the run records show which rules catch real problems.
+- **People's work moves up a level:** to what is needed, what "done" means, and the design.
+
+More: [docs/why.md](docs/why.md)
+
 house runs the tools that check a repo's rules at commit and at push, replies to agents in
 one format, and records every run. It never judges code itself: each rule maps to the tools
 that check it (ruff, cargo fmt, clippy and cargo-deny, SwiftLint and swift format, ShellCheck,
