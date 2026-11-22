@@ -34,6 +34,7 @@ mod tests {
         let _ = child.kill();
         let _ = child.wait();
         let _ = std::fs::remove_dir_all("d");
+        let _ = tx.send(run_child(&os(&words), Duration::from_millis(300)));
     }
 
     #[test]

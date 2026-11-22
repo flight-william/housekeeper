@@ -16,4 +16,6 @@ fn cleans_up_inline() {
     let _ = handle.join();
     let _ = self.0
         .kill();
+    // Arguments nested two levels deep: still a send.
+    let _ = tx.send(run_child(&os(&words), Duration::from_millis(300)));
 }

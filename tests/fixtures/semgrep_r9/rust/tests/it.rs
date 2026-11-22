@@ -6,4 +6,5 @@ fn drops_result() {
     // An ordinary call on the result of a cleanup call.
     let _ = tx.send(1).map(drop);
     let _ = killer();
+    let _ = foo(bar(baz()));
 }
