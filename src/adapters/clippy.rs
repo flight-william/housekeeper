@@ -2,7 +2,7 @@
 //! The thresholds (60 lines, 6 arguments) live in the project's `clippy.toml`.
 
 use super::Exits;
-use super::cargo_fmt::{manifests, relative};
+use super::cargo_fmt::{listed, manifests, relative};
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
 use crate::finding::{Finding, Measure, Place};
 use serde_json::Value;
@@ -20,7 +20,10 @@ const EXITS: Exits = Exits {
 
 const ARGS: &[&str] = &[
     "clippy",
+    "--all-targets",
     "--offline",
+    "--locked",
+    "--keep-going",
     "--message-format=json",
     "--quiet",
     "--",
@@ -64,6 +67,7 @@ impl Adapter for Clippy {
 
     fn parse(&self, ctx: &Context, out: &Output) -> Result<Vec<Finding>, CannotCheck> {
         let mut findings = Vec::new();
+        let mut seen = Vec::new();
         for line in out.stdout.lines() {
             let Ok(v) = serde_json::from_str::<Value>(line) else {
                 continue;
@@ -79,13 +83,21 @@ impl Adapter for Clippy {
                 return Err(cannot_build(msg["message"].as_str().unwrap_or("")));
             };
             let file = source_path(&ctx.root, &v, span["file_name"].as_str().unwrap_or(""));
-            findings.push(finding(msg, span, code, file));
+            let f = finding(msg, span, code, file);
+            // With --all-targets a lint in library code comes once per target that
+            // builds it (the lib and its unit tests): the same span, said again.
+            let column = span["column_start"].as_u64();
+            if !seen.contains(&(f.place.clone(), f.line, column, f.what.clone())) {
+                seen.push((f.place.clone(), f.line, column, f.what.clone()));
+                findings.push(f);
+            }
         }
         if findings.is_empty() && out.exit != 0 {
             let first = out.stderr.lines().find(|l| l.starts_with("error"));
             return Err(cannot_build(first.unwrap_or("no output")));
         }
-        EXITS.judge("clippy", out, findings)
+        let findings = EXITS.judge("clippy", out, findings)?;
+        Ok(listed(ctx, findings))
     }
 }
 
@@ -233,7 +245,32 @@ mod tests {
             stdout: stdout.into(),
             stderr: stderr.into(),
         };
-        Clippy.parse(&ctx("/tmp/house-fixture/planted", &[]), &out)
+        Clippy.parse(&ctx("/tmp/house-fixture/planted", &["src/lib.rs"]), &out)
+    }
+
+    #[test]
+    fn findings_in_files_not_staged_are_dropped() {
+        let out = Output {
+            exit: 101,
+            stdout: PLANTED.into(),
+            stderr: String::new(),
+        };
+        let c = ctx(
+            "/tmp/house-fixture/planted",
+            &["src/other.rs", "Cargo.toml"],
+        );
+        assert_eq!(Clippy.parse(&c, &out), Ok(vec![]));
+    }
+
+    #[test]
+    fn a_build_error_in_a_file_not_staged_still_cannot_check() {
+        let out = Output {
+            exit: 101,
+            stdout: BROKEN_OUT.into(),
+            stderr: BROKEN_ERR.into(),
+        };
+        let c = ctx("/tmp/house-fixture/planted", &["src/other.rs"]);
+        assert!(Clippy.parse(&c, &out).is_err());
     }
 
     #[test]
@@ -306,6 +343,11 @@ mod tests {
         assert_eq!(cmd.program, "cargo");
         assert_eq!(cmd.args[..3], ["clippy", "--manifest-path", "Cargo.toml"]);
         assert_eq!(cmd.args[3..], ARGS[1..]);
+        for flag in ["--all-targets", "--locked", "--offline", "--keep-going"] {
+            let at = cmd.args.iter().position(|a| a == flag);
+            let end = cmd.args.iter().position(|a| a == "--");
+            assert!(at < end && at.is_some(), "{flag} before --: {:?}", cmd.args);
+        }
         assert!(
             Clippy
                 .command(&ctx(env!("CARGO_MANIFEST_DIR"), &["a.md"]))
@@ -321,7 +363,8 @@ mod tests {
             stderr: String::new(),
         };
         let root = "/tmp/house-fixture/nested";
-        let found = Clippy.parse(&ctx(root, &[]), &out).unwrap();
+        let lib = "tools/inner/crates/a/src/lib.rs";
+        let found = Clippy.parse(&ctx(root, &[lib]), &out).unwrap();
         let got: Vec<_> = found
             .iter()
             .map(|f| (f.place.clone(), f.tool_rule.as_str()))
