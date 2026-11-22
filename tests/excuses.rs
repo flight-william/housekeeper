@@ -1,6 +1,6 @@
 //! The dated excuse list: match, expired, stale, malformed.
 
-use house::excuses::{Date, Excuse, apply, grew, parse};
+use house::excuses::{Date, Excuse, apply, grew, parse, stale, too_far};
 use house::finding::{Finding, Measure, Place};
 
 fn finding(rule: &str, file: &str, line: u32) -> Finding {
@@ -290,4 +290,72 @@ fn an_unchanged_or_shrinking_list_has_not_grown() {
         )
         .is_empty()
     );
+}
+
+fn far(base: &str, now: &str) -> Vec<String> {
+    let found = too_far(&list(base), &list(now), today());
+    for f in &found {
+        assert_eq!(f.rule, "R9");
+        assert_eq!(f.place, Place::File(".house-excuses.toml".to_string()));
+        assert_eq!(f.tool_rule, "house excuse-far");
+        assert_eq!(f.fix, "set a deadline within 56 days");
+    }
+    found.into_iter().map(|f| f.what).collect()
+}
+
+fn entry_due(deadline: &str) -> String {
+    ONE.replace("2026-12-31", deadline)
+}
+
+#[test]
+fn a_new_entry_more_than_56_days_out_is_too_far() {
+    // today is 2026-11-22; +56 days is 2027-01-17.
+    assert!(far("", &entry_due("2027-01-17")).is_empty());
+    assert_eq!(
+        far("", &entry_due("2027-01-18")),
+        vec!["excuse deadline too far: R3 src/old.rs run"]
+    );
+}
+
+#[test]
+fn a_dated_entry_is_measured_from_its_added_date() {
+    let dated = |added: &str, due: &str| format!("{}added = \"{added}\"\n", entry_due(due));
+    // Added 2026-10-01: 56 days later is 2026-11-26, so a December deadline is too far
+    // even though it is within 56 days of today.
+    let text = dated("2026-10-01", "2026-12-01");
+    assert_eq!(far(&text, &text).len(), 1);
+    let ok = dated("2026-10-01", "2026-11-26");
+    assert!(far(&ok, &ok).is_empty());
+}
+
+#[test]
+fn an_old_entry_without_an_added_date_is_not_judged() {
+    assert!(far(ONE, &entry_due("2030-01-01")).is_empty());
+}
+
+#[test]
+fn an_added_date_must_be_a_real_date() {
+    let text = format!("{ONE}added = \"2026-02-30\"\n");
+    assert!(parse(&text).unwrap_err().what.contains("added"));
+}
+
+fn stale_of(text: &str, findings: Vec<Finding>) -> Vec<String> {
+    let out = stale(&list(text), &findings);
+    for f in &out {
+        assert_eq!(f.rule, "R9");
+        assert_eq!(f.tool_rule, "house excuse-stale");
+        assert_eq!(f.fix, "delete it from .house-excuses.toml");
+    }
+    out.into_iter().map(|f| f.what).collect()
+}
+
+#[test]
+fn stale_names_the_entries_that_match_no_finding() {
+    let got = stale_of(ONE, vec![finding("R4", "src/old.rs", 1)]);
+    assert_eq!(
+        got,
+        vec!["stale excuse: R3 src/old.rs run matches no finding"]
+    );
+    assert!(stale_of(ONE, vec![finding("R3", "src/old.rs", 1)]).is_empty());
+    assert!(stale_of("", vec![]).is_empty());
 }

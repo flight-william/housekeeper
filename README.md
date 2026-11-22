@@ -32,7 +32,11 @@ house init
 
 `house init` writes `.house.toml` (the tools per stage), CODEOWNERS for the protected files
 and the git hooks. Commit them. Files listed under `[paths] exclude` in `.house.toml`
-(prefix globs, such as `tests/fixtures/`) are never handed to a tool.
+(prefix globs, such as `tests/fixtures/`) are never handed to a tool. Under `[tests]`,
+`commit = [["cargo", "test"]]` and `push = [...]` (push falls back to commit) list test
+commands, each a program and its arguments with no shell, run from the repo root after the
+tools; a failing one is an R7 finding, and the last 20 lines of its output go to the run
+record. An unknown table or key in `.house.toml` is a "cannot check" naming it.
 
 ## The reply
 
@@ -44,6 +48,12 @@ R4 src/score.py:88: complexity 14, limit 10. fix: split the branches into helper
 One line per finding: rule, place, what, `fix:` the action, then the tool's own rule id.
 Exit 0 is nothing to fix, 1 is findings, 2 is "cannot check" (a tool missing or failing).
 `house check --json` gives the same as JSON; every run appends one line to the run record.
+`house check --all` runs the push stage's tools and tests on every tracked file, not only
+the changed ones, and is the only run that reports a stale excuse (an entry in
+`.house-excuses.toml` that matches no finding).
+
+An excuse may record `added = "YYYY-MM-DD"`, the day it was written: its deadline may be at
+most 56 days after that day (after today for a new entry).
 
 ## Licence
 

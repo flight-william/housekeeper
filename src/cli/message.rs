@@ -36,7 +36,7 @@ pub(super) fn commit_msg(cwd: &Path, file: &str) -> i32 {
         tools: vec![tool],
     };
     print!("{}", report.text_as("commit-msg", 0));
-    write_record(&root, start, &report, "commit-msg", 0);
+    write_record(&root, start, &report, "commit-msg", 0, &[]);
     report.exit()
 }
 
