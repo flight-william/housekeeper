@@ -1,7 +1,7 @@
 //! `house check --stage push --config-from <rev>`: `.house.toml` and the excuse list
 //! come from that revision's objects, never the working tree, and judge the pushed
 //! content. A file absent at the revision is absent; a revision with no `.house.toml`
-//! at all is the first adoption, judged by the pushed rules with a note.
+//! at all is cannot-check: the change never judges itself.
 
 mod common;
 
@@ -166,29 +166,33 @@ fn an_expired_entry_the_change_deletes_is_not_reported() {
     assert!(out.contains("excuse expired"), "{out}");
 }
 
-// The first adoption: the revision has no .house.toml at all. The pushed rules judge
-// the change, and one note line says the owner must approve it.
+// This test replaced `a_revision_without_rules_uses_the_pushed_rules_with_a_note`,
+// which pinned a fallback to the pushed rules when the revision has no .house.toml:
+// the change then judged itself. A revision without rules is now cannot-check, so
+// the rules are adopted in a commit of their own, before any code is judged by them.
 #[test]
-fn a_revision_without_rules_uses_the_pushed_rules_with_a_note() {
-    // The base holds a list but no .house.toml: the pushed .house.toml runs R3, and
-    // the list (the working tree's) excuses its finding.
+fn a_revision_without_rules_cannot_check() {
     let (dir, base) = based("cf-adopt", &[(".house-excuses.toml", APP_EXCUSE)]);
     let local = commit(
         &dir,
-        &[(".house.toml", R3_ONLY), ("app.py", &long_py())],
-        "adopt house",
+        &[
+            (".house.toml", "[tools]\npush = []\n"),
+            ("app.py", &long_py()),
+        ],
+        "adopt house with no tools, and a long file",
     );
-    let (code, out, err) = push(&dir, &["--config-from", &base], &line(&local, &base));
-    assert_eq!(code, 0, "{out}");
-    assert!(out.contains("1 excused"), "{out}");
-    let note = "no base rules: the owner must approve this change";
-    assert_eq!(err.matches(note).count(), 1, "{err}");
-    // With base rules there is no note.
+    let (code, out, _) = push(&dir, &["--config-from", &base], &line(&local, &base));
+    assert_eq!(code, 2, "{out}");
+    let want = format!(
+        "cannot check: no rules at {base}. fix: adopt the rules in their own commit first, then change code"
+    );
+    assert_eq!(out.matches(&want).count(), 1, "{out}");
+    // With rules at the revision there is no such refusal.
     let (dir, base) = based("cf-adopt-not", &[(".house.toml", R3_ONLY)]);
     let local = commit(&dir, &[("a.py", "x = 1\n")], "small");
-    let (code, out, err) = push(&dir, &["--config-from", &base], &line(&local, &base));
+    let (code, out, _) = push(&dir, &["--config-from", &base], &line(&local, &base));
     assert_eq!(code, 0, "{out}");
-    assert!(!err.contains("no base rules"), "{err}");
+    assert!(!out.contains("no rules at"), "{out}");
 }
 
 #[test]

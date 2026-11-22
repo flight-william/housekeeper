@@ -156,9 +156,6 @@ fn check_and_record(cwd: &Path, mode: Mode, json: bool, config_from: Option<&str
         Some(rev) => Rules::at(&root, rev),
         None => Rules::working_tree(&root),
     };
-    if let Some(note) = rules.note {
-        eprintln!("house {label}: {note}");
-    }
     let checked = check_from(&root, mode, &rules, adapters::all());
     let mut report = checked.report;
     let base = checked.base.as_deref();

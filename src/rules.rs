@@ -4,9 +4,9 @@
 //! working tree.
 //!
 //! At a revision, a file it does not hold is absent: the working tree's copy is never
-//! used in its place. The one exception is a revision with no `.house.toml` at all,
-//! the first adoption: the pushed rules are used and a note says the owner must
-//! approve the change. A revision or file that cannot be read is cannot-check.
+//! used in its place. A revision with no `.house.toml` at all is cannot-check: the
+//! rules are adopted in a commit of their own, so a change never judges itself. A
+//! revision or file that cannot be read is cannot-check too.
 
 use crate::adapter::CannotCheck;
 use crate::config::{self, Config};
@@ -14,9 +14,6 @@ use crate::excuses::{self, Excuse};
 use crate::files::split_nul;
 use crate::run::git;
 use std::path::Path;
-
-/// The note a revision with no `.house.toml` gives.
-pub const NO_BASE_RULES: &str = "no base rules: the owner must approve this change";
 
 /// The rules a check runs by.
 #[derive(Debug)]
@@ -26,8 +23,6 @@ pub struct Rules {
     pub excuses: Result<Option<Vec<Excuse>>, CannotCheck>,
     /// The revision both were read from; `None` for the working tree.
     pub rev: Option<String>,
-    /// One line to show before the report (`NO_BASE_RULES`).
-    pub note: Option<&'static str>,
 }
 
 impl Rules {
@@ -37,17 +32,15 @@ impl Rules {
             config: config::load(root),
             excuses: excuses::in_tree(root),
             rev: None,
-            note: None,
         }
     }
 
-    /// The rules at `rev`, or the working tree's when `rev` holds no `.house.toml`.
+    /// The rules at `rev`; cannot-check when `rev` holds no `.house.toml`.
     pub fn at(root: &Path, rev: &str) -> Rules {
         let unread = |c: CannotCheck| Rules {
             config: Err(c.clone()),
             excuses: Err(c),
             rev: Some(rev.to_string()),
-            note: None,
         };
         let sha = match commit(root, rev) {
             Ok(sha) => sha,
@@ -56,10 +49,10 @@ impl Rules {
         let config = match file_at(root, &sha, config::FILE) {
             Ok(Some(text)) => config::parse(&text).map_err(|c| named(c, rev)),
             Ok(None) => {
-                return Rules {
-                    note: Some(NO_BASE_RULES),
-                    ..Rules::working_tree(root)
-                };
+                return unread(CannotCheck {
+                    what: format!("no rules at {rev}"),
+                    fix: "adopt the rules in their own commit first, then change code".into(),
+                });
             }
             Err(c) => Err(named(c, rev)),
         };
@@ -70,7 +63,6 @@ impl Rules {
             config,
             excuses,
             rev: Some(rev.to_string()),
-            note: None,
         }
     }
 }
