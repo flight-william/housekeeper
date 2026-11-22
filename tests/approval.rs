@@ -118,3 +118,18 @@ fn protected_names_count_anywhere_and_in_any_case() {
     }
     assert!(check(&s(&["sub/notes.cfg", "src/config.rs"]), &protected(), "m").is_empty());
 }
+
+/// The Rust tools' settings at the repo root, where cargo-deny, clippy and rustfmt
+/// read them first: `**/` matches zero folders too.
+#[test]
+fn rust_tool_settings_at_the_root_are_protected() {
+    for path in [
+        "deny.toml",
+        "clippy.toml",
+        ".clippy.toml",
+        "rustfmt.toml",
+        ".rustfmt.toml",
+    ] {
+        assert_eq!(check(&s(&[path]), &protected(), "m").len(), 1, "{path}");
+    }
+}
