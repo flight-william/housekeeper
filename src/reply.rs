@@ -40,10 +40,13 @@ pub fn stage_name(stage: Stage) -> &'static str {
     }
 }
 
-/// The rule a cannot-check line reports: formatters are R1, every other tool R2.
-/// (`CannotCheck` carries no rule, so the core derives it from the tool's name.)
+/// The rule a cannot-check line reports: the test step is R7, formatters are R1,
+/// every other tool R2. (`CannotCheck` carries no rule, so the core derives it from
+/// the tool's name.)
 pub fn cannot_rule(tool: &str) -> &'static str {
-    if tool.contains("fmt") || tool.contains("format") {
+    if tool == crate::tests_step::NAME {
+        "R7"
+    } else if tool.contains("fmt") || tool.contains("format") {
         "R1"
     } else {
         "R2"

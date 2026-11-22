@@ -117,6 +117,9 @@ fn a_missing_test_program_is_cannot_check() {
     assert_eq!(c.what, "house-no-such-program is not installed");
     assert!(c.fix.contains("[tests]"), "{}", c.fix);
     assert_eq!(r.exit(), 2);
+    let line = "R7 cannot check: house-no-such-program is not installed.";
+    assert!(r.text().contains(line), "{}", r.text());
+    assert_eq!(r.json()["cannot_check"][0]["rule"], "R7");
 }
 
 #[test]
