@@ -66,6 +66,12 @@ the changed ones, and is the only run that reports a stale excuse (an entry in
 An excuse may record `added = "YYYY-MM-DD"`, the day it was written: its deadline may be at
 most 56 days after that day (after today for a new entry).
 
+## On a runner
+
+On a self-hosted GitHub Actions runner, house refuses to run for a public repository, or when
+it cannot read the event payload at `GITHUB_EVENT_PATH` (exit 2): there anyone's pull request
+code would run on the runner's machine.
+
 ## Licence
 
 house is dual-licensed under MIT or Apache-2.0, at your option. See LICENSE-MIT and LICENSE-APACHE.

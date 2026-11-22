@@ -14,7 +14,7 @@ pub use stage::{check, check_all};
 use crate::adapter::Stage;
 use crate::excuses::Date;
 use crate::reply::{Report, stage_name};
-use crate::{adapters, files, init, record, run};
+use crate::{adapters, files, init, record, run, runner};
 use message::commit_msg;
 use serde_json::Value;
 use stage::{Mode, check_from};
@@ -110,6 +110,10 @@ fn run_init(cwd: &Path, owner: Option<&str>) -> i32 {
 }
 
 fn check_and_record(cwd: &Path, mode: Mode, json: bool) -> i32 {
+    if let Some(line) = runner::refusal(&|key| std::env::var(key).ok()) {
+        println!("{line}");
+        return 2;
+    }
     let start = SystemTime::now();
     let label = match mode {
         Mode::Stage(stage) => stage_name(stage),
