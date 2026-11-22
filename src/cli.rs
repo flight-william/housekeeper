@@ -1,4 +1,5 @@
-//! `house check --stage commit|push [--json]`, `house commit-msg <file>`,
+//! `house check --stage commit|push [--json]`, `house check --all [--json]`,
+//! `house commit-msg <file>`,
 //! `house init [--owner @user]`, `house --version`. Arguments are parsed by hand.
 //! The cli is the only place that reads the clock for the excuse list's "today".
 
@@ -6,9 +7,9 @@ mod excuse;
 mod message;
 mod stage;
 
-pub use excuse::excuse;
+pub use excuse::{excuse, excuse_all};
 pub use message::{commit_facts, judge_message};
-pub use stage::check;
+pub use stage::{check, check_all};
 
 use crate::adapter::Stage;
 use crate::excuses::Date;
@@ -16,15 +17,16 @@ use crate::reply::{Report, stage_name};
 use crate::{adapters, files, init, record, run};
 use message::commit_msg;
 use serde_json::Value;
-use stage::check_from;
+use stage::{Mode, check_from};
 use std::path::Path;
 use std::time::SystemTime;
 
-pub const USAGE: &str = "usage: house check --stage commit|push [--json] | house commit-msg <message file> | house init [--owner @user] | house --version";
+pub const USAGE: &str = "usage: house check --stage commit|push [--json] | house check --all [--json] | house commit-msg <message file> | house init [--owner @user] | house --version";
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Cmd {
     Check { stage: Stage, json: bool },
+    CheckAll { json: bool },
     CommitMsg { file: String },
     Init,
     InitOwner { owner: String },
@@ -52,10 +54,12 @@ pub fn parse(args: &[String]) -> Result<Cmd, String> {
 fn parse_check(rest: &[&str]) -> Result<Cmd, String> {
     let mut stage = None;
     let mut json = false;
+    let mut all = false;
     let mut it = rest.iter();
     while let Some(arg) = it.next() {
         match *arg {
             "--json" => json = true,
+            "--all" => all = true,
             "--stage" => {
                 stage = Some(match it.next() {
                     Some(&"commit") => Stage::Commit,
@@ -66,8 +70,11 @@ fn parse_check(rest: &[&str]) -> Result<Cmd, String> {
             _ => return Err(USAGE.into()),
         }
     }
-    let stage = stage.ok_or_else(|| USAGE.to_string())?;
-    Ok(Cmd::Check { stage, json })
+    match (stage, all) {
+        (None, true) => Ok(Cmd::CheckAll { json }),
+        (Some(stage), false) => Ok(Cmd::Check { stage, json }),
+        _ => Err(USAGE.into()),
+    }
 }
 
 /// Run house with `args` (without the program name) in `cwd`; returns the exit code.
@@ -84,7 +91,8 @@ pub fn main(args: &[String], cwd: &Path) -> i32 {
         Ok(Cmd::Init) => run_init(cwd, None),
         Ok(Cmd::InitOwner { owner }) => run_init(cwd, Some(&owner)),
         Ok(Cmd::CommitMsg { file }) => commit_msg(cwd, &file),
-        Ok(Cmd::Check { stage, json }) => check_and_record(cwd, stage, json),
+        Ok(Cmd::Check { stage, json }) => check_and_record(cwd, Mode::Stage(stage), json),
+        Ok(Cmd::CheckAll { json }) => check_and_record(cwd, Mode::All, json),
     }
 }
 
@@ -101,18 +109,26 @@ fn run_init(cwd: &Path, owner: Option<&str>) -> i32 {
     }
 }
 
-fn check_and_record(cwd: &Path, stage: Stage, json: bool) -> i32 {
+fn check_and_record(cwd: &Path, mode: Mode, json: bool) -> i32 {
     let start = SystemTime::now();
-    let label = stage_name(stage);
+    let label = match mode {
+        Mode::Stage(stage) => stage_name(stage),
+        Mode::All => "all",
+    };
     let Some(root) = root_or_say(cwd, label) else {
         return 2;
     };
-    let checked = check_from(&root, stage, adapters::all());
+    let checked = check_from(&root, mode, adapters::all());
     let mut report = checked.report;
-    let excused = excuse(&mut report, &root, today(), checked.base.as_deref());
+    let base = checked.base.as_deref();
+    let excused = match mode {
+        Mode::Stage(_) => excuse(&mut report, &root, today(), base),
+        Mode::All => excuse_all(&mut report, &root, today(), base),
+    };
     if json {
         let mut value = report.json();
         if let Some(m) = value.as_object_mut() {
+            m.insert("stage".into(), label.into());
             m.insert("excused".into(), excused.into());
         }
         println!("{value}");

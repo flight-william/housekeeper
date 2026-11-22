@@ -15,6 +15,24 @@ use std::path::Path;
 /// base (the part of `push_range` before `..`) at push; `None` is no prior list (a
 /// first push without origin/main), so every entry is growth.
 pub fn excuse(report: &mut Report, root: &Path, today: Date, base: Option<&str>) -> usize {
+    apply_list(report, root, today, base, false)
+}
+
+/// `excuse` for `house check --all`, the one run over every tracked file: it also
+/// reports each live entry that matches no finding as a stale excuse, unless a tool
+/// could not check (its findings are missing, so nothing can be judged stale). An
+/// expired entry is reported as expired only.
+pub fn excuse_all(report: &mut Report, root: &Path, today: Date, base: Option<&str>) -> usize {
+    apply_list(report, root, today, base, true)
+}
+
+fn apply_list(
+    report: &mut Report,
+    root: &Path,
+    today: Date,
+    base: Option<&str>,
+    full: bool,
+) -> usize {
     let list = match std::fs::read_to_string(root.join(excuses::FILE)) {
         Ok(text) => excuses::parse(&text),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return 0,
@@ -42,6 +60,16 @@ pub fn excuse(report: &mut Report, root: &Path, today: Date, base: Option<&str>)
         .iter()
         .flat_map(|t| t.findings.iter().cloned())
         .collect();
+    let stale = if full && report.cannots().is_empty() {
+        let live: Vec<_> = list
+            .iter()
+            .filter(|e| e.deadline >= today)
+            .cloned()
+            .collect();
+        excuses::stale(&live, &all)
+    } else {
+        Vec::new()
+    };
     let applied = excuses::apply(all, &list, today);
     for t in &mut report.tools {
         t.findings.retain(|f| !applied.excused.contains(f));
@@ -54,6 +82,7 @@ pub fn excuse(report: &mut Report, root: &Path, today: Date, base: Option<&str>)
             .into_iter()
             .filter(|p| p.tool_rule != "house excuse-stale"),
     );
+    problems.extend(stale);
     if !problems.is_empty() {
         report.tools.push(ToolRun {
             name: "excuses".into(),
