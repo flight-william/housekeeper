@@ -47,6 +47,7 @@ pub fn excuse(report: &mut Report, root: &Path, today: Date, base: Option<&str>)
         t.findings.retain(|f| !applied.excused.contains(f));
     }
     let mut problems = excuses::grew(&base, &list);
+    problems.extend(excuses::too_far(&base, &list, today));
     problems.extend(
         applied
             .problems
