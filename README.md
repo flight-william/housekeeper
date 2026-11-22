@@ -66,6 +66,11 @@ the changed ones, and is the only run that reports a stale excuse (an entry in
 An excuse may record `added = "YYYY-MM-DD"`, the day it was written: its deadline may be at
 most 56 days after that day (after today for a new entry).
 
+The list may only shrink: an entry added since the base (HEAD at commit, the push base at
+push), or a deadline moved later, is a finding. The first list, added where the base has
+none, is adoption, not growth. Its deadlines are still capped at 56 days, and it is a
+protected file, so the commit still needs the owner's approval line.
+
 ## On a runner
 
 On a self-hosted GitHub Actions runner, house refuses to run for a public repository, or when

@@ -149,10 +149,9 @@ fn a_broken_excuse_list_cannot_check() {
     );
 }
 
-// Regression: an entry added beside new bad code must not pass the check.
-#[test]
-fn an_entry_added_since_head_is_the_list_growing() {
-    let root = common::repo("ex-grew-new");
+/// A repo whose HEAD is one empty commit: no excuse list there yet.
+fn listless_repo(name: &str) -> PathBuf {
+    let root = common::repo(name);
     common::git(
         &root,
         &[
@@ -164,7 +163,14 @@ fn an_entry_added_since_head_is_the_list_growing() {
             "start",
         ],
     );
-    std::fs::write(root.join(".house-excuses.toml"), LIVE).unwrap();
+    root
+}
+
+// Regression: an entry added beside new bad code must not pass the check.
+#[test]
+fn an_entry_added_since_head_is_the_list_growing() {
+    let root = excuses_repo("ex-grew-new", STALE);
+    std::fs::write(root.join(".house-excuses.toml"), format!("{STALE}{LIVE}")).unwrap();
     let mut r = report(Stage::Commit, vec![found("R3", "src/old.py", "x")], None);
     assert_eq!(
         cli::excuse(&mut r, &root, day("2026-11-22"), Some("HEAD")),
@@ -176,6 +182,58 @@ fn an_entry_added_since_head_is_the_list_growing() {
         "{}",
         r.text()
     );
+}
+
+// Adoption: the commit that first adds the list cannot shrink one that is not there, so
+// none of its entries is growth. The owner's approval of the protected file still applies
+// at commit-msg (tests/approval_wire.rs).
+#[test]
+fn adding_the_list_where_head_has_none_is_adoption_not_growth() {
+    let root = listless_repo("ex-adopt");
+    std::fs::write(root.join(".house-excuses.toml"), LIVE).unwrap();
+    let mut r = report(Stage::Commit, vec![found("R3", "src/old.py", "x")], None);
+    assert_eq!(
+        cli::excuse(&mut r, &root, day("2026-11-22"), Some("HEAD")),
+        1
+    );
+    assert_eq!(r.exit(), 0, "{}", r.text());
+    assert!(!r.text().contains("grew"), "{}", r.text());
+}
+
+#[test]
+fn after_adoption_an_added_entry_is_the_list_growing_again() {
+    let root = listless_repo("ex-adopt-then-grow");
+    std::fs::write(root.join(".house-excuses.toml"), LIVE).unwrap();
+    common::git(&root, &["add", "-A"]);
+    common::git(&root, &["commit", "-q", "--no-verify", "-m", "adopt"]);
+    std::fs::write(root.join(".house-excuses.toml"), format!("{LIVE}{STALE}")).unwrap();
+    let mut r = report(Stage::Commit, vec![], None);
+    cli::excuse(&mut r, &root, day("2026-11-22"), Some("HEAD"));
+    let text = r.text();
+    assert!(text.contains("excuse list grew: R4 src/gone.py."), "{text}");
+    assert!(!text.contains("grew: R3 src/old.py"), "{text}");
+}
+
+#[test]
+fn adoption_still_caps_each_deadline_at_56_days_from_today() {
+    let root = listless_repo("ex-adopt-far");
+    // 2026-11-22 + 56 days is 2027-01-17: that day passes, the next does not.
+    let list = format!(
+        "{}{}",
+        LIVE.replace("2026-12-31", "2027-01-17"),
+        STALE.replace("2026-12-31", "2027-01-18")
+    );
+    std::fs::write(root.join(".house-excuses.toml"), list).unwrap();
+    let mut r = report(Stage::Commit, vec![found("R3", "src/old.py", "x")], None);
+    cli::excuse(&mut r, &root, day("2026-11-22"), Some("HEAD"));
+    let text = r.text();
+    assert_eq!(r.exit(), 1, "{text}");
+    assert!(
+        text.contains("excuse deadline too far: R4 src/gone.py."),
+        "{text}"
+    );
+    assert!(!text.contains("too far: R3"), "{text}");
+    assert!(!text.contains("grew"), "{text}");
 }
 
 #[test]
@@ -196,16 +254,12 @@ fn a_deadline_moved_later_than_heads_is_the_list_growing() {
 }
 
 #[test]
-fn in_a_repo_with_no_commit_yet_every_entry_is_new() {
-    let root = common::repo("ex-grew-unborn");
+fn in_a_repo_with_no_commit_yet_the_list_is_adopted() {
+    let root = common::repo("ex-adopt-unborn");
     std::fs::write(root.join(".house-excuses.toml"), LIVE).unwrap();
     let mut r = report(Stage::Commit, vec![], None);
     cli::excuse(&mut r, &root, day("2026-11-22"), Some("HEAD"));
-    assert!(
-        r.text().contains("excuse list grew: R3 src/old.py."),
-        "{}",
-        r.text()
-    );
+    assert!(!r.text().contains("grew"), "{}", r.text());
 }
 
 #[test]
@@ -241,6 +295,23 @@ fn at_push_the_list_is_compared_with_the_push_base() {
     );
     let mut r = report(Stage::Push, vec![], None);
     cli::excuse(&mut r, &root, day("2026-11-22"), Some("HEAD"));
+    assert!(!r.text().contains("grew"), "{}", r.text());
+}
+
+#[test]
+fn at_push_a_push_base_with_no_list_is_adoption() {
+    let root = listless_repo("ex-adopt-push");
+    let out = std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(&root)
+        .output()
+        .unwrap();
+    let base = String::from_utf8(out.stdout).unwrap().trim().to_string();
+    std::fs::write(root.join(".house-excuses.toml"), LIVE).unwrap();
+    common::git(&root, &["add", "-A"]);
+    common::git(&root, &["commit", "-q", "--no-verify", "-m", "adopt"]);
+    let mut r = report(Stage::Push, vec![], None);
+    cli::excuse(&mut r, &root, day("2026-11-22"), Some(&base));
     assert!(!r.text().contains("grew"), "{}", r.text());
 }
 

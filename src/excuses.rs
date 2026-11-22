@@ -310,24 +310,24 @@ pub fn parse(text: &str) -> Result<Vec<Excuse>, CannotCheck> {
     Ok(list)
 }
 
-/// The list as committed at `rev` (`HEAD`, or a push base): empty when `rev` is not
-/// a commit yet (a repo before its first commit) or holds no list; a list there that
-/// cannot be read is cannot-check.
-pub fn at_rev(root: &Path, rev: &str) -> Result<Vec<Excuse>, CannotCheck> {
+/// The list as committed at `rev` (`HEAD`, or a push base): `None` when `rev` is not
+/// a commit yet (a repo before its first commit) or holds no list, so the list is being
+/// adopted; a list there that cannot be read is cannot-check.
+pub fn at_rev(root: &Path, rev: &str) -> Result<Option<Vec<Excuse>>, CannotCheck> {
     if git(
         root,
         &["rev-parse", "--verify", "-q", &format!("{rev}^{{commit}}")],
     )
     .is_err()
     {
-        return Ok(Vec::new());
+        return Ok(None);
     }
     let spec = format!("{rev}:{FILE}");
     if git(root, &["cat-file", "-e", &spec]).is_err() {
-        return Ok(Vec::new());
+        return Ok(None);
     }
     let text = git(root, &["show", &spec])?.stdout;
-    parse(&text).map_err(|c| CannotCheck {
+    parse(&text).map(Some).map_err(|c| CannotCheck {
         what: format!("the list at {rev}: {}", c.what),
         fix: c.fix,
     })

@@ -12,8 +12,10 @@ use std::path::Path;
 /// excuse" problems are always dropped: commit and push check changed files only, and
 /// only a full run over every file the list names can judge staleness. The list may
 /// only shrink: it is compared with the list at `base`, `HEAD` at commit and the push
-/// base (the part of `push_range` before `..`) at push; `None` is no prior list (a
-/// first push without origin/main), so every entry is growth.
+/// base (the part of `push_range` before `..`) at push; `None` is no base to compare
+/// with (a first push without origin/main), so every entry is growth. A base that holds
+/// no list is adoption: no entry is growth, but each deadline is still capped at 56 days
+/// from today, and the protected file still needs the owner's approval at commit-msg.
 pub fn excuse(report: &mut Report, root: &Path, today: Date, base: Option<&str>) -> usize {
     apply_list(report, root, today, base, false)
 }
@@ -48,7 +50,7 @@ fn apply_list(
             return 0;
         }
     };
-    let base = match base.map_or(Ok(Vec::new()), |rev| excuses::at_rev(root, rev)) {
+    let base = match base.map_or(Ok(Some(Vec::new())), |rev| excuses::at_rev(root, rev)) {
         Ok(base) => base,
         Err(c) => {
             report.tools.push(cannot_run("excuses", c));
@@ -74,8 +76,15 @@ fn apply_list(
     for t in &mut report.tools {
         t.findings.retain(|f| !applied.excused.contains(f));
     }
-    let mut problems = excuses::grew(&base, &list);
-    problems.extend(excuses::too_far(&base, &list, today));
+    let mut problems = match &base {
+        Some(base) => excuses::grew(base, &list),
+        None => Vec::new(),
+    };
+    problems.extend(excuses::too_far(
+        base.as_deref().unwrap_or(&[]),
+        &list,
+        today,
+    ));
     problems.extend(
         applied
             .problems
