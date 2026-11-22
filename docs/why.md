@@ -120,3 +120,5 @@ The role moves from checking code to three things:
 ---
 
 **Next:** [Set up a project](setup.md) · [The rules and the tools](../README.md)
+
+house is made by [Mu Media](https://media-mu.com).

@@ -71,3 +71,5 @@ most 56 days after that day (after today for a new entry).
 house is dual-licensed under MIT or Apache-2.0, at your option. See LICENSE-MIT and LICENSE-APACHE.
 
 Contributions are accepted under the same terms.
+
+house is made by [Mu Media](https://media-mu.com).
