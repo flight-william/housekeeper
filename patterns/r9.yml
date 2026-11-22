@@ -13,7 +13,8 @@
 #   the error to: a `Drop` impl, a `defer!` block, a function named teardown
 #   or tear_down, and anywhere a `let _ =` whose last call is kill, wait,
 #   try_wait, remove_file, remove_dir_all, send, flush, shutdown or join.
-#   Swift `try?` is exempt in `defer`, `deinit` and tearDown/tearDownWithError.
+#   Swift `try?` is exempt in `defer`, `deinit` and tearDown/tearDownWithError,
+#   and anywhere on a FileManager removeItem(at:) or removeItem(atPath:).
 rules:
   # ---- Python ----
   - id: r9-python-noqa
@@ -175,6 +176,9 @@ rules:
       # Semgrep's Swift patterns cannot name a deinit, so it is text (one level
       # of nested braces inside).
       - pattern-not-regex: '\bdeinit\s*\{(?:[^{}]|\{[^{}]*\})*\}'
+      # Removing a file or folder anywhere: `try?` straight on a FileManager
+      # removeItem(at:) or removeItem(atPath:) call, the receiver a plain name chain.
+      - pattern-not-regex: '\btry\?\s+[\w.]*\bremoveItem\s*\(\s*(?:at|atPath)\s*:'
 
   # ---- Rust ----
   - id: r9-rust-allow

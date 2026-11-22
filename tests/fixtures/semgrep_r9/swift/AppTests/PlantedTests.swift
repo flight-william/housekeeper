@@ -48,3 +48,10 @@ struct KnownIssues {
         }
     }
 }
+
+// A try? on any other call still swallows the error, a file write among them.
+@Test func writes() {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("y")
+    try? Data().write(to: url)
+    try? check(FileManager.default.removeItem(at: url))
+}

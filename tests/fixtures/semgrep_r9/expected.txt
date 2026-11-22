@@ -43,3 +43,5 @@ r9-swift-tool-ignore swift/AppTests/PlantedTests.swift:35
 r9-swift-tool-ignore swift/AppTests/PlantedTests.swift:36
 r9-swift-expected-failure swift/AppTests/PlantedTests.swift:39
 r9-swift-expected-failure swift/AppTests/PlantedTests.swift:46
+r9-swift-try-optional-in-tests swift/AppTests/PlantedTests.swift:55
+r9-swift-try-optional-in-tests swift/AppTests/PlantedTests.swift:56
