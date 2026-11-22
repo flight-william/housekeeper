@@ -5,11 +5,11 @@ one format, and records every run. It never judges code itself: each rule maps t
 that check it (ruff, cargo fmt, clippy and cargo-deny, SwiftLint and swift format, ShellCheck,
 gitleaks, Semgrep, its own size counter, commit-message and approval checks).
 
-## The rules (✓ checked by 0.1.0)
+## The rules (✓ checked by 0.2.0)
 
 R1 ✓ Formatted · R2 ✓ Clean: lint, warnings as errors, no secret · R3 ✓ Small: file ≤ 400
 lines, function ≤ 60 · R4 ✓ Simple: complexity ≤ 10 · R5 Not copied · R6 Nothing unused ·
-R7 Tested · R8 ✓ Deterministic tests · R9 ✓ Nothing silenced; fix the root cause ·
+R7 ✓ Tested · R8 ✓ Deterministic tests · R9 ✓ Nothing silenced; fix the root cause ·
 R10 Fast, at every stage · R11 State machine first · R12 Good API design · R13 Modular
 design · R14 Comments say why · R15 One vocabulary · R16 Standard folder layout ·
 R17 ✓ Commit messages are records: `area: what changed`, then Why:, Proof:, Undo:

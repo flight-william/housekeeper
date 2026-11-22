@@ -9,7 +9,16 @@ fn the_formula_installs_the_tagged_release_from_the_public_repo() {
         FORMULA.contains(&format!("  url \"{REPO}.git\",\n")),
         "{FORMULA}"
     );
-    assert!(FORMULA.contains("      tag: \"v0.1.0\""), "{FORMULA}");
+    let version = env!("CARGO_PKG_VERSION");
+    assert_eq!(version, "0.2.0");
+    assert!(
+        FORMULA.contains(&format!("      tag: \"v{version}\"\n")),
+        "{FORMULA}"
+    );
+    assert!(
+        FORMULA.contains(&format!("  version \"{version}\"\n")),
+        "{FORMULA}"
+    );
     assert!(
         FORMULA.contains(&format!("  head \"{REPO}.git\", branch: \"main\"\n")),
         "{FORMULA}"
