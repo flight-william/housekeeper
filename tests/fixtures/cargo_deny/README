@@ -1,0 +1,10 @@
+Captured 2026-11-22 with cargo-deny 0.22.0 (Homebrew) on a planted crate at /tmp/house-fixture/planted
+depending on itoa =1.0.19 and memchr =2.8.3, with an advisory database made for the capture
+(two made-up advisories, RUSTSEC-2099-0001 for itoa and RUSTSEC-2099-0002 for a crate not used) so
+every run is offline. Command, from /tmp/house-fixture:
+`cargo-deny --offline --locked --format json --manifest-path planted/Cargo.toml --config planted/deny.toml check`
+planted.stderr: deny.toml bans memchr; exit 3 (advisories and bans failed). clean.stderr: no ban; exit 0.
+badconf.stderr: deny.toml with a misspelled key (`multiple-version`); exit 1.
+nodb.stderr: the advisory database folder named in deny.toml does not exist; exit 1.
+The capture folder is written as /tmp/house-fixture in every file here, and each timestamp as one
+fixed time; the real temporary folder named the machine.

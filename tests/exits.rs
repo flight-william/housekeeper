@@ -21,6 +21,7 @@ fn clean_output(tool: &str) -> &'static str {
         "shellcheck" => r#"{"comments":[]}"#,
         "semgrep" => r#"{"results":[],"errors":[]}"#,
         "cargo-fmt" | "clippy" | "swift-format" | "r3" => "",
+        "cargo-deny" => r#"{"fields":{},"type":"summary"}"#,
         other => panic!("no clean output for {other}: add it here"),
     }
 }
@@ -29,7 +30,7 @@ fn clean_output(tool: &str) -> &'static str {
 fn found_exit(tool: &str) -> Option<i32> {
     match tool {
         "ruff" | "ruff-format" | "cargo-fmt" | "swift-format" | "shellcheck" | "gitleaks"
-        | "semgrep" => Some(1),
+        | "semgrep" | "cargo-deny" => Some(1),
         "swiftlint" => Some(2),
         "clippy" => Some(101),
         "r3" => None,

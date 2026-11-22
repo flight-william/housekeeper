@@ -4,6 +4,7 @@ use crate::adapter::{Adapter, CannotCheck, Output};
 use crate::finding::Finding;
 use crate::run::first_line;
 
+pub mod cargo_deny;
 pub mod cargo_fmt;
 pub mod clippy;
 pub mod gitleaks;
@@ -21,6 +22,7 @@ pub fn all() -> Vec<Box<dyn Adapter>> {
         Box::new(ruff::RuffFormat),
         Box::new(cargo_fmt::CargoFmt),
         Box::new(clippy::Clippy),
+        Box::new(cargo_deny::CargoDeny),
         Box::new(swiftlint::SwiftLint),
         Box::new(swift_format::SwiftFormat),
         Box::new(shellcheck::Shellcheck),

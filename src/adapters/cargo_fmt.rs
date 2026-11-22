@@ -102,6 +102,17 @@ fn excludes(workspace: &toml::Table, inside: &Path) -> bool {
         .any(|e| inside.starts_with(e.trim_start_matches("./").trim_end_matches('/')))
 }
 
+/// Only the findings in files the run was asked about (`ctx.files`: staged at
+/// commit, pushed at push). cargo checks whole workspaces, so without this a
+/// commit of one file reported every other file's old problems too.
+pub(crate) fn listed(ctx: &Context, findings: Vec<Finding>) -> Vec<Finding> {
+    let asked = |f: &Finding| match &f.place {
+        Place::File(file) => ctx.files.contains(file),
+        _ => true,
+    };
+    findings.into_iter().filter(asked).collect()
+}
+
 /// A path the tool printed, made relative to the repo root with `/` separators.
 pub(crate) fn relative(root: &Path, path: &str) -> String {
     let p = Path::new(path);
@@ -155,7 +166,8 @@ impl Adapter for CargoFmt {
                 fix: "fix the error cargo fmt reports, then run it again".into(),
             });
         }
-        EXITS.judge("cargo-fmt", out, findings)
+        let findings = EXITS.judge("cargo-fmt", out, findings)?;
+        Ok(listed(ctx, findings))
     }
 }
 
@@ -206,7 +218,7 @@ mod tests {
     #[test]
     fn planted_diffs_give_one_r1_finding_per_block() {
         let found = CargoFmt
-            .parse(&ctx(ROOT, &[]), &out(1, PLANTED, ""))
+            .parse(&ctx(ROOT, &["src/lib.rs"]), &out(1, PLANTED, ""))
             .unwrap();
         let places: Vec<_> = found.iter().map(|f| (f.place.clone(), f.line)).collect();
         let lib = Place::File("src/lib.rs".into());
@@ -215,6 +227,12 @@ mod tests {
         assert_eq!(found[0].what, "not formatted");
         assert_eq!(found[0].fix, "run cargo fmt");
         assert_eq!(found[0].tool_rule, "rustfmt");
+    }
+
+    #[test]
+    fn diffs_in_files_not_staged_are_dropped() {
+        let c = ctx(ROOT, &["src/main.rs", "Cargo.toml"]);
+        assert_eq!(CargoFmt.parse(&c, &out(1, PLANTED, "")), Ok(vec![]));
     }
 
     #[test]
@@ -340,7 +358,10 @@ mod tests {
     fn nested_workspace_diffs_are_relative_to_the_repo() {
         let root = "/tmp/house-fixture/nested";
         let found = CargoFmt
-            .parse(&ctx(root, &[]), &out(1, NESTED, ""))
+            .parse(
+                &ctx(root, &["tools/inner/crates/a/src/lib.rs"]),
+                &out(1, NESTED, ""),
+            )
             .unwrap();
         assert_eq!(found.len(), 1);
         assert_eq!(
