@@ -17,6 +17,9 @@ pub fn repo_root(cwd: &Path) -> Result<PathBuf, CannotCheck> {
 /// (`push::Push`).
 pub struct Scope {
     pub files: Vec<String>,
+    /// Every changed path but deletes, links and excluded paths kept: what the
+    /// policy checks (`approval::wrong_case`) judge.
+    pub changed: Vec<String>,
     pub push_range: Option<String>,
     pub unbounded: bool,
 }
@@ -39,7 +42,9 @@ pub fn for_stage_excluding(
 ) -> Result<Scope, CannotCheck> {
     match stage {
         Stage::Commit => {
-            let files = without_excluded(staged(root)?, exclude);
+            let all = staged_changes(root)?;
+            let changed = not_deleted(&all);
+            let files = without_excluded(for_tools(root, &all), exclude);
             let unstaged = split_nul(&git(root, &["diff", "--name-only", "-z"])?.stdout);
             refuse_changed(
                 &files,
@@ -49,6 +54,7 @@ pub fn for_stage_excluding(
             )?;
             Ok(Scope {
                 files,
+                changed,
                 push_range: None,
                 unbounded: false,
             })
@@ -72,6 +78,7 @@ pub fn for_stage_excluding(
             let push = crate::push::pushed(root, &text)?;
             Ok(Scope {
                 files: without_excluded(push.files, exclude),
+                changed: push.changed,
                 push_range: push.range,
                 unbounded: push.unbounded,
             })
@@ -158,6 +165,18 @@ pub(crate) fn changes(root: &Path, diff: &[&str]) -> Result<Vec<Change>, CannotC
             path: path.clone(),
         })
         .collect())
+}
+
+/// The paths of `changes` not deleted, links and all, sorted, no repeats.
+pub(crate) fn not_deleted(changes: &[Change]) -> Vec<String> {
+    let mut paths: Vec<String> = changes
+        .iter()
+        .filter(|c| c.status != 'D')
+        .map(|c| c.path.clone())
+        .collect();
+    paths.sort();
+    paths.dedup();
+    paths
 }
 
 /// The paths of `changes` a tool can read: not deleted, not a link.

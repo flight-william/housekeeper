@@ -6,7 +6,7 @@ use crate::finding::Finding;
 use crate::reply::{Report, ToolRun};
 use crate::rules::Rules;
 use crate::tests_step::{self, FailedOutput, TestRun};
-use crate::{config, files, lints, run};
+use crate::{approval, config, files, lints, run};
 use std::path::Path;
 use std::time::Instant;
 
@@ -91,6 +91,7 @@ pub(super) fn check_from(
             if scope.unbounded {
                 checked.base = None;
             }
+            let scope_changed = scope.changed;
             let ctx = Context {
                 root: root.to_path_buf(),
                 stage,
@@ -100,6 +101,7 @@ pub(super) fn check_from(
             };
             tools.extend(chosen.iter().map(|a| run_one(a.as_ref(), &ctx)));
             tools.extend(lints::run(&ctx));
+            tools.extend(settings_case(&scope_changed, rules));
             for test in run_tests(&ctx, &tests) {
                 tools.push(test.tool);
                 checked.failed_tests.extend(test.failed);
@@ -111,16 +113,38 @@ pub(super) fn check_from(
     checked
 }
 
+/// The wrong-case settings names among `changed`, against the built-in protected
+/// list and the rules' `[protected] extra`; `None` when there are none.
+fn settings_case(changed: &[String], rules: &Rules) -> Option<ToolRun> {
+    let mut protected: Vec<String> = approval::PROTECTED.iter().map(|g| g.to_string()).collect();
+    if let Ok(config) = &rules.config {
+        protected.extend(config.protected.extra.iter().cloned());
+    }
+    let findings = approval::wrong_case(changed, &protected);
+    (!findings.is_empty()).then(|| ToolRun {
+        name: "settings-case".into(),
+        seconds: 0.0,
+        exit: None,
+        skipped: false,
+        findings,
+        cannot: None,
+        unread: Vec::new(),
+    })
+}
+
 /// Every tracked file still in the working copy, links and `exclude` dropped: what
 /// `--all` hands the tools, with no push range (gitleaks then reads all history).
+/// Every tracked path, links and all, is what the policy checks judge.
 fn every_file(root: &Path, exclude: &[String]) -> Result<files::Scope, CannotCheck> {
-    let tracked = files::without_links(root, files::tracked(root)?);
+    let changed = files::tracked(root)?;
+    let tracked = files::without_links(root, changed.clone());
     let present = tracked
         .into_iter()
         .filter(|f| root.join(f).is_file())
         .collect();
     Ok(files::Scope {
         files: files::without_excluded(present, exclude),
+        changed,
         push_range: None,
         unbounded: false,
     })

@@ -90,6 +90,12 @@ push), or a deadline moved later, is a finding. The first list, added where the 
 none, is adoption, not growth. Its deadlines are still capped at 56 days, and it is a
 protected file, so the commit still needs the owner's approval line.
 
+A changed path whose name matches a protected settings file only when case is ignored, such
+as `.SEMGREPIGNORE` or `sub/Pyproject.toml`, is an R9 finding at commit and push, whatever
+the commit message says: on a case-insensitive filesystem the tool reads it as its settings,
+while CODEOWNERS matches case-sensitively and asks no owner to review it. Use the canonical
+name.
+
 ## On a runner
 
 A pull request can change `.house.toml` and `.house-excuses.toml`, so on a runner the rules

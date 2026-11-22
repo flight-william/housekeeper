@@ -129,3 +129,58 @@ pub fn check(changed: &[String], protected: &[String], message: &str) -> Vec<Fin
         })
         .collect()
 }
+
+/// One R9 finding per path of `changed` that matches a glob of `protected` only when
+/// case is ignored, whatever the commit message says. A case-insensitive filesystem
+/// lets `.SEMGREPIGNORE` act as `.semgrepignore`, while GitHub CODEOWNERS matches
+/// paths case-sensitively, so the owner is never asked to review it.
+pub fn wrong_case(changed: &[String], protected: &[String]) -> Vec<Finding> {
+    changed
+        .iter()
+        .filter_map(|path| {
+            let lower = path.to_lowercase();
+            let glob = protected
+                .iter()
+                .find(|g| glob_matches(&g.to_lowercase(), &lower))?;
+            if protected.iter().any(|g| glob_matches(g, path)) {
+                return None;
+            }
+            let name = canonical(glob, path);
+            let how = if glob == &glob.to_lowercase() {
+                "canonical lowercase name"
+            } else {
+                "canonical name"
+            };
+            Some(Finding {
+                rule: "R9".to_string(),
+                place: Place::File(path.clone()),
+                line: None,
+                what: format!("settings file name in the wrong case: {path}"),
+                fix: format!("use the {how} {name}"),
+                tool_rule: "settings-case".to_string(),
+                measure: None,
+            })
+        })
+        .collect()
+}
+
+/// `path` spelled as `glob` spells it: each segment equal, ignoring case, to one of
+/// the glob's literal segments takes the glob's spelling; failing that, lowercase.
+fn canonical(glob: &str, path: &str) -> String {
+    let literals: Vec<&str> = glob.split('/').filter(|s| !s.contains('*')).collect();
+    let spelled = path
+        .split('/')
+        .map(|seg| {
+            literals
+                .iter()
+                .find(|l| l.eq_ignore_ascii_case(seg))
+                .map_or(seg, |l| *l)
+        })
+        .collect::<Vec<_>>()
+        .join("/");
+    if glob_matches(glob, &spelled) {
+        spelled
+    } else {
+        path.to_lowercase()
+    }
+}
