@@ -11,6 +11,7 @@ pub mod excuses;
 pub mod files;
 pub mod finding;
 pub mod init;
+pub mod lints;
 pub mod push;
 pub mod record;
 pub mod reply;

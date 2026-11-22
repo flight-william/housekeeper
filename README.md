@@ -58,6 +58,11 @@ chosen by its first line: `#!/usr/bin/env python3` goes to ruff, ruff format, r3
 and `#!/bin/sh` or `#!/usr/bin/env bash` to ShellCheck, r3 and Semgrep. A zsh script, which
 ShellCheck cannot read, goes to none of them, nor does a binary file.
 
+Every `Cargo.toml` a stage sends is also read by house itself, whatever `[tools]` lists: a
+lint set to `allow` (or `expect`) in a `[lints]` or `[workspace.lints]` table silences it for
+the whole crate, so each such entry is an R9 finding at its line. `deny`, `forbid` and `warn`
+are not: under clippy's `-D warnings` a `warn` lint is still an error.
+
 ## The reply
 
 ```

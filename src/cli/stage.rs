@@ -6,7 +6,7 @@ use crate::finding::Finding;
 use crate::reply::{Report, ToolRun};
 use crate::rules::Rules;
 use crate::tests_step::{self, FailedOutput, TestRun};
-use crate::{config, files, run};
+use crate::{config, files, lints, run};
 use std::path::Path;
 use std::time::Instant;
 
@@ -99,6 +99,7 @@ pub(super) fn check_from(
                 push_range: scope.push_range,
             };
             tools.extend(chosen.iter().map(|a| run_one(a.as_ref(), &ctx)));
+            tools.extend(lints::run(&ctx));
             for test in run_tests(&ctx, &tests) {
                 tools.push(test.tool);
                 checked.failed_tests.extend(test.failed);
