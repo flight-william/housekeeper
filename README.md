@@ -72,6 +72,11 @@ On a self-hosted GitHub Actions runner, house refuses to run for a public reposi
 it cannot read the event payload at `GITHUB_EVENT_PATH` (exit 2): there anyone's pull request
 code would run on the runner's machine.
 
+A fork can edit the workflow and skip house, so the runner needs a guard outside every
+workflow: `runner/job-started.sh` refuses any job from a repository that is not private.
+Install it with `ACTIONS_RUNNER_HOOK_JOB_STARTED=<path to runner/job-started.sh>` in the
+runner folder's `.env`, then restart the runner service.
+
 ## Licence
 
 house is dual-licensed under MIT or Apache-2.0, at your option. See LICENSE-MIT and LICENSE-APACHE.
