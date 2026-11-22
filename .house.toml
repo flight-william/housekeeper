@@ -4,6 +4,11 @@
 commit = ["cargo-fmt", "clippy", "ruff", "ruff-format", "r3", "gitleaks", "semgrep"]
 push = ["cargo-fmt", "clippy", "ruff", "ruff-format", "r3", "gitleaks", "semgrep"]
 
+# After the tools: the crate's tests, offline and on the locked dependencies.
+# Push uses the same list.
+[tests]
+commit = [["cargo", "test", "--offline", "--locked"]]
+
 # The planted samples the tests read: findings on purpose, never handed to a tool.
 [paths]
 exclude = ["tests/fixtures/"]
