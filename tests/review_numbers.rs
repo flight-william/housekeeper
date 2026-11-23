@@ -98,3 +98,36 @@ fn the_largest_counts_house_writes_add_up_exactly() {
         "{text}"
     );
 }
+
+/// A record line whose one tool, ruff, took `seconds`.
+fn timed(seconds: &str) -> String {
+    format!(
+        r#"{{"start":"2026-11-02T09:00:00Z","repo":"/work/shop","stage":"commit","tools":[{{"name":"ruff","seconds":{seconds},"findings":{{}},"excused":{{}}}}],"findings":[],"excused":0}}"#
+    )
+}
+
+#[test]
+fn a_duration_out_of_range_skips_the_line_and_seconds_stay_numbers() {
+    let (code, v, text) = review_json("review-huge-seconds", &[timed("1e308"), timed("1e308")]);
+    assert_eq!(code, 0, "{text}");
+    assert_eq!(v["skipped_lines"], 2, "{text}");
+    assert_eq!(v["tools"], serde_json::json!([]), "{text}");
+    // A negative duration does not take from a real one.
+    let (_, v, text) = review_json("review-negative-seconds", &[timed("-1.0"), timed("2.0")]);
+    assert_eq!(v["skipped_lines"], 1, "{text}");
+    assert_eq!(v["tools"][0]["seconds_total"], 2.0, "{text}");
+    assert_eq!(v["tools"][0]["seconds_median"], 2.0, "{text}");
+}
+
+#[test]
+fn the_longest_duration_accepted_adds_up_as_a_number() {
+    // A day, 86400 s, is the most a tool's seconds may be.
+    let day = timed("86400");
+    let (code, v, text) = review_json("review-day-seconds", &[day.clone(), day.clone(), day]);
+    assert_eq!(code, 0, "{text}");
+    assert_eq!(v["skipped_lines"], 0, "{text}");
+    assert_eq!(v["tools"][0]["seconds_total"], 259200.0, "{text}");
+    assert_eq!(v["tools"][0]["seconds_median"], 86400.0, "{text}");
+    let (_, v, text) = review_json("review-past-a-day", &[timed("86400.5")]);
+    assert_eq!(v["skipped_lines"], 1, "{text}");
+}

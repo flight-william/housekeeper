@@ -76,7 +76,7 @@ struct Failed {
 #[derive(Deserialize)]
 struct Tool {
     name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "seconds")]
     seconds: f64,
     #[serde(default)]
     skipped: bool,
@@ -98,6 +98,20 @@ impl Tool {
             .as_ref()
             .map(|_| cannot_rule(&self.name).to_string());
         self.findings.keys().cloned().chain(excused).chain(cannot)
+    }
+}
+
+/// The most seconds a tool's entry may hold: a day. house stops each command at its
+/// hang guard, an hour, so a larger, negative or non-finite duration was not written
+/// by house, and the line is not a house record. Totals then stay finite numbers.
+pub const MAX_SECONDS: f64 = 86_400.0;
+
+fn seconds<'de, D: serde::Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
+    let s = f64::deserialize(d)?;
+    if (0.0..=MAX_SECONDS).contains(&s) {
+        Ok(s)
+    } else {
+        Err(serde::de::Error::custom("seconds out of range"))
     }
 }
 
