@@ -124,13 +124,13 @@ counts every record with that root commit, from whichever folder; a record witho
 written before 0.3.1, counts when its folder is the path's top folder. `--repo <name>`
 counts a record when its folder's last part is the name, or its main checkout's last part
 is: `--repo shop` counts runs in `/work/shop` and in a worktree `/work/trees/feature-a` of
-it.
+it. The report's second line then names the repository, its root commit and how many
+folders its runs came from.
 
-A line in the folder that is not
-a house run record, another program's or a broken one, is skipped and counted. So is an
-entry named like a month's file that is not a regular file (a folder, a FIFO, a link). A
-record written before 0.3.0 keeps only the run's excused total, so those excuses are counted
-apart from the rules.
+A line in the folder that is not a house run record, another program's or a broken one, is
+skipped and counted. So is an entry named like a month's file that is not a regular file (a
+folder, a FIFO, a link). A record written before 0.3.0 keeps only the run's excused total, so
+those excuses are counted apart from the rules.
 
 ## On a runner
 

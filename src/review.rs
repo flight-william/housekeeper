@@ -35,11 +35,12 @@ pub struct Filter {
 /// The repository `--repo` names: a repository, not one of its folders.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Repo {
-    /// A path, resolved to its top folder and the root commit of its repository.
-    /// A record with a root commit is the repository's when the roots are the
-    /// same; a record without one (before 0.3.1), or a path with none, when the
-    /// folders are the same.
+    /// A path, resolved to its top folder and the root commit of its repository,
+    /// and named by its main checkout's last part. A record with a root commit is
+    /// the repository's when the roots are the same; a record without one (before
+    /// 0.3.1), or a path with none, when the folders are the same.
     Path {
+        name: String,
         folder: String,
         root_commit: Option<String>,
     },
@@ -49,11 +50,19 @@ pub enum Repo {
 }
 
 impl Repo {
+    /// What the report calls it.
+    pub fn name(&self) -> &str {
+        match self {
+            Repo::Path { name, .. } | Repo::Name(name) => name,
+        }
+    }
+
     fn holds(&self, run: &Run) -> bool {
         match self {
             Repo::Path {
                 folder,
                 root_commit,
+                ..
             } => match (root_commit, &run.root_commit) {
                 (Some(want), Some(root)) => want == root,
                 _ => run.repo == *folder,
@@ -153,8 +162,10 @@ pub struct Review {
     pub skipped_lines: usize,
     /// Entries named like a month's record file that are not regular files.
     pub skipped_files: usize,
-    /// Every repo a covered run was in.
+    /// Every folder a covered run was in.
     pub repos: BTreeSet<String>,
+    /// Every root commit a covered run's record names.
+    pub roots: BTreeSet<String>,
     /// Every rule a record of the repo names, in the period or not, with its counts
     /// in the period.
     pub rules: BTreeMap<String, Count>,
@@ -257,7 +268,8 @@ impl Review {
             + self.checked_sets.len()
             + self.tools.len()
             + self.stages.len()
-            + self.repos.len();
+            + self.repos.len()
+            + self.roots.len();
         keys > MAX_KEYS
     }
 
@@ -299,7 +311,14 @@ impl Review {
         self.last = Some(self.last.map_or(day, |d| d.max(day)));
         self.runs += 1;
         *self.stages.entry(run.stage.clone()).or_default() += 1;
-        self.repos.insert(run.repo.clone());
+        if !self.repos.contains(&run.repo) {
+            self.repos.insert(run.repo.clone());
+        }
+        if let Some(root) = &run.root_commit
+            && !self.roots.contains(root)
+        {
+            self.roots.insert(root.clone());
+        }
         let unattributed = run.excused > 0 && run.tools.iter().all(|t| t.excused.is_none());
         if unattributed {
             add_count(
