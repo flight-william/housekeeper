@@ -54,4 +54,11 @@ fn asserts_on_the_stand_in_log() {
         "delete-generic-password -s svc"
     );
 }
+
+// A made-up user's path handed to a formatter and compared: data, never read.
+#[test]
+fn shortens_a_made_up_home_path() {
+    assert_eq!(shorten("/Users/tester/Desktop/Shop"), "~/Desktop/Shop");
+    println!("{}", "/home/someone/project");
+}
 }

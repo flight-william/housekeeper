@@ -9,7 +9,8 @@
 - **The rules themselves improve:** the run records show which rules catch real problems.
 - **People's work moves up a level:** to what is needed, what "done" means, and the design.
 
-More: [docs/why.md](docs/why.md)
+More: [why house](docs/why.md) · [adopt it in an existing project](docs/adopting.md) ·
+[read the weekly review](docs/review.md)
 
 house runs the tools that check a repo's rules at commit and at push, replies to agents in
 one format, and records every run. It never judges code itself: each rule maps to the tools
@@ -97,6 +98,27 @@ as `.SEMGREPIGNORE` or `sub/Pyproject.toml`, is an R9 finding at commit and push
 the commit message says: on a case-insensitive filesystem the tool reads it as its settings,
 while CODEOWNERS matches case-sensitively and asks no owner to review it. Use the canonical
 name.
+
+## Review the records
+
+```sh
+house review --from 2026-11-01
+```
+
+`house review [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--repo <path or name>] [--json]` reads
+the run records (`$HOUSE_LOG_DIR`, else `~/Library/Logs/house/runs`) and prints one report
+for the runs that started in the period (UTC days, as house writes each start in UTC; `--to`
+is today in UTC when not given): the runs per stage; per rule and per tool, the findings,
+the excused findings and the cannot-checks; each tool's total and median seconds (a tool
+skipped on every run is left out); the places (rule, file, tool rule) that failed on more
+than one run, most often first; and suggestions to weigh, not orders: a rule or tool that
+never fires (no findings in at least 5 runs that checked it), one that looks noisy (its
+findings mostly excused, or failing again on the same places), and a tool that takes most of
+the time. `--repo` takes a repo's path or its folder name. A line in the folder that is not
+a house run record, another program's or a broken one, is skipped and counted. So is an
+entry named like a month's file that is not a regular file (a folder, a FIFO, a link). A
+record written before 0.3.0 keeps only the run's excused total, so those excuses are counted
+apart from the rules.
 
 ## On a runner
 

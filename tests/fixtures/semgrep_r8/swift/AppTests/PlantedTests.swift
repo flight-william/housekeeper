@@ -80,14 +80,24 @@ final class PlantedTests: XCTestCase {
         _ = NWConnection(host: "example.invalid", port: 443, using: .tcp)
     }
 
-    func testPaths() {
-        let a = "/Users/someone/project"
-        let b = "/home/someone/project"
-        let c = "~/project"
-        XCTAssertNotNil([a, b, c])
+    func testPaths() throws {
+        let a = FileManager.default.fileExists(atPath: "/Users/someone/project")
+        let b = try String(contentsOfFile: "/home/someone/project/notes.txt", encoding: .utf8)
+        let c = try Data(contentsOf: URL(fileURLWithPath: "~/project/data.bin"))
+        XCTAssertNotNil([a, b, c] as [Any])
     }
 
     func testKeychainCallInsideAnAssert() {
         XCTAssertEqual(SecItemCopyMatching(query, &result), errSecSuccess)
+    }
+}
+
+final class MoveTests: XCTestCase {
+    func testMovesToAMachinePath() throws {
+        try FileManager.default.copyItem(atPath: "tmp", toPath: "/Users/someone/a")
+        try FileManager.default.moveItem(atPath: "tmp", toPath: "/Users/someone/b")
+        let from = URL(fileURLWithPath: "tmp")
+        try FileManager.default.copyItem(at: from, to: URL(fileURLWithPath: "/home/someone/c"))
+        try FileManager.default.moveItem(at: from, to: URL(fileURLWithPath: "~/d"))
     }
 }

@@ -98,7 +98,16 @@ pub fn scan(fixture: &Path, pattern: &Path, tag: &str) -> Vec<Hit> {
         .expect("run semgrep");
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).expect("semgrep JSON");
     fs::remove_dir_all(&work).expect("remove work dir");
-    assert_eq!(json["errors"], serde_json::json!([]), "semgrep errors");
+    // Semgrep 1.186.0 cannot parse Swift's #expect and #require macros: it reads
+    // the rest of such a file and warns that it read it in part. That warning is
+    // Semgrep's limit, not a broken rule or fixture; any other error fails.
+    let errors: Vec<&serde_json::Value> = json["errors"]
+        .as_array()
+        .expect("errors")
+        .iter()
+        .filter(|e| !swift_macro_partial_parse(e))
+        .collect();
+    assert!(errors.is_empty(), "semgrep errors: {errors:?}");
     let mut found = Vec::new();
     for result in json["results"].as_array().expect("results") {
         let full_id = result["check_id"].as_str().expect("check_id");
@@ -117,6 +126,15 @@ pub fn scan(fixture: &Path, pattern: &Path, tag: &str) -> Vec<Hit> {
     }
     found.sort();
     found
+}
+
+/// A warning that a Swift file was read in part, at a `#expect` or `#require`.
+fn swift_macro_partial_parse(error: &serde_json::Value) -> bool {
+    let message = error["message"].as_str().unwrap_or_default();
+    error["type"][0] == "PartialParsing"
+        && error["level"] == "warn"
+        && (message.contains("`#expect` was unexpected")
+            || message.contains("`#require` was unexpected"))
 }
 
 /// The non-comment lines of the fixture folder's expected.txt.

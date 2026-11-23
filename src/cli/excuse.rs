@@ -3,6 +3,7 @@
 use super::stage::cannot_run;
 use crate::excuses::{self, Date};
 use crate::finding::Finding;
+use crate::record::Excused;
 use crate::reply::{Report, ToolRun};
 use crate::rules::Rules;
 use std::path::Path;
@@ -18,20 +19,7 @@ use std::path::Path;
 /// from today, and the protected file still needs the owner's approval at commit-msg.
 pub fn excuse(report: &mut Report, root: &Path, today: Date, base: Option<&str>) -> usize {
     let rules = Rules::working_tree(root);
-    apply_list(report, root, today, base, &rules, false)
-}
-
-/// `excuse` with the list from `rules`: with rules read at a revision, that list
-/// excuses the findings, while the pushed list (the working tree's) is what the
-/// growth, deadline and expiry checks judge.
-pub(super) fn excuse_by(
-    report: &mut Report,
-    root: &Path,
-    today: Date,
-    base: Option<&str>,
-    rules: &Rules,
-) -> usize {
-    apply_list(report, root, today, base, rules, false)
+    apply_list(report, root, today, base, &rules, false).total
 }
 
 /// `excuse` for `house check --all`, the one run over every tracked file: it also
@@ -40,17 +28,21 @@ pub(super) fn excuse_by(
 /// expired entry is reported as expired only.
 pub fn excuse_all(report: &mut Report, root: &Path, today: Date, base: Option<&str>) -> usize {
     let rules = Rules::working_tree(root);
-    apply_list(report, root, today, base, &rules, true)
+    apply_list(report, root, today, base, &rules, true).total
 }
 
-fn apply_list(
+/// `excuse` (`full`: `excuse_all`) with the list from `rules`, telling which tool and
+/// rule each excused finding was. With rules read at a revision, that list excuses
+/// the findings, while the pushed list (the working tree's) is what the growth,
+/// deadline and expiry checks judge.
+pub(super) fn apply_list(
     report: &mut Report,
     root: &Path,
     today: Date,
     base: Option<&str>,
     rules: &Rules,
     full: bool,
-) -> usize {
+) -> Excused {
     let lists = rules.excuses.clone().and_then(|applied| {
         let pushed = match rules.rev {
             Some(_) => excuses::in_tree(root)?,
@@ -59,20 +51,20 @@ fn apply_list(
         Ok((applied, pushed))
     });
     let (applied, pushed) = match lists {
-        Ok((None, None)) => return 0,
+        Ok((None, None)) => return Excused::default(),
         Ok((applied, pushed)) => (applied.unwrap_or_default(), pushed.unwrap_or_default()),
         // A revision that cannot be read is reported once, by the check's config.
-        Err(c) if rules.config.as_ref().err() == Some(&c) => return 0,
+        Err(c) if rules.config.as_ref().err() == Some(&c) => return Excused::default(),
         Err(c) => {
             report.tools.push(cannot_run("excuses", c));
-            return 0;
+            return Excused::default();
         }
     };
     let base = match base.map_or(Ok(Some(Vec::new())), |rev| excuses::at_rev(root, rev)) {
         Ok(base) => base,
         Err(c) => {
             report.tools.push(cannot_run("excuses", c));
-            return 0;
+            return Excused::default();
         }
     };
     let all: Vec<Finding> = report
@@ -91,8 +83,20 @@ fn apply_list(
         Vec::new()
     };
     let sorted = excuses::apply(all, &applied, today);
+    let mut excused = Excused {
+        total: sorted.excused.len(),
+        by_tool: Vec::new(),
+    };
     for t in &mut report.tools {
-        t.findings.retain(|f| !sorted.excused.contains(f));
+        let mut by_rule = std::collections::BTreeMap::new();
+        t.findings.retain(|f| {
+            let keep = !sorted.excused.contains(f);
+            if !keep {
+                *by_rule.entry(f.rule.clone()).or_insert(0) += 1;
+            }
+            keep
+        });
+        excused.by_tool.push(by_rule);
     }
     let mut problems = match &base {
         Some(base) => excuses::grew(base, &pushed),
@@ -116,5 +120,5 @@ fn apply_list(
             unread: Vec::new(),
         });
     }
-    sorted.excused.len()
+    excused
 }

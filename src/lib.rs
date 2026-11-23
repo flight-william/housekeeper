@@ -15,6 +15,7 @@ pub mod lints;
 pub mod push;
 pub mod record;
 pub mod reply;
+pub mod review;
 pub mod rules;
 pub mod run;
 pub mod runner;

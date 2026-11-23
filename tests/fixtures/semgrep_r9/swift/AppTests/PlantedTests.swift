@@ -55,3 +55,12 @@ struct KnownIssues {
     try? Data().write(to: url)
     try? check(FileManager.default.removeItem(at: url))
 }
+
+// A try? whose result is only defaulted or kept, or on a call that is not cleanup,
+// still swallows the error.
+@Test func notChecked() {
+    let count = (try? load()) ?? 0
+    let kept = try? load()
+    try? closeAccount(count)
+    try? removeUser(kept)
+}

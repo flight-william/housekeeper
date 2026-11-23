@@ -78,8 +78,8 @@ flowchart LR
     P -->|"a finding"| RP
     RP --> A
     K & P & R --> L[("Run records")]
-    L --> W["Regular review"]
-    W -->|"owner approves rule changes"| RU["The rules"]
+    L --> W["house review<br/>a weekly report"]
+    W -->|"the owner decides<br/>rule changes"| RU["The rules"]
     RU --> K
 ```
 
@@ -101,7 +101,7 @@ It can, when three things hold:
 
 | Condition | Why it matters |
 |---|---|
-| **The loop acts, not only records** | A regular review of the run records turns repeated findings into fixes, and noisy rules into better ones. |
+| **The loop acts, not only records** | The weekly report of `house review` turns repeated findings into fixes, and noisy rules into better ones. |
 | **Tests carry the meaning** | The gate proves code passes its tests, not that the tests capture what the business needs. Measuring test strength (coverage, mutation testing) and reviewing tests close part of that gap; clear acceptance criteria close the rest. |
 | **Design keeps a person's judgment** | Rules keep code clean, but they cannot choose the right architecture. A short design note before building, boundaries a tool can check, and design promises written as tests give design structure. The choices stay with people. |
 
@@ -113,12 +113,12 @@ The role moves from checking code to three things:
 
 1. **Saying what is needed,** and how to know it works.
 2. **Approving the rules** and every change to them.
-3. **Reading the review** of the run records, and deciding what to tighten or loosen.
+3. **Reading the weekly review** of the run records ([how](review.md)), and deciding what to tighten or loosen.
 
 > The gate stops things getting worse. Clear intent and the feedback loop make them better.
 
 ---
 
-**Next:** [Set up a project](setup.md) · [The rules and the tools](../README.md)
+**Next:** [Set up a project](setup.md) · [Adopt house in an existing project](adopting.md) · [Read the weekly review](review.md) · [The rules and the tools](../README.md)
 
 house is made by [Mu Media](https://media-mu.com).

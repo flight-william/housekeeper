@@ -39,9 +39,6 @@ const INLINE_OFFSET: u64 = 2;
 
 /// The inline-module twin of a rule that reads tests/ files.
 fn twin(rule: &str) -> Option<String> {
-    if rule == "test-machine-path" {
-        return Some("rust-test-mod-machine-path".to_string());
-    }
     let what = rule.strip_prefix("rust-test-")?;
     (!what.starts_with("mod-")).then(|| format!("rust-test-mod-{what}"))
 }

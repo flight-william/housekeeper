@@ -70,6 +70,12 @@ impl fmt::Display for Date {
 pub const MAX_DAYS: i64 = 56;
 
 impl Date {
+    /// The day `n` days after this one (before it when `n` is negative).
+    pub fn add_days(self, n: i64) -> Option<Date> {
+        let (y, m, d) = crate::record::civil(self.days() + n);
+        Date::parse(&format!("{y:04}-{m:02}-{d:02}"))
+    }
+
     /// Days since 1970-01-01 (civil calendar), so dates subtract.
     fn days(self) -> i64 {
         let (y, m, d) = (

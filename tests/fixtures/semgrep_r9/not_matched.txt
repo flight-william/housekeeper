@@ -12,6 +12,33 @@ r9-swift-xctskip swift/AppTests/CleanupTests.swift: let markers = "XCTSkip(\"lat
 r9-swift-expected-failure swift/AppTests/CleanupTests.swift: let markers = "XCTSkip(\"later\") XCTExpectFailure withKnownIssue"
 r9-swift-testing-disabled swift/App/ContentView.swift: .disabled(!ok)
 r9-swift-try-optional-in-tests swift/AppTests/CleanupTests.swift: defer { try? FileManager.default.removeItem(at: url) }
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertNil(try? parse("a1"))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertNil((try? parse("a2")))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertNotNil(try? parse("b1"))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertNotNil((try? parse("b2")))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: _ = try XCTUnwrap(try? parse("c1"))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: _ = try XCTUnwrap((try? parse("c2")))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: _ = try #require(try? parse("d1"))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: _ = try #require((try? parse("d2")))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertEqual(try? parse("e1"), 1)
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertEqual((try? parse("e2")), 1)
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertEqual(1, try? parse("f1"))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertEqual(1, (try? parse("f2")))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertNotEqual(try? parse("g1"), 2)
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertNotEqual((try? parse("g2")), 2)
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertNotEqual(2, try? parse("h1"))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertNotEqual(2, (try? parse("h2")))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: let i1 = (try? parse("i1")) != nil
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: let i2 = ((try? parse("i2"))) != nil
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: let j1 = (try? parse("j1")) == 3
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: let j2 = ((try? parse("j2"))) == 3
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: let k1 = 3 == (try? parse("k1"))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: let k2 = nil != ((try? parse("k2")))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: #expect((try? parse("l1")) == nil)
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: #expect(((try? parse("l2"))) == nil)
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: try? handle.close()
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: try? store.remove(key: "k")
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: try? store.removeFile(named: "k")
 r9-rust-allow rust/src/clean.rs: pub const SAMPLE: &str = "#[allow(dead_code)] fn x() {}";
 r9-rust-ignore rust/src/clean.rs: // #[allow(dead_code)] and #[ignore] here are words in a comment.
 r9-rust-let-underscore-in-test-mod rust/src/clean.rs: let _ = std::fs::remove_file(&self.0);

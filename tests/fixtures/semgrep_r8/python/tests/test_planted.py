@@ -86,9 +86,9 @@ def test_network():
 
 
 def test_paths():
-    a = "/Users/someone/project"
-    b = "/home/someone/project"
-    c = "~/project"
+    a = open("/Users/someone/project/notes.txt")
+    b = os.listdir("/home/someone/project")
+    c = pathlib.Path("~/project/notes.txt").read_text()
     assert a and b and c
 
 
@@ -99,3 +99,10 @@ def test_rerun():
 
 def test_keychain_call_inside_an_assert():
     assert subprocess.run(["security", "find-generic-password"]).returncode == 0
+
+
+def test_moves_to_a_machine_path():
+    os.rename("tmp", "/home/someone/a")
+    os.replace("tmp", "/home/someone/b")
+    shutil.copy("tmp", dst="/Users/someone/c")
+    pathlib.Path("tmp").rename("/Users/someone/d")

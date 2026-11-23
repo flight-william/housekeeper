@@ -1,10 +1,13 @@
 //! `house check --stage commit|push [--json]`, `house check --all [--json]`,
 //! `house commit-msg <file>`,
+//! `house review [--from D] [--to D] [--repo R] [--json]`,
 //! `house init [--owner @user]`, `house --version`. Arguments are parsed by hand.
-//! The cli is the only place that reads the clock for the excuse list's "today".
+//! The cli is the only place that reads the clock: for the excuse list's "today",
+//! and for the last day `house review` covers when `--to` is not given.
 
 mod excuse;
 mod message;
+mod review;
 mod stage;
 
 pub use excuse::{excuse, excuse_all};
@@ -17,12 +20,13 @@ use crate::reply::{Report, stage_name};
 use crate::rules::Rules;
 use crate::{adapters, files, init, record, run, runner};
 use message::commit_msg;
+use review::{parse_review, run_review};
 use serde_json::Value;
 use stage::{Mode, check_from};
 use std::path::Path;
 use std::time::SystemTime;
 
-pub const USAGE: &str = "usage: house check --stage commit|push [--json] | house check --stage push --config-from <rev> [--json] | house check --all [--json] | house commit-msg <message file> | house init [--owner @user] | house --version";
+pub const USAGE: &str = "usage: house check --stage commit|push [--json] | house check --stage push --config-from <rev> [--json] | house check --all [--json] | house commit-msg <message file> | house review [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--repo <path or name>] [--json] | house init [--owner @user] | house --version";
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Cmd {
@@ -42,6 +46,13 @@ pub enum Cmd {
     InitOwner {
         owner: String,
     },
+    /// `to`: the last day; the cli takes today when it is `None`.
+    Review {
+        from: Option<Date>,
+        to: Option<Date>,
+        repo: Option<String>,
+        json: bool,
+    },
     Version,
 }
 
@@ -59,6 +70,7 @@ pub fn parse(args: &[String]) -> Result<Cmd, String> {
             file: file.to_string(),
         }),
         ["check", rest @ ..] => parse_check(rest),
+        ["review", rest @ ..] => parse_review(rest),
         _ => Err(USAGE.into()),
     }
 }
@@ -122,6 +134,12 @@ pub fn main(args: &[String], cwd: &Path) -> i32 {
             config_from,
         }) => check_and_record(cwd, Mode::Stage(stage), json, config_from.as_deref()),
         Ok(Cmd::CheckAll { json }) => check_and_record(cwd, Mode::All, json, None),
+        Ok(Cmd::Review {
+            from,
+            to,
+            repo,
+            json,
+        }) => run_review(cwd, from, to, repo.as_deref(), json),
     }
 }
 
@@ -159,19 +177,16 @@ fn check_and_record(cwd: &Path, mode: Mode, json: bool, config_from: Option<&str
     let checked = check_from(&root, mode, &rules, adapters::all());
     let mut report = checked.report;
     let base = checked.base.as_deref();
-    let excused = match mode {
-        Mode::Stage(_) => excuse::excuse_by(&mut report, &root, today(), base, &rules),
-        Mode::All => excuse_all(&mut report, &root, today(), base),
-    };
+    let excused = excuse::apply_list(&mut report, &root, today(), base, &rules, mode == Mode::All);
     if json {
         let mut value = report.json();
         if let Some(m) = value.as_object_mut() {
             m.insert("stage".into(), label.into());
-            m.insert("excused".into(), excused.into());
+            m.insert("excused".into(), excused.total.into());
         }
         println!("{value}");
     } else {
-        print!("{}", report.text_as(label, excused));
+        print!("{}", report.text_as(label, excused.total));
     }
     let tests = serde_json::to_value(&checked.failed_tests).unwrap_or_default();
     write_record(
@@ -179,7 +194,7 @@ fn check_and_record(cwd: &Path, mode: Mode, json: bool, config_from: Option<&str
         start,
         &report,
         label,
-        excused,
+        &excused,
         &[("test_output", tests)],
     );
     report.exit()
@@ -201,14 +216,14 @@ pub(crate) fn root_or_say(cwd: &Path, label: &str) -> Option<std::path::PathBuf>
     }
 }
 
-/// Append the run's record line, its stage shown as `label`, with the excused count
+/// Append the run's record line, its stage shown as `label`, with the excused counts
 /// and the `extra` fields (a check's failed test commands and their output's tails).
 pub(crate) fn write_record(
     root: &Path,
     start: SystemTime,
     report: &Report,
     label: &str,
-    excused: usize,
+    excused: &record::Excused,
     extra: &[(&str, Value)],
 ) {
     let info = record::RunInfo {
@@ -221,9 +236,9 @@ pub(crate) fn write_record(
         user: std::env::var("USER").unwrap_or_default(),
     };
     let mut line = record::line(&info, report);
+    record::add_excused(&mut line, excused);
     if let Value::Object(m) = &mut line {
         m.insert("stage".into(), label.into());
-        m.insert("excused".into(), excused.into());
         for (key, value) in extra {
             m.insert((*key).into(), value.clone());
         }

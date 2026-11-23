@@ -15,7 +15,13 @@ swift-test-locale swift/AppTests/CleanTests.swift: let locale = Locale(identifie
 swift-test-home swift/AppTests/CleanTests.swift: let folder = FileManager.default.temporaryDirectory
 swift-test-keychain swift/AppTests/CleanTests.swift: let tool = "/usr/bin/security-helper"
 swift-test-network swift/AppTests/CleanTests.swift: let session = URLSession(configuration: configuration)
-test-machine-path python/tests/test_clean.py: message = "files live under /Users/ on a Mac"
+python-test-machine-path python/tests/test_clean.py: message = "files live under /Users/ on a Mac"
+python-test-machine-path python/tests/test_clean.py: assert shorten("/Users/tester/Desktop/Shop") == "~/Desktop/Shop"
+python-test-machine-path python/tests/test_clean.py: print("/home/someone/project")
+swift-test-machine-path swift/AppTests/CleanTests.swift: XCTAssertEqual(shorten("/Users/tester/Desktop/Shop"), "~/Desktop/Shop")
+swift-test-machine-path swift/AppTests/CleanTests.swift: XCTAssertEqual(URL(fileURLWithPath: "/Users/someone/project").lastPathComponent, "project")
+swift-test-machine-path swift/AppTests/CleanTests.swift: print("/home/someone/project")
+rust-test-machine-path rust/tests/clean.rs: assert_eq!(shorten("/Users/tester/Desktop/Shop"), "~/Desktop/Shop");
 rust-test-sleep rust/src/prod.rs: std::thread::sleep(std::time::Duration::from_millis(1));
 rust-test-wall-clock rust/tests/clean.rs: let _d = std::time::Duration::from_secs(1);
 rust-test-unseeded-random rust/tests/clean.rs: let _rng = StdRng::seed_from_u64(4);
@@ -31,3 +37,4 @@ rust-test-mod-home rust/src/inline_clean.rs: cmd.env("HOME", &home);
 rust-test-mod-keychain rust/src/inline_clean.rs: let mut cmd = Command::new("env");
 rust-test-mod-network rust/src/inline_clean.rs: let _b = TcpStream::connect(addr);
 rust-test-mod-machine-path rust/src/inline_clean.rs: let _m = "files live under /Users/ on a Mac";
+rust-test-mod-machine-path rust/src/inline_clean.rs: assert_eq!(shorten("/Users/tester/Desktop/Shop"), "~/Desktop/Shop");

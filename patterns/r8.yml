@@ -15,7 +15,10 @@
 #
 # Known limits, on purpose (smallest thing that works): a call through an alias
 # or a wrapper the test defines is not seen; a string pattern matches only a
-# string literal that starts with the path, not a path built at run time.
+# string literal that starts with the path, not a path built at run time. A
+# machine path counts only written straight into a call that reaches the disk
+# (open, a FileManager atPath:, std::fs, ...): a path that is only data, handed to
+# a formatter, compared or printed, is not one machine's.
 rules:
   # ---- Python ----
   - id: python-test-sleep
@@ -389,13 +392,15 @@ rules:
           ...
 
   # ---- Every language: machine paths ----
-  - id: test-machine-path
-    languages: [python, swift, rust]
+  - id: python-test-machine-path
+    languages: [python]
     severity: WARNING
-    # A string counts where it is written, not where a variable carries it.
+    # Only a path the test reaches on disk: a literal written straight into a call
+    # that reads, writes, lists or checks the file system. The same path handed to a
+    # formatter, compared or printed is data, and machine-independent.
     options:
       constant_propagation: false
-    message: test names a path on one machine (a home or user folder)
+    message: test reaches a path on one machine (a home or user folder) on disk
     metadata:
       fix: make a temp folder in the test and build the path from it
     paths:
@@ -404,15 +409,134 @@ rules:
         - "**/*_test.py"
         - "**/tests/**/*.py"
         - "**/test/**/*.py"
+    patterns:
+      - pattern-either:
+          - pattern: open("$P", ...)
+          - pattern: io.open("$P", ...)
+          - pattern: shutil.$F("$P", ...)
+          - pattern: shutil.$F($SRC, "$P", ...)
+          - pattern: subprocess.$F(..., cwd="$P", ...)
+          # The destination of a rename, a replace or a link, by place or by name.
+          - patterns:
+              - pattern-either:
+                  - pattern: os.$F($SRC, "$P", ...)
+                  - pattern: os.$F(..., dst="$P", ...)
+              - metavariable-regex:
+                  metavariable: $F
+                  regex: ^(rename|replace|renames|link|symlink)$
+          - pattern: shutil.$F(..., dst="$P", ...)
+          - patterns:
+              - pattern-either:
+                  - pattern: pathlib.Path(...).$M("$P", ...)
+                  - pattern: Path(...).$M("$P", ...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(rename|replace|symlink_to|hardlink_to)$
+          - patterns:
+              - pattern: os.$F("$P", ...)
+              - metavariable-regex:
+                  metavariable: $F
+                  regex: ^(listdir|scandir|walk|stat|lstat|remove|unlink|rmdir|removedirs|mkdir|makedirs|chdir|rename|replace|access|chmod|chown|open|readlink|utime|truncate)$
+          - patterns:
+              - pattern: os.path.$F("$P", ...)
+              - metavariable-regex:
+                  metavariable: $F
+                  regex: ^(exists|lexists|isfile|isdir|islink|getsize|getmtime|getatime|getctime|realpath|samefile)$
+          - patterns:
+              - pattern-either:
+                  - pattern: pathlib.Path("$P", ...).$M(...)
+                  - pattern: Path("$P", ...).$M(...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(read_text|read_bytes|write_text|write_bytes|open|exists|is_file|is_dir|is_symlink|iterdir|glob|rglob|mkdir|unlink|rmdir|stat|lstat|touch|rename|replace|resolve|chmod)$
+      # A home or user folder: /Users/, /home/ or ~/ (the quote is part of the
+      # literal in some languages).
+      - metavariable-regex:
+          metavariable: $P
+          regex: "^[\"']?(/Users/|/home/|~/)"
+
+  - id: swift-test-machine-path
+    languages: [swift]
+    severity: WARNING
+    # Only a path the test reaches on disk: a literal written straight into a call
+    # that reads, writes, lists or checks the file system. The same path handed to a
+    # formatter, compared or printed is data, and machine-independent.
+    options:
+      constant_propagation: false
+    message: test reaches a path on one machine (a home or user folder) on disk
+    metadata:
+      fix: make a temp folder in the test and build the path from it
+    paths:
+      include:
         - "**/*Tests.swift"
         - "**/*Tests/**/*.swift"
+    patterns:
+      - pattern-either:
+          # FileManager and its kin: every method that takes atPath: touches it.
+          - pattern: '$FM.$M(atPath: "$P")'
+          - pattern: '$FM.$M(atPath: "$P", ...)'
+          - pattern: '$FM.$M(at: URL(fileURLWithPath: "$P"), ...)'
+          # The destination of a copy, a move or a link: toPath:, or to: a file URL.
+          - pattern: '$FM.$M(atPath: $SRC, toPath: "$P")'
+          - pattern: '$FM.$M(at: $SRC, to: URL(fileURLWithPath: "$P"))'
+          - pattern: 'String(contentsOfFile: "$P", ...)'
+          - pattern: 'NSString(contentsOfFile: "$P", ...)'
+          - pattern: 'NSData(contentsOfFile: "$P", ...)'
+          - pattern: 'Data(contentsOf: URL(fileURLWithPath: "$P"), ...)'
+          - pattern: 'String(contentsOf: URL(fileURLWithPath: "$P"), ...)'
+          - pattern: 'FileHandle(forReadingAtPath: "$P")'
+          - pattern: 'FileHandle(forWritingAtPath: "$P")'
+          - pattern: 'FileHandle(forUpdatingAtPath: "$P")'
+          - pattern: '$X.write(toFile: "$P", ...)'
+          - pattern: '$X.write(to: URL(fileURLWithPath: "$P"), ...)'
+      # A home or user folder: /Users/, /home/ or ~/ (the quote is part of the
+      # literal in some languages).
+      - metavariable-regex:
+          metavariable: $P
+          regex: "^[\"']?(/Users/|/home/|~/)"
+
+  # ---- Rust ----
+  - id: rust-test-machine-path
+    languages: [rust]
+    severity: WARNING
+    # Only a path the test reaches on disk: a literal written straight into a call
+    # that reads, writes, lists or checks the file system. The same path handed to a
+    # formatter, compared or printed is data, and machine-independent.
+    options:
+      constant_propagation: false
+    message: test reaches a path on one machine (a home or user folder) on disk
+    metadata:
+      fix: make a temp folder in the test and build the path from it
+    paths:
+      include:
         - "**/tests/**/*.rs"
         - "**/*_test.rs"
         - "**/tests.rs"
-    # Only a literal that starts with the path: a fixture text that mentions one does not count.
-    pattern: '"=~/^(\/Users\/|\/home\/|~\/)/"'
+    patterns:
+      - pattern-either:
+          - pattern: std::fs::$F("$P", ...)
+          - pattern: fs::$F("$P", ...)
+          - pattern: std::fs::$F($SRC, "$P")
+          - pattern: fs::$F($SRC, "$P")
+          - pattern: File::open("$P")
+          - pattern: File::create("$P")
+          - pattern: std::fs::File::open("$P")
+          - pattern: std::fs::File::create("$P")
+          - pattern: $OPTIONS.open("$P")
+          - pattern: $CMD.current_dir("$P")
+          - patterns:
+              - pattern-either:
+                  - pattern: Path::new("$P").$M(...)
+                  - pattern: std::path::Path::new("$P").$M(...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(exists|try_exists|is_file|is_dir|is_symlink|metadata|symlink_metadata|read_dir|read_link|canonicalize)$
+      # A home or user folder: /Users/, /home/ or ~/ (the quote is part of the
+      # literal in some languages).
+      - metavariable-regex:
+          metavariable: $P
+          regex: "^[\"']?(/Users/|/home/|~/)"
 
-  # ---- Rust ----
   - id: rust-test-sleep
     languages: [rust]
     severity: WARNING
@@ -763,10 +887,12 @@ rules:
   - id: rust-test-mod-machine-path
     languages: [rust]
     severity: WARNING
-    # A string counts where it is written, not where a variable carries it.
+    # Only a path the test reaches on disk: a literal written straight into a call
+    # that reads, writes, lists or checks the file system. The same path handed to a
+    # formatter, compared or printed is data, and machine-independent.
     options:
       constant_propagation: false
-    message: test names a path on one machine (a home or user folder)
+    message: test reaches a path on one machine (a home or user folder) on disk
     metadata:
       fix: make a temp folder in the test and build the path from it
     paths:
@@ -778,4 +904,26 @@ rules:
       - pattern-either:
           - pattern-inside: "mod tests { ... }"
           - pattern-inside: "mod test { ... }"
-      - pattern: '"=~/^(\/Users\/|\/home\/|~\/)/"'
+      - pattern-either:
+          - pattern: std::fs::$F("$P", ...)
+          - pattern: fs::$F("$P", ...)
+          - pattern: std::fs::$F($SRC, "$P")
+          - pattern: fs::$F($SRC, "$P")
+          - pattern: File::open("$P")
+          - pattern: File::create("$P")
+          - pattern: std::fs::File::open("$P")
+          - pattern: std::fs::File::create("$P")
+          - pattern: $OPTIONS.open("$P")
+          - pattern: $CMD.current_dir("$P")
+          - patterns:
+              - pattern-either:
+                  - pattern: Path::new("$P").$M(...)
+                  - pattern: std::path::Path::new("$P").$M(...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(exists|try_exists|is_file|is_dir|is_symlink|metadata|symlink_metadata|read_dir|read_link|canonicalize)$
+      # A home or user folder: /Users/, /home/ or ~/ (the quote is part of the
+      # literal in some languages).
+      - metavariable-regex:
+          metavariable: $P
+          regex: "^[\"']?(/Users/|/home/|~/)"
