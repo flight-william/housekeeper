@@ -17,10 +17,9 @@
 #   Swift `try?` is exempt in `defer`, `deinit` and tearDown/tearDownWithError,
 #   anywhere on a FileManager removeItem(at:) or removeItem(atPath:), on a call
 #   named close, remove, delete or unlink (and their File/Directory forms), and
-#   where its result is checked: compared with == or != in parentheses (as in
-#   #expect((try? x) == nil)), or the value XCTAssertNil, XCTAssertNotNil,
-#   XCTUnwrap or #require inspects. XCTAssertNoThrow(try? x) and a try? in an
-#   assertion's message are still reported.
+#   where its result is checked, in one of the shapes the rule lists (an
+#   assertion's value argument, or a comparison with == or !=). XCTAssertNoThrow
+#   (try? x) and a try? in an assertion's message are still reported.
 rules:
   # ---- Python ----
   - id: r9-python-noqa
@@ -190,13 +189,27 @@ rules:
       # remove, removeFile, removeDirectory, delete, deleteFile or unlink. A call
       # that only starts with one of those names (closeAccount) is not cleanup.
       - pattern-not-regex: '\btry\?\s+[\w.]*\b(?:close|closeFile|remove|removeFile|removeDirectory|delete|deleteFile|unlink)\s*\('
-      # A result that is compared: `(try? x) == nil`, `!= nil` or `== value`.
-      - pattern-not-regex: '\(\s*try\?(?:[^()\n]|\((?:[^()\n]|\([^()\n]*\))*\))*\)\s*[!=]='
-      # A result that an assertion inspects, as the value it checks: the first
-      # argument of XCTAssertNil, XCTAssertNotNil or XCTUnwrap, or of #require,
-      # which unwraps it. Anywhere else in an assertion (XCTAssertNoThrow, a
-      # message, a #expect that is not a comparison) the error is still swallowed.
-      - pattern-not-regex: '(?:\bXCTAssert(?:Nil|NotNil)|\bXCTUnwrap|#require)\s*\(\s*try\?'
+      # The CHECKED shapes, the only places a try? result is exempt because a test
+      # inspects it; each is allowed with and without redundant parentheses around
+      # the try? expression, and each has one line in
+      # tests/fixtures/semgrep_r9/swift/AppTests/AssertedTests.swift:
+      #   (a) the first argument of XCTAssertNil, XCTAssertNotNil, XCTUnwrap or
+      #       #require:  XCTAssertNil(try? x)   XCTAssertNil((try? x))
+      #   (b) the first or second argument of XCTAssertEqual or XCTAssertNotEqual:
+      #       XCTAssertEqual(try? x, y)   XCTAssertEqual(y, (try? x))
+      #   (c) a comparison of the result with == or !=, anywhere, #expect included:
+      #       (try? x) != nil   ((try? x)) == y   y == (try? x)   #expect((try? x) == nil)
+      # Everything else is still R9, one line each in UncheckedTests.swift:
+      # XCTAssertNoThrow(try? x), a try? in a message argument, a bare try?, a try?
+      # inside a call whose result is checked (count(try? x) == 1), and a try? in a
+      # #expect that is no comparison. `try? x == nil` is no comparison of the
+      # result: try? binds over the whole comparison, giving a Bool?.
+      - pattern-not-regex: '(?:\bXCTAssert(?:Nil|NotNil)|\bXCTUnwrap|#require)\s*\(\s*(?:\(\s*)?try\?'
+      - pattern-not-regex: '\bXCTAssert(?:Not)?Equal\s*\(\s*(?:\(\s*)?try\?'
+      - pattern-not-regex: '\bXCTAssert(?:Not)?Equal\s*\(\s*(?:[^(),\n]|\((?:[^()\n]|\([^()\n]*\))*\))+,\s*(?:\(\s*)?try\?'
+      - pattern-not-regex: '(?<![\w)\]?!])\(\s*try\?(?:[^()\n]|\((?:[^()\n]|\([^()\n]*\))*\))*\)\s*[!=]='
+      - pattern-not-regex: '(?<![\w)\]?!])\(\s*\(\s*try\?(?:[^()\n]|\((?:[^()\n]|\([^()\n]*\))*\))*\)\s*\)\s*[!=]='
+      - pattern-not-regex: '[!=]=\s*(?:\(\s*)?\(\s*try\?'
 
   # ---- Rust ----
   - id: r9-rust-allow
