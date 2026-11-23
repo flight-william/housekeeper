@@ -40,7 +40,8 @@ cd your-repo
 house init
 ```
 
-`house init` writes `.house.toml`, the protected-file list and the git hooks. Commit them.
+`house init` writes `.house.toml`, the protected-file list and the git hooks, and, for a repo
+with Swift files and no `.swift-format`, one with the indentation those files use. Commit them.
 
 ## What the reply means
 
