@@ -65,7 +65,9 @@ ShellCheck cannot read, goes to none of them, nor does a binary file.
 
 SwiftLint keeps to the repo's own scope: with a `.swiftlint.yml` at the root, SwiftLint picks
 the files itself, by its `included:` and `excluded:`, and only its findings on the files the
-stage checks count. Without one, the stage's Swift files are named to it.
+stage checks count. Without one, the stage's Swift files are named to it. ShellCheck follows
+the files a script sources, looked up from the script's own folder, so `. ./lib.sh` is not
+SC1091 when `lib.sh` sits beside the script.
 
 Every `Cargo.toml` a stage sends is also read by house itself, whatever `[tools]` lists: a
 lint set to `allow` (or `expect`) in a `[lints]` or `[workspace.lints]` table silences it for
