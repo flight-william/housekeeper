@@ -68,6 +68,13 @@ today, and every deadline within 56 days of it. An excuse covers at most `count`
 new code in an excused file is not excused. A later `house check --all` reports an entry that
 matches nothing; delete it.
 
+When one finding fits two entries (the same rule and file, and both symbols in its text), it
+goes to the most specific one: the longer `symbol`, then any `symbol` over none, then a
+`value` over none. A wider entry never takes a finding a narrower one was written for, and
+the order of the entries in the file does not matter. So an entry for one kind of finding
+(`symbol = "LineLength"`) and an entry for the rest of the same tool's findings
+(`symbol = "format"`) can sit side by side.
+
 ### 4. Report-only, beside the old checks
 
 For a while, run both: the old checks and house's report-only hooks. Compare what each one
