@@ -23,7 +23,7 @@ with the install line.
 |---|---|
 | all | `brew install gitleaks semgrep` |
 | Rust | cargo fmt, clippy (with rustup), `brew install cargo-deny` |
-| Swift | `brew install swiftlint` (`swift format` ships with the toolchain) |
+| Swift | `brew install swiftlint` (`swift format` ships with the toolchain); `brew install swiftformat` for a repo that names `swiftformat` in `.house.toml` |
 | Python | `brew install ruff` (coverage.py in the project's venv) |
 | shell | `brew install shellcheck` |
 

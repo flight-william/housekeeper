@@ -2,7 +2,7 @@
 //! the test step.
 
 use crate::adapter::{Adapter, CannotCheck, Context, Stage};
-use crate::finding::Finding;
+use crate::finding::{Finding, Place};
 use crate::reply::{Report, ToolRun};
 use crate::rules::Rules;
 use crate::tests_step::{self, FailedOutput, TestRun};
@@ -108,7 +108,10 @@ pub(super) fn check_from(
                 files: scope.files,
                 push_range: scope.push_range,
             };
-            tools.extend(chosen.iter().map(|a| run_one(a.as_ref(), &ctx)));
+            for mut tool in chosen.iter().map(|a| run_one(a.as_ref(), &ctx)) {
+                tool.findings.retain(|f| !on_excluded(f, &exclude));
+                tools.push(tool);
+            }
             tools.extend(lints::run(&ctx));
             tools.extend(settings_case(&scope_changed, rules));
             for test in run_tests(&ctx, &tests.0, tests.1, tests_due) {
@@ -172,6 +175,15 @@ fn run_tests(ctx: &Context, tests: &[Vec<String>], limit: Duration, due: bool) -
     } else {
         tests_step::run(&ctx.root, tests, limit)
     }
+}
+
+/// A finding on a path `[paths] exclude` names. A tool that reads more than the
+/// files it is handed (gitleaks reads the git history) reports one, and it is dropped.
+fn on_excluded(f: &Finding, exclude: &[String]) -> bool {
+    let Place::File(file) = &f.place else {
+        return false;
+    };
+    files::without_excluded(vec![file.clone()], exclude).is_empty()
 }
 
 /// Two findings are one when rule, place, line and tool rule match.

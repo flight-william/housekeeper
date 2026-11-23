@@ -14,8 +14,8 @@ More: [why house](docs/why.md) · [adopt it in an existing project](docs/adoptin
 
 house runs the tools that check a repo's rules at commit and at push, replies to agents in
 one format, and records every run. It never judges code itself: each rule maps to the tools
-that check it (ruff, cargo fmt, clippy and cargo-deny, SwiftLint and swift format, ShellCheck,
-gitleaks, Semgrep, its own size counter, commit-message and approval checks).
+that check it (ruff, cargo fmt, clippy and cargo-deny, SwiftLint, swift format or SwiftFormat,
+ShellCheck, gitleaks, Semgrep, its own size counter, commit-message and approval checks).
 
 ## The rules (✓ checked by 0.2.0)
 
@@ -44,7 +44,9 @@ house init
 
 `house init` writes `.house.toml` (the tools per stage), CODEOWNERS for the protected files
 and the git hooks. Commit them. Files listed under `[paths] exclude` in `.house.toml`
-(prefix globs, such as `tests/fixtures/`) are never handed to a tool. Under `[tests]`,
+(prefix globs, such as `tests/fixtures/`) are never handed to a tool, and a finding a tool
+reports on one anyway is dropped: gitleaks reads the git history, not the files it is handed,
+so an excluded vendored file is not scanned for secrets either. Under `[tests]`,
 `commit = [["cargo", "test"]]` and `push = [...]` (push falls back to commit) list test
 commands, each a program and its arguments with no shell, run from the repo root after the
 tools; a failing one is an R7 finding, and the last 20 lines of its output go to the run
@@ -62,6 +64,18 @@ Each tool gets the files it reads, chosen by extension. A file with no known ext
 chosen by its first line: `#!/usr/bin/env python3` goes to ruff, ruff format, r3 and Semgrep,
 and `#!/bin/sh` or `#!/usr/bin/env bash` to ShellCheck, r3 and Semgrep. A zsh script, which
 ShellCheck cannot read, goes to none of them, nor does a binary file.
+
+SwiftLint keeps to the repo's own scope: with a `.swiftlint.yml` at the root, SwiftLint picks
+the files itself, by its `included:` and `excluded:`, and only its findings on the files the
+stage checks count. Without one, the stage's Swift files are named to it. ShellCheck follows
+the files a script sources, looked up from the script's own folder, so `. ./lib.sh` is not
+SC1091 when `lib.sh` sits beside the script.
+
+Swift code is formatted by Apple's swift format (`swift-format`) unless the repo names
+SwiftFormat instead: `swiftformat` runs only when `[tools]` lists it, as in
+`commit = ["swiftlint", "swiftformat"]`, never by default nor in `house init`'s starter list,
+since two formatters disagree on one file. It runs `swiftformat --lint` on the stage's Swift
+files and reads the repo's own `.swiftformat`, its `--exclude` included.
 
 Every `Cargo.toml` a stage sends is also read by house itself, whatever `[tools]` lists: a
 lint set to `allow` (or `expect`) in a `[lints]` or `[workspace.lints]` table silences it for

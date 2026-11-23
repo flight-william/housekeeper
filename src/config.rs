@@ -29,8 +29,9 @@
 //! than `[house] minimum` is a cannot-check naming both versions (a house from before
 //! `minimum` existed refuses the unknown `[house]` table, so it never runs either).
 //!
-//! Without the file (or without the stage's list) every adapter in `all()` runs,
-//! and each skips itself when no file concerns it.
+//! Without the file (or without the stage's list) every adapter in `all()` that runs
+//! by default runs (swiftformat only by name), and each skips itself when no file
+//! concerns it.
 
 use crate::adapter::{Adapter, CannotCheck, Stage};
 use serde::Deserialize;
@@ -129,7 +130,8 @@ pub fn tests_for(config: &Config, stage: Stage) -> &[Vec<String>] {
 
 /// `[paths]`: `exclude` lists prefix globs (a folder, a file, `*` and `**/` as in
 /// `[protected]`); a file under one is dropped from every stage's file list before
-/// the adapters see it. The policy checks (approval) still see every change.
+/// the adapters see it, and a finding a tool still reports on one (gitleaks reads the
+/// git history) is dropped. The policy checks (approval) still see every change.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Paths {
@@ -215,7 +217,8 @@ pub fn select(
         Stage::Push => config.tools.push.as_ref().or(config.tools.commit.as_ref()),
     };
     let Some(wanted) = wanted else {
-        return (all, Vec::new());
+        let defaults = all.into_iter().filter(|a| a.runs_by_default()).collect();
+        return (defaults, Vec::new());
     };
     let known: Vec<&str> = all.iter().map(|a| a.name()).collect();
     let unknown = wanted

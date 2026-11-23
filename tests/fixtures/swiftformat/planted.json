@@ -1,0 +1,38 @@
+[
+  {
+    "file" : "/repo/Sources/Bad.swift",
+    "line" : 1,
+    "reason" : "Replace consecutive spaces with a single space.",
+    "rule_id" : "consecutiveSpaces"
+  },
+  {
+    "file" : "/repo/Sources/Bad.swift",
+    "line" : 2,
+    "reason" : "Remove whitespace inside empty braces.",
+    "rule_id" : "emptyBraces"
+  },
+  {
+    "file" : "/repo/Sources/Bad.swift",
+    "line" : 2,
+    "reason" : "Remove unneeded return keyword.",
+    "rule_id" : "redundantReturn"
+  },
+  {
+    "file" : "/repo/Sources/Bad.swift",
+    "line" : 2,
+    "reason" : "Remove space inside parentheses.",
+    "rule_id" : "spaceInsideParens"
+  },
+  {
+    "file" : "/repo/Sources/Bad.swift",
+    "line" : 3,
+    "reason" : "Indent code in accordance with the scope level.",
+    "rule_id" : "indent"
+  },
+  {
+    "file" : "/repo/Sources/Bad.swift",
+    "line" : 3,
+    "reason" : "Remove unneeded return keyword.",
+    "rule_id" : "redundantReturn"
+  }
+]

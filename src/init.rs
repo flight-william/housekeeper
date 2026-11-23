@@ -162,7 +162,7 @@ fn starter_config(root: &Path, all: Vec<Box<dyn Adapter>>) -> Result<String, Can
     };
     let names: Vec<String> = all
         .iter()
-        .filter(|a| a.command(&ctx).is_some())
+        .filter(|a| a.runs_by_default() && a.command(&ctx).is_some())
         .map(|a| format!("\"{}\"", a.name()))
         .collect();
     let text = format!(

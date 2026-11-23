@@ -1,5 +1,7 @@
 //! shellcheck: shell scripts (R2). Captured with ShellCheck 0.11.0.
 //! Files by the `.sh` extension, or a shell first line (`Context::languages`).
+//! A sourced file is followed from the script's folder; findings in it are not
+//! reported unless it is handed over too.
 
 use super::Exits;
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Language, Output};
@@ -51,7 +53,17 @@ impl Adapter for Shellcheck {
         if files.is_empty() {
             return None;
         }
-        let mut args = vec!["-f".to_string(), "json1".to_string()];
+        // Follow what a script sources, from the script's own folder: otherwise a
+        // source is SC1091 or not by which other files the stage happens to hold.
+        let mut args: Vec<String> = [
+            "-f",
+            "json1",
+            "--external-sources",
+            "--source-path=SCRIPTDIR",
+        ]
+        .iter()
+        .map(|a| a.to_string())
+        .collect();
         args.extend(files);
         Some(Command {
             program: "shellcheck".into(),
@@ -151,6 +163,15 @@ mod tests {
     fn only_sh_files_are_passed() {
         assert!(Shellcheck.command(&ctx(&["a.py"])).is_none());
         let c = Shellcheck.command(&ctx(&["a.py", "x/b.sh"])).unwrap();
-        assert_eq!(c.args, ["-f", "json1", "x/b.sh"]);
+        assert_eq!(
+            c.args,
+            [
+                "-f",
+                "json1",
+                "--external-sources",
+                "--source-path=SCRIPTDIR",
+                "x/b.sh"
+            ]
+        );
     }
 }
