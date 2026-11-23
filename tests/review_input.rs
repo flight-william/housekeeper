@@ -85,3 +85,87 @@ fn links_and_folders_named_like_a_month_are_skipped_and_counted() {
     assert_eq!(v["runs"], 1, "{text}");
     assert_eq!(v["skipped_files"], 4, "{text}");
 }
+
+#[test]
+fn a_line_longer_than_the_limit_is_skipped_once_even_a_valid_record() {
+    let log = common::fresh("review-long-line");
+    // A real record padded past 1 MiB with a field the review does not read.
+    let padded = RUN.replacen('{', &format!("{{\"pad\":\"{}\",", "x".repeat(1 << 20)), 1);
+    std::fs::write(log.join("2026-11.jsonl"), format!("{padded}\n{RUN}\n")).unwrap();
+    let Some((code, text)) = review_guarded(&log, &["--json"]) else {
+        panic!("house review did not finish");
+    };
+    assert_eq!(code, 0, "{text}");
+    let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(
+        (v["runs"].clone(), v["skipped_lines"].clone()),
+        (1.into(), 1.into()),
+        "{text}"
+    );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn a_huge_line_is_counted_without_holding_it_in_memory() {
+    let log = common::fresh("review-huge-line");
+    let mut huge = vec![b'x'; 64 << 20];
+    huge.push(b'\n');
+    std::fs::write(log.join("2026-11.jsonl"), huge).unwrap();
+    // macOS time -l reports the peak resident memory, in bytes, on stderr.
+    let out = Command::new("/usr/bin/time")
+        .args([
+            "-l",
+            env!("CARGO_BIN_EXE_house"),
+            "review",
+            "--to",
+            "2026-11-30",
+        ])
+        .env("HOUSE_LOG_DIR", &log)
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stdout.contains("\n1 line skipped: not house run records\n"),
+        "{stdout}"
+    );
+    let peak: u64 = stderr
+        .lines()
+        .find(|l| l.contains("maximum resident set size"))
+        .and_then(|l| l.split_whitespace().next())
+        .and_then(|n| n.parse().ok())
+        .unwrap_or_else(|| panic!("no peak memory in: {stderr}"));
+    assert!(
+        peak < 32 << 20,
+        "peak memory {peak} bytes for a 64 MiB line"
+    );
+}
+
+#[test]
+fn more_distinct_places_than_the_limit_stop_the_review_with_a_clear_error() {
+    let log = common::fresh("review-many-places");
+    // 201 lines of 500 distinct places each: 100 500 places, past the limit.
+    let mut lines = String::new();
+    for line in 0..201 {
+        let findings: Vec<String> = (0..500)
+            .map(|n| {
+                format!(r#"{{"rule":"R3","place":"src/f{line}_{n}.py","tool_rule":"r3 file"}}"#)
+            })
+            .collect();
+        lines.push_str(&format!(
+            r#"{{"start":"2026-11-02T09:00:00Z","repo":"/work/shop","stage":"commit","tools":[{{"name":"r3","seconds":0.1,"findings":{{"R3":500}},"excused":{{}}}}],"findings":[{}],"excused":0}}"#,
+            findings.join(",")
+        ));
+        lines.push('\n');
+    }
+    std::fs::write(log.join("2026-11.jsonl"), lines).unwrap();
+    let Some((code, text)) = review_guarded(&log, &[]) else {
+        panic!("house review did not finish");
+    };
+    assert_eq!(code, 2, "{text}");
+    assert!(text.contains("more than 100000 distinct places"), "{text}");
+    assert!(
+        text.contains("fix: review a shorter period or one repo"),
+        "{text}"
+    );
+}

@@ -70,13 +70,18 @@ suggestions (to weigh, not orders):
 | Part | What it shows |
 |---|---|
 | **Header** | The first and last day of the runs covered, the number of runs, and the runs per stage: commit, commit-msg, push and all. |
-| **lines skipped** | `N lines skipped: not house run records`. The record folder can hold lines another program wrote, or a broken one; they are skipped and counted. The line is absent when none were skipped. |
+| **lines skipped** | `N lines skipped: not house run records`. The record folder can hold lines another program wrote, or a broken one; they are skipped and counted. A line longer than 1 MiB is skipped too, without being held in memory. The line is absent when none were skipped. |
 | **record files skipped** | `N record files skipped: not regular files`. Only a regular file named `<YYYY-MM>.jsonl` is read. A folder, a FIFO or a symbolic link with such a name is skipped and counted, never followed or waited on. A regular file that cannot be read stops the review (exit 2). The line is absent when none were skipped. |
 | **per rule** | For each rule: the findings left to fix, the excused findings and the cannot-checks. A cannot-check is counted under the rule of the tool that could not run. |
 | **excused before 0.3.0** | `N excused in records that do not say which rule (before house 0.3.0)`. A record written before 0.3.0 keeps only the run's excused total, so those excuses cannot be tied to a rule or a tool. They are counted apart. |
 | **per tool** | For each tool: the runs it took part in, the same three counts, and its total and median seconds. |
 | **repeated places** | `repeated places (failed on more than one run)`: each place (rule, file, the tool's own rule in brackets) that failed on more than one run, most often first. The repo's folder name is added when the report spans repos. `repeated places: none` when there are none. |
 | **suggestions** | `suggestions (to weigh, not orders)`, one `suggestion:` line each; see [below](#the-suggestions). `suggestions: none` when there are none. |
+
+The review holds what it counts, not the records: at most 100000 distinct places, rules,
+tools, stages and repos. Past that, or past a total that does not fit in a 64-bit count, it
+stops with `house review: cannot review: ...` (exit 2), and a shorter period or one repo is
+the fix.
 
 "Cannot check" is not a finding. It means a tool was missing, crashed or hung, so nothing
 about that run's code is known. A rule with many of them is not being enforced.

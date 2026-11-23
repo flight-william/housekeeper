@@ -3,7 +3,7 @@
 
 use super::{Cmd, USAGE, today};
 use crate::excuses::Date;
-use crate::review::{self, Filter};
+use crate::review::{self, Filter, ReviewError};
 use crate::{files, record};
 use std::path::Path;
 
@@ -66,10 +66,16 @@ pub(super) fn run_review(
     };
     let review = match review::review_folder(&dir, &filter) {
         Ok(review) => review,
-        Err(e) => {
+        Err(ReviewError::Read(e)) => {
             println!(
                 "house review: cannot read the records in {}: {e}. fix: set HOUSE_LOG_DIR to a folder you can read",
                 dir.display()
+            );
+            return 2;
+        }
+        Err(ReviewError::Limit(what)) => {
+            println!(
+                "house review: cannot review: {what}. fix: review a shorter period or one repo"
             );
             return 2;
         }

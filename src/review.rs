@@ -11,6 +11,7 @@ mod read;
 mod suggest;
 mod text;
 
+pub use read::MAX_LINE;
 pub use suggest::{NEVER_FIRES_MIN_RUNS, Suggestion};
 
 use crate::excuses::Date;
@@ -190,18 +191,42 @@ fn parse(line: &str) -> Option<(Run, Date)> {
     Some((run, day))
 }
 
+/// The most distinct places, rules, tools, stages and repos a review keeps: what it
+/// holds grows with these, never with the number or size of the lines.
+pub const MAX_KEYS: usize = 100_000;
+
+/// Why a review was not made.
+#[derive(Debug)]
+pub enum ReviewError {
+    /// The record folder or a record file could not be read.
+    Read(std::io::Error),
+    /// The records are past what a review holds: a sum past `u64::MAX`, or more
+    /// than `MAX_KEYS` distinct keys. One sentence, no trailing period.
+    Limit(String),
+}
+
 /// The review of the records in `dir` for the runs `filter` covers.
-pub fn review_folder(dir: &Path, filter: &Filter) -> std::io::Result<Review> {
+pub fn review_folder(dir: &Path, filter: &Filter) -> Result<Review, ReviewError> {
     let mut r = Review {
         filter: filter.clone(),
         ..Review::default()
     };
-    let folder = read::each_line(dir, |line| r.add_line(line))?;
+    let folder = read::each_line(dir, |line| {
+        if !r.full() {
+            r.add_line(line);
+        }
+    })
+    .map_err(ReviewError::Read)?;
     r.skipped_files = folder.skipped_files;
     if r.overflowed {
-        return Err(std::io::Error::other(
-            "a count in the records adds up to more than 18446744073709551615",
+        return Err(ReviewError::Limit(
+            "a count in the records adds up to more than 18446744073709551615".into(),
         ));
+    }
+    if r.full() {
+        return Err(ReviewError::Limit(format!(
+            "the records name more than {MAX_KEYS} distinct places, rules, tools, stages and repos"
+        )));
     }
     Ok(r)
 }
@@ -215,9 +240,23 @@ fn add_count(total: &mut u64, n: u32, overflowed: &mut bool) {
 }
 
 impl Review {
+    /// Past `MAX_KEYS`: nothing more is added, and the review is refused.
+    fn full(&self) -> bool {
+        let keys = self.places.len()
+            + self.rules.len()
+            + self.tools.len()
+            + self.stages.len()
+            + self.repos.len();
+        keys > MAX_KEYS
+    }
+
     /// One line of a record file: a covered run is added, a line that is not a house
     /// record is counted. A blank line is neither.
-    fn add_line(&mut self, bytes: &[u8]) {
+    fn add_line(&mut self, line: read::Line) {
+        let read::Line::Bytes(bytes) = line else {
+            self.skipped_lines += 1;
+            return;
+        };
         let text = String::from_utf8_lossy(bytes);
         let line = text.as_ref();
         if line.trim().is_empty() {
