@@ -17,6 +17,15 @@ pub fn log_dir() -> Option<PathBuf> {
     Some(PathBuf::from(home).join("Library/Logs/house/runs"))
 }
 
+/// The findings the excuse list took out of a run's reply: `total`, and for each tool
+/// (by its place in the report's tools) the count by rule, recorded as the tool's
+/// `excused` map.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Excused {
+    pub total: usize,
+    pub by_tool: Vec<BTreeMap<String, u32>>,
+}
+
 /// The facts about a run that the report does not hold.
 pub struct RunInfo<'a> {
     pub start: SystemTime,
@@ -70,6 +79,23 @@ pub fn line(info: &RunInfo, report: &Report) -> Value {
     m.insert("tools".into(), tools.into());
     m.insert("findings".into(), findings.into());
     Value::Object(m)
+}
+
+/// Put `excused` into `line`: the run's total as `excused`, each tool's by-rule count
+/// as that tool's `excused` map (empty when nothing of it was excused).
+pub fn add_excused(line: &mut Value, excused: &Excused) {
+    let Value::Object(m) = line else {
+        return;
+    };
+    m.insert("excused".into(), excused.total.into());
+    if let Some(Value::Array(tools)) = m.get_mut("tools") {
+        for (i, tool) in tools.iter_mut().enumerate() {
+            if let Value::Object(t) = tool {
+                let by_rule = excused.by_tool.get(i).cloned().unwrap_or_default();
+                t.insert("excused".into(), json!(by_rule));
+            }
+        }
+    }
 }
 
 /// Append `line` to `<dir>/<YYYY-MM>.jsonl` (month of `start`), creating the folder.

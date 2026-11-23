@@ -159,19 +159,16 @@ fn check_and_record(cwd: &Path, mode: Mode, json: bool, config_from: Option<&str
     let checked = check_from(&root, mode, &rules, adapters::all());
     let mut report = checked.report;
     let base = checked.base.as_deref();
-    let excused = match mode {
-        Mode::Stage(_) => excuse::excuse_by(&mut report, &root, today(), base, &rules),
-        Mode::All => excuse_all(&mut report, &root, today(), base),
-    };
+    let excused = excuse::apply_list(&mut report, &root, today(), base, &rules, mode == Mode::All);
     if json {
         let mut value = report.json();
         if let Some(m) = value.as_object_mut() {
             m.insert("stage".into(), label.into());
-            m.insert("excused".into(), excused.into());
+            m.insert("excused".into(), excused.total.into());
         }
         println!("{value}");
     } else {
-        print!("{}", report.text_as(label, excused));
+        print!("{}", report.text_as(label, excused.total));
     }
     let tests = serde_json::to_value(&checked.failed_tests).unwrap_or_default();
     write_record(
@@ -179,7 +176,7 @@ fn check_and_record(cwd: &Path, mode: Mode, json: bool, config_from: Option<&str
         start,
         &report,
         label,
-        excused,
+        &excused,
         &[("test_output", tests)],
     );
     report.exit()
@@ -201,14 +198,14 @@ pub(crate) fn root_or_say(cwd: &Path, label: &str) -> Option<std::path::PathBuf>
     }
 }
 
-/// Append the run's record line, its stage shown as `label`, with the excused count
+/// Append the run's record line, its stage shown as `label`, with the excused counts
 /// and the `extra` fields (a check's failed test commands and their output's tails).
 pub(crate) fn write_record(
     root: &Path,
     start: SystemTime,
     report: &Report,
     label: &str,
-    excused: usize,
+    excused: &record::Excused,
     extra: &[(&str, Value)],
 ) {
     let info = record::RunInfo {
@@ -221,9 +218,9 @@ pub(crate) fn write_record(
         user: std::env::var("USER").unwrap_or_default(),
     };
     let mut line = record::line(&info, report);
+    record::add_excused(&mut line, excused);
     if let Value::Object(m) = &mut line {
         m.insert("stage".into(), label.into());
-        m.insert("excused".into(), excused.into());
         for (key, value) in extra {
             m.insert((*key).into(), value.clone());
         }
