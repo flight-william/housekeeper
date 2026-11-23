@@ -89,6 +89,12 @@ pub trait Adapter {
         true
     }
 
+    /// Variables set in the command's environment, after house strips the GIT_* ones
+    /// it inherited.
+    fn env(&self) -> &'static [(&'static str, &'static str)] {
+        &[]
+    }
+
     /// The command to run, or `None` when nothing in `ctx.files` concerns this tool
     /// (e.g. no `.py` file staged for ruff): then the tool is skipped, not an error.
     fn command(&self, ctx: &Context) -> Option<Command>;

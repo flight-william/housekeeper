@@ -1,5 +1,11 @@
 //! gitleaks: secrets (R2). At commit it scans the staged changes; at push, the
 //! pushed commits (`ctx.push_range`), or all history when no range is known.
+//!
+//! gitleaks reports a secret at the path whose diff adds its line. With git's rename
+//! detection a `git mv` adds no line, so a secret moved out of an excluded folder
+//! would be reported, and dropped, at its old path only. gitleaks runs with
+//! `diff.renames` off: a rename is a delete and an add, and the secret is reported at
+//! the path it now has, where `[paths] exclude` is judged.
 //! Captured with gitleaks 8.30.1.
 
 use super::Exits;
@@ -44,9 +50,20 @@ struct Leak {
     start_line: u32,
 }
 
+/// git's rename detection off for the `git diff` and `git log` gitleaks runs.
+const NO_RENAMES: &[(&str, &str)] = &[
+    ("GIT_CONFIG_COUNT", "1"),
+    ("GIT_CONFIG_KEY_0", "diff.renames"),
+    ("GIT_CONFIG_VALUE_0", "false"),
+];
+
 impl Adapter for Gitleaks {
     fn name(&self) -> &'static str {
         "gitleaks"
+    }
+
+    fn env(&self) -> &'static [(&'static str, &'static str)] {
+        NO_RENAMES
     }
 
     fn program(&self) -> &'static str {

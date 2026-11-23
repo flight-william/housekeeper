@@ -46,8 +46,10 @@ house init
 and the git hooks. Commit them. Files listed under `[paths] exclude` in `.house.toml`
 (prefix globs, such as `tests/fixtures/`) are never handed to a tool, and a finding a tool
 reports on one anyway is dropped: gitleaks reads the git history, not the files it is handed,
-so an excluded vendored file is not scanned for secrets either. Under `[tests]`,
-`commit = [["cargo", "test"]]` and `push = [...]` (push falls back to commit) list test
+so an excluded vendored file is not scanned for secrets either. The exclusion is judged
+at the path a secret has now: gitleaks runs with git's rename detection off, so a secret
+moved or copied out of an excluded folder (`git mv`) is reported at its new path. Under
+`[tests]`, `commit = [["cargo", "test"]]` and `push = [...]` (push falls back to commit) list test
 commands, each a program and its arguments with no shell, run from the repo root after the
 tools; a failing one is an R7 finding, and the last 20 lines of its output go to the run
 record. Each command may run for `timeout_seconds` (in `[tests]`, 600 when unset); one still

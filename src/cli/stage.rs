@@ -212,7 +212,13 @@ fn run_one(adapter: &dyn Adapter, ctx: &Context) -> ToolRun {
         return tool;
     }
     for cmd in &commands {
-        let ran = run::run(cmd, &ctx.root, adapter.brew_formula(), run::HANG_GUARD);
+        let ran = run::run_env(
+            cmd,
+            &ctx.root,
+            adapter.brew_formula(),
+            run::HANG_GUARD,
+            adapter.env(),
+        );
         tool.seconds += ran.seconds;
         let parsed = ran.result.and_then(|out| {
             if tool.exit.is_none_or(|e| e == 0) {

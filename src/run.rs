@@ -33,18 +33,36 @@ pub struct Ran {
 
 /// Run `cmd` in `root`. A program not on PATH gives "not installed" with the brew line.
 pub fn run(cmd: &Command, root: &Path, brew_formula: &str, guard: Duration) -> Ran {
-    timed(cmd, root, brew_formula, guard, false)
+    timed(cmd, root, brew_formula, guard, false, &[])
+}
+
+/// `run`, with `env` set in the command's environment after the GIT_* are stripped.
+pub fn run_env(
+    cmd: &Command,
+    root: &Path,
+    brew_formula: &str,
+    guard: Duration,
+    env: &[(&str, &str)],
+) -> Ran {
+    timed(cmd, root, brew_formula, guard, false, env)
 }
 
 /// `run`, with the command in a process group of its own; at the guard the whole
 /// group is stopped, not the command alone.
 pub fn run_group(cmd: &Command, root: &Path, brew_formula: &str, guard: Duration) -> Ran {
-    timed(cmd, root, brew_formula, guard, true)
+    timed(cmd, root, brew_formula, guard, true, &[])
 }
 
-fn timed(cmd: &Command, root: &Path, brew_formula: &str, guard: Duration, group: bool) -> Ran {
+fn timed(
+    cmd: &Command,
+    root: &Path,
+    brew_formula: &str,
+    guard: Duration,
+    group: bool,
+    env: &[(&str, &str)],
+) -> Ran {
     let start = Instant::now();
-    let (result, timed_out) = match run_inner(cmd, root, brew_formula, guard, group) {
+    let (result, timed_out) = match run_inner(cmd, root, brew_formula, guard, group, env) {
         Ok(out) => (Ok(out), false),
         Err(Stop::Failed(c)) => (Err(c), false),
         Err(Stop::Hung(c)) => (Err(c), true),
@@ -93,6 +111,7 @@ fn run_inner(
     brew_formula: &str,
     guard: Duration,
     group: bool,
+    env: &[(&str, &str)],
 ) -> Result<Output, Stop> {
     let mut command = std::process::Command::new(&cmd.program);
     command
@@ -106,6 +125,7 @@ fn run_inner(
             command.env_remove(key);
         }
     }
+    command.envs(env.iter().copied());
     if group {
         command.process_group(0);
     }
