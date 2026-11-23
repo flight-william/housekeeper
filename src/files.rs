@@ -13,6 +13,33 @@ pub fn repo_root(cwd: &Path) -> Result<PathBuf, CannotCheck> {
     Ok(PathBuf::from(out.stdout.trim()))
 }
 
+/// The repository's identity, the same in each of its worktrees: its root commit
+/// (`git rev-list --max-parents=0 HEAD`; the oldest when there are several, by
+/// commit time, then hash), or `None` before the first commit.
+pub fn root_commit(dir: &Path) -> Option<String> {
+    let out = git(dir, &["log", "--max-parents=0", "--format=%ct %H", "HEAD"]).ok()?;
+    out.stdout
+        .lines()
+        .filter_map(|l| {
+            let (time, hash) = l.trim().split_once(' ')?;
+            Some((time.parse::<i64>().ok()?, hash.to_string()))
+        })
+        .min()
+        .map(|(_, hash)| hash)
+}
+
+/// The repository's main checkout, the folder holding the `.git` folder every
+/// worktree shares (`git rev-parse --git-common-dir`'s parent), or `None` when that
+/// folder is not named `.git` (a bare repository).
+pub fn main_checkout(dir: &Path) -> Option<PathBuf> {
+    let out = git(dir, &["rev-parse", "--git-common-dir"]).ok()?;
+    let common = dir.join(out.stdout.trim()).canonicalize().ok()?;
+    if common.file_name()? != ".git" {
+        return None;
+    }
+    common.parent().map(Path::to_path_buf)
+}
+
 /// What a stage checks: its files, and at push the range and whether it is bounded
 /// (`push::Push`).
 pub struct Scope {
