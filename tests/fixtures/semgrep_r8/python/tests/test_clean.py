@@ -87,3 +87,9 @@ class StandInTest(unittest.TestCase):
             self.log.splitlines()[0],
             "delete-generic-password -s svc",
         )
+
+
+# A made-up user's path handed to a formatter and compared: data, never read.
+def test_shortens_a_made_up_home_path():
+    assert shorten("/Users/tester/Desktop/Shop") == "~/Desktop/Shop"
+    print("/home/someone/project")

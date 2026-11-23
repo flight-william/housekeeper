@@ -37,6 +37,13 @@ final class CleanTests: XCTestCase {
         XCTAssertEqual(value, 1)
     }
 
+    // A made-up user's path handed to a formatter and compared: data, never read.
+    func testShortensAMadeUpHomePath() {
+        XCTAssertEqual(shorten("/Users/tester/Desktop/Shop"), "~/Desktop/Shop")
+        XCTAssertEqual(URL(fileURLWithPath: "/Users/someone/project").lastPathComponent, "project")
+        print("/home/someone/project")
+    }
+
     func testAssertsOnTheStandInLog() {
         let log = ""
         XCTAssertEqual(log, "find-generic-password -s svc")

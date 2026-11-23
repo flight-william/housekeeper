@@ -44,9 +44,9 @@ python-test-network python/tests/test_planted.py:82
 python-test-network python/tests/test_planted.py:83
 python-test-network python/tests/test_planted.py:84
 python-test-network python/tests/test_planted.py:85
-test-machine-path python/tests/test_planted.py:89
-test-machine-path python/tests/test_planted.py:90
-test-machine-path python/tests/test_planted.py:91
+python-test-machine-path python/tests/test_planted.py:89
+python-test-machine-path python/tests/test_planted.py:90
+python-test-machine-path python/tests/test_planted.py:91
 python-test-rerun python/tests/test_planted.py:95
 python-test-keychain python/tests/test_planted.py:101
 rust-test-wall-clock rust/src/clock_test.rs:3
@@ -152,9 +152,9 @@ rust-test-network rust/tests/planted.rs:75
 rust-test-network rust/tests/planted.rs:76
 rust-test-network rust/tests/planted.rs:77
 rust-test-network rust/tests/planted.rs:78
-test-machine-path rust/tests/planted.rs:83
-test-machine-path rust/tests/planted.rs:84
-test-machine-path rust/tests/planted.rs:85
+rust-test-machine-path rust/tests/planted.rs:83
+rust-test-machine-path rust/tests/planted.rs:84
+rust-test-machine-path rust/tests/planted.rs:85
 swift-test-sleep swift/AppTests/PlantedTests.swift:8
 swift-test-sleep swift/AppTests/PlantedTests.swift:9
 swift-test-sleep swift/AppTests/PlantedTests.swift:10
@@ -204,8 +204,8 @@ swift-test-network swift/AppTests/PlantedTests.swift:77
 swift-test-network swift/AppTests/PlantedTests.swift:78
 swift-test-network swift/AppTests/PlantedTests.swift:79
 swift-test-network swift/AppTests/PlantedTests.swift:80
-test-machine-path swift/AppTests/PlantedTests.swift:84
-test-machine-path swift/AppTests/PlantedTests.swift:85
-test-machine-path swift/AppTests/PlantedTests.swift:86
+swift-test-machine-path swift/AppTests/PlantedTests.swift:84
+swift-test-machine-path swift/AppTests/PlantedTests.swift:85
+swift-test-machine-path swift/AppTests/PlantedTests.swift:86
 swift-test-keychain swift/AppTests/PlantedTests.swift:91
 swift-test-wall-clock swift/Tests/Support.swift:4

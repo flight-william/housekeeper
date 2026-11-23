@@ -80,7 +80,7 @@ fn opens_the_network() {
 
 #[test]
 fn names_machine_paths() {
-    let _a = "/Users/someone/project";
-    let _b = "/home/someone/project";
-    let _c = "~/project";
+    let _a = std::fs::read_to_string("/Users/someone/project/notes.txt");
+    let _b = std::fs::File::open("/home/someone/project");
+    let _c = std::path::Path::new("~/project").exists();
 }

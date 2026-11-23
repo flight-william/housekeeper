@@ -80,11 +80,11 @@ final class PlantedTests: XCTestCase {
         _ = NWConnection(host: "example.invalid", port: 443, using: .tcp)
     }
 
-    func testPaths() {
-        let a = "/Users/someone/project"
-        let b = "/home/someone/project"
-        let c = "~/project"
-        XCTAssertNotNil([a, b, c])
+    func testPaths() throws {
+        let a = FileManager.default.fileExists(atPath: "/Users/someone/project")
+        let b = try String(contentsOfFile: "/home/someone/project/notes.txt", encoding: .utf8)
+        let c = try Data(contentsOf: URL(fileURLWithPath: "~/project/data.bin"))
+        XCTAssertNotNil([a, b, c] as [Any])
     }
 
     func testKeychainCallInsideAnAssert() {

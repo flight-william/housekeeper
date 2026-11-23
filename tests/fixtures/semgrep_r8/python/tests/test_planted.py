@@ -86,9 +86,9 @@ def test_network():
 
 
 def test_paths():
-    a = "/Users/someone/project"
-    b = "/home/someone/project"
-    c = "~/project"
+    a = open("/Users/someone/project/notes.txt")
+    b = os.listdir("/home/someone/project")
+    c = pathlib.Path("~/project/notes.txt").read_text()
     assert a and b and c
 
 
