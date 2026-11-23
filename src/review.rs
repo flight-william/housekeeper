@@ -7,17 +7,19 @@
 //! reads it as its UTC day), a `stage` and a `tools` list of named tools; any other
 //! line, a blank or broken one included, is skipped and counted.
 
+mod line;
 mod read;
 mod start;
 mod suggest;
 mod text;
 
+pub use line::MAX_SECONDS;
 pub use read::MAX_LINE;
 pub use suggest::{NEVER_FIRES_MIN_RUNS, Suggestion};
 
 use crate::excuses::Date;
 use crate::reply::cannot_rule;
-use serde::Deserialize;
+use line::{Run, Tool, parse};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -47,73 +49,6 @@ impl Filter {
 
 fn same_repo(repo: &str, want: &str) -> bool {
     repo == want || Path::new(repo).file_name().is_some_and(|name| name == want)
-}
-
-/// One record line, the fields a review reads; every other field is ignored.
-#[derive(Deserialize)]
-struct Run {
-    start: String,
-    #[serde(default)]
-    repo: String,
-    stage: String,
-    tools: Vec<Tool>,
-    /// The run's excused total. Every count is a `u32`, the most house writes: a
-    /// larger or negative one makes the line not a house record.
-    #[serde(default)]
-    excused: u32,
-    /// The findings left to fix, one entry each.
-    #[serde(default)]
-    findings: Vec<Failed>,
-}
-
-#[derive(Deserialize)]
-struct Failed {
-    rule: String,
-    place: String,
-    #[serde(default)]
-    tool_rule: String,
-}
-
-#[derive(Deserialize)]
-struct Tool {
-    name: String,
-    #[serde(default, deserialize_with = "seconds")]
-    seconds: f64,
-    #[serde(default)]
-    skipped: bool,
-    #[serde(default)]
-    findings: BTreeMap<String, u32>,
-    #[serde(default)]
-    cannot_check: Option<String>,
-    /// Rule to count; `None` in records written before house 0.3.0.
-    #[serde(default)]
-    excused: Option<BTreeMap<String, u32>>,
-}
-
-impl Tool {
-    /// The rules this tool's entry names: its findings, its excuses, its cannot-check.
-    fn rules(&self) -> impl Iterator<Item = String> + '_ {
-        let excused = self.excused.iter().flat_map(|m| m.keys().cloned());
-        let cannot = self
-            .cannot_check
-            .as_ref()
-            .map(|_| cannot_rule(&self.name).to_string());
-        self.findings.keys().cloned().chain(excused).chain(cannot)
-    }
-}
-
-/// The most seconds a tool's entry may hold: a day. house stops each command at its
-/// hang guard, an hour, so a larger, negative or non-finite duration was not written
-/// by house, and the line is not a house record. Totals then stay finite numbers.
-pub const MAX_SECONDS: f64 = 86_400.0;
-
-fn seconds<'de, D: serde::Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
-    let s = f64::deserialize(d)?;
-    if (0.0..=MAX_SECONDS).contains(&s) {
-        Ok(s)
-    } else {
-        Err(serde::de::Error::custom("seconds out of range"))
-    }
 }
 
 /// A place a rule failed: the repo, the rule, the file (or "repo") and the tool's
@@ -209,13 +144,6 @@ pub struct Review {
     /// the place's rule. When two tools hold it, the finding is no tool's: the record
     /// does not say which, and none is invented.
     pub place_tools: BTreeMap<(Place, String), u64>,
-}
-
-/// A house record line and its start day, or `None` for any other line.
-fn parse(line: &str) -> Option<(Run, Date)> {
-    let run: Run = serde_json::from_str(line).ok()?;
-    let day = start::utc_day(&run.start)?;
-    Some((run, day))
 }
 
 /// The most distinct places, rules, tools, stages and repos a review keeps: what it
