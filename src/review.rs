@@ -153,8 +153,9 @@ pub struct PlaceStat {
     pub by_tool: BTreeMap<String, u64>,
 }
 
-/// The most distinct places, rules, tools, stages and repos a review keeps: what it
-/// holds grows with these, never with the number or size of the lines.
+/// The most distinct places, rules, tools, stages and repos a review counts before it
+/// refuses. It is a stop for a runaway folder, not a memory budget: memory also grows
+/// with the tools named outside the period and with the runs in it.
 pub const MAX_KEYS: usize = 100_000;
 
 /// Why a review was not made.

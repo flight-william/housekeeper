@@ -88,10 +88,11 @@ suggestions (to weigh, not orders):
 | **repeated places** | `repeated places (failed on more than one run)`: each place (rule, file, the tool's own rule in brackets) that failed on more than one run, most often first. The repo's folder name is added when the report spans repos. `repeated places: none` when there are none. |
 | **suggestions** | `suggestions (to weigh, not orders)`, one `suggestion:` line each; see [below](#the-suggestions). `suggestions: none` when there are none. |
 
-The review holds what it counts, not the records: at most 100000 distinct places, rules,
-tools, stages and repos. Past that, or past a total that does not fit in a 64-bit count, it
-stops with `house review: cannot review: ...` (exit 2), and a shorter period or one repo is
-the fix.
+Memory grows with the number of distinct repos, rules, tools and places in the record
+folder, and with the runs in the period, as for any tool reading its own records; a single
+line is capped at 1 MiB. Past 100000 distinct places, rules, tools, stages and repos, or past
+a total that does not fit in a 64-bit count, the review stops with
+`house review: cannot review: ...` (exit 2), and a shorter period or one repo is the fix.
 
 "Cannot check" is not a finding. It means a tool was missing, crashed or hung, so nothing
 about that run's code is known. A rule with many of them is not being enforced.

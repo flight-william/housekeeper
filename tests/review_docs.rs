@@ -29,3 +29,24 @@ fn the_docs_sample_is_the_whole_report_over_the_fixture() {
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(sample(), String::from_utf8_lossy(&out.stdout));
 }
+
+#[test]
+fn the_docs_say_memory_grows_with_the_folder_and_claim_no_bound() {
+    // What a review keeps grows with the distinct names in the folder; only a line
+    // has a cap. The page once said the review's state was bounded, which it is not.
+    assert!(
+        !DOC.contains("holds what it counts"),
+        "docs/review.md claims a bound"
+    );
+    let plain = DOC.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        plain.contains(
+            "Memory grows with the number of distinct repos, rules, tools and places in the record folder"
+        ),
+        "docs/review.md does not say what memory grows with"
+    );
+    assert!(
+        plain.contains("a single line is capped at 1 MiB"),
+        "no line cap stated"
+    );
+}
