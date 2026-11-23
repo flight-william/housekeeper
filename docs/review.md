@@ -114,7 +114,7 @@ Read the sections in this order:
 
 | Suggestion | What it means | What to do |
 |---|---|---|
-| `X never fires: no findings in N runs; ...` | A rule or tool found nothing, excused or left to fix, in the whole period. Only shown after at least 5 runs. | For a rule, check that a tool still checks it, or drop it. For a tool, check it is handed the files it should read. A quiet rule may simply be holding: do not remove it only because it is quiet. |
+| `X never fires: no findings in N runs; ...` | A rule or tool found nothing, excused or left to fix, in the whole period. Only shown after at least 5 runs that checked: a tool's own runs with no cannot-check, and for a rule the runs where a tool that names it checked. Never shown for a rule or tool that ran where a record from before 0.3.0 excused findings without saying whose. | For a rule, check that a tool still checks it, or drop it. For a tool, check it is handed the files it should read. A quiet rule may simply be holding: do not remove it only because it is quiet. |
 | `X looks noisy: ...` | Most of its findings were excused (`6 of 10 findings excused`), or most of those left to fix were on places that failed on another run too (`3 of 4 left to fix on places that failed before`), so they were not fixed in between. | Open a few of its findings. If they are real, fix that code, or excuse with a deadline. If they are not, tune the rule or the tool: loosen it. |
 | `X takes most of the time: S of T s (P%); ...` | One tool took more than half of all the tools' seconds, when two or more ran. | Run it at push only, or hand it fewer files. |
 

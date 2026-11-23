@@ -141,6 +141,9 @@ pub struct ToolStat {
     pub runs: usize,
     /// The runs it was not skipped in and could check.
     pub checked: usize,
+    /// It ran in a record written before 0.3.0 that excused findings: some may have
+    /// been its own, so it cannot be said to have found nothing.
+    pub excused_unknown: bool,
     pub seconds: Vec<f64>,
 }
 
@@ -187,6 +190,12 @@ pub struct Review {
     pub rules: BTreeMap<String, Count>,
     /// Every tool that ran (was not skipped) on a covered run.
     pub tools: BTreeMap<String, ToolStat>,
+    /// For each rule, the tools a record of the repo names it under, in the period
+    /// or not: the tools that check it.
+    pub rule_tools: BTreeMap<String, BTreeSet<String>>,
+    /// The covered runs by the set of tools that checked in them (not skipped, no
+    /// cannot-check): how often each rule was checked.
+    pub checked_sets: BTreeMap<BTreeSet<String>, usize>,
     /// Excused findings in records that name no tool's excused map.
     pub excused_unattributed: u64,
     /// A sum passed `u64::MAX`; the review is then refused, never wrapped.
@@ -258,6 +267,7 @@ impl Review {
     fn full(&self) -> bool {
         let keys = self.places.len()
             + self.rules.len()
+            + self.checked_sets.len()
             + self.tools.len()
             + self.stages.len()
             + self.repos.len();
@@ -280,8 +290,12 @@ impl Review {
             return;
         };
         if self.filter.in_repo(&run.repo) {
-            for rule in run.tools.iter().flat_map(Tool::rules) {
-                self.rules.entry(rule).or_default();
+            for tool in &run.tools {
+                for rule in tool.rules() {
+                    let tools = self.rule_tools.entry(rule.clone()).or_default();
+                    tools.insert(tool.name.clone());
+                    self.rules.entry(rule).or_default();
+                }
             }
         }
         if self.filter.covers(day, &run.repo) {
@@ -297,7 +311,8 @@ impl Review {
         self.runs += 1;
         *self.stages.entry(run.stage.clone()).or_default() += 1;
         self.repos.insert(run.repo.clone());
-        if run.tools.iter().all(|t| t.excused.is_none()) {
+        let unattributed = run.excused > 0 && run.tools.iter().all(|t| t.excused.is_none());
+        if unattributed {
             add_count(
                 &mut self.excused_unattributed,
                 run.excused,
@@ -305,19 +320,27 @@ impl Review {
             );
         }
         for tool in &run.tools {
-            self.add_tool(tool);
+            self.add_tool(tool, unattributed);
         }
+        let checked: BTreeSet<String> = run
+            .tools
+            .iter()
+            .filter(|t| !t.skipped && t.cannot_check.is_none())
+            .map(|t| t.name.clone())
+            .collect();
+        *self.checked_sets.entry(checked).or_default() += 1;
         self.add_places(run);
     }
 
     /// A tool skipped on a run did not run: a tool skipped on every run of the period
     /// is not one of its tools.
-    fn add_tool(&mut self, tool: &Tool) {
+    fn add_tool(&mut self, tool: &Tool, excused_unknown: bool) {
         if tool.skipped {
             return;
         }
         let stat = self.tools.entry(tool.name.clone()).or_default();
         stat.runs += 1;
+        stat.excused_unknown |= excused_unknown;
         stat.checked += usize::from(tool.cannot_check.is_none());
         stat.seconds.push(tool.seconds);
         for (rule, n) in &tool.findings {

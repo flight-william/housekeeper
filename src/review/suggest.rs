@@ -23,12 +23,14 @@ impl Review {
     pub fn suggestions(&self) -> Vec<Suggestion> {
         let mut out = Vec::new();
         for (rule, count) in self.rules_in_order() {
-            if self.runs >= NEVER_FIRES_MIN_RUNS && silent(count) {
-                out.push(never_fires(rule, self.runs, RULE_CHECK));
+            let runs = self.rule_checked_runs(rule);
+            if runs >= NEVER_FIRES_MIN_RUNS && silent(count) && !self.rule_excused_unknown(rule) {
+                out.push(never_fires(rule, runs, RULE_CHECK));
             }
         }
         for (tool, stat) in &self.tools {
-            if stat.checked >= NEVER_FIRES_MIN_RUNS && silent(&stat.count) {
+            if stat.checked >= NEVER_FIRES_MIN_RUNS && silent(&stat.count) && !stat.excused_unknown
+            {
                 out.push(never_fires(tool, stat.checked, TOOL_CHECK));
             }
         }
@@ -40,6 +42,29 @@ impl Review {
         }
         out.extend(self.slow());
         out
+    }
+
+    /// The covered runs in which a tool that names `rule` checked: a run where they
+    /// were all skipped or could not check says nothing about the rule.
+    fn rule_checked_runs(&self, rule: &str) -> usize {
+        let Some(tools) = self.rule_tools.get(rule) else {
+            return 0;
+        };
+        self.checked_sets
+            .iter()
+            .filter(|(checked, _)| !checked.is_disjoint(tools))
+            .map(|(_, runs)| runs)
+            .sum()
+    }
+
+    /// A tool that names `rule` ran where excuses were not tied to a rule (records
+    /// written before 0.3.0), so the rule may have had excused findings.
+    fn rule_excused_unknown(&self, rule: &str) -> bool {
+        self.rule_tools.get(rule).is_some_and(|tools| {
+            tools
+                .iter()
+                .any(|t| self.tools.get(t).is_some_and(|s| s.excused_unknown))
+        })
     }
 
     /// The runs a rule failed on places found on more than one run.

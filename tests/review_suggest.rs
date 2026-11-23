@@ -80,8 +80,9 @@ fn never_fires_needs_at_least_five_runs_in_the_period() {
 }
 
 #[test]
-fn a_tool_is_judged_by_its_own_runs_a_rule_by_the_periods() {
-    // Five runs, gitleaks skipped on one: the rule and ruff have five, gitleaks four.
+fn a_tool_is_judged_by_its_own_runs_a_rule_by_its_tools_runs() {
+    // Five runs, gitleaks skipped on one: ruff, and R4 that ruff checks, have five;
+    // gitleaks has four.
     let skipped = r#"{"start":"2026-11-03T09:00:00Z","repo":"/work/shop","stage":"commit","tools":[{"name":"ruff","seconds":0.0,"findings":{},"excused":{}},{"name":"gitleaks","seconds":0.0,"skipped":true,"findings":{},"excused":{}}],"findings":[],"excused":0}"#;
     let log = quiet_runs("review-tool-four", 4);
     let path = log.join("2026-11.jsonl");
@@ -94,6 +95,57 @@ fn a_tool_is_judged_by_its_own_runs_a_rule_by_the_periods() {
         [
             "  suggestion: R4 never fires: no findings in 5 runs; check that a tool still checks it, or drop it",
             "  suggestion: ruff never fires: no findings in 5 runs; check that it is handed the files it should read",
+        ],
+        "{text}"
+    );
+}
+
+/// `n` copies of `line` as November's records, in a fresh folder.
+fn repeated_runs(name: &str, line: &str, n: usize) -> PathBuf {
+    folder_with(name, &vec![line; n])
+}
+
+#[test]
+fn a_tool_whose_old_records_excused_findings_is_not_said_to_never_fire() {
+    // Before 0.3.0 a record kept only the run's excused total: these ten excuses
+    // may be r3's, the run's only tool.
+    let old = r#"{"start":"2026-11-02T09:00:00Z","repo":"/work/shop","stage":"commit","tools":[{"name":"r3","seconds":0.2,"findings":{}}],"findings":[],"excused":2}"#;
+    let log = repeated_runs("review-old-excused", old, 5);
+    let (_, text) = review_in(&log, &log, &NOVEMBER);
+    assert!(
+        text.contains("\n10 excused in records that do not say which rule"),
+        "{text}"
+    );
+    assert!(text.ends_with("\nsuggestions: none\n"), "{text}");
+}
+
+#[test]
+fn a_rule_whose_tool_never_could_check_is_not_said_to_never_fire() {
+    // R2 is named only by semgrep's cannot-check: nothing was ever checked for it.
+    let cannot = r#"{"start":"2026-11-02T09:00:00Z","repo":"/work/shop","stage":"commit","tools":[{"name":"semgrep","seconds":0.0,"findings":{},"cannot_check":"semgrep is not installed. fix: brew install semgrep","excused":{}}],"findings":[],"excused":0}"#;
+    let log = repeated_runs("review-cannot-only", cannot, 5);
+    let (_, text) = review_in(&log, &log, &NOVEMBER);
+    assert!(
+        text.contains("  R2: 0 findings, 0 excused, 5 cannot check\n"),
+        "{text}"
+    );
+    assert!(text.ends_with("\nsuggestions: none\n"), "{text}");
+}
+
+#[test]
+fn a_rule_counts_only_the_runs_its_tools_checked() {
+    // Five runs, ruff skipped on one: R4, which only ruff names, was checked four times.
+    let skipped = r#"{"start":"2026-11-03T09:00:00Z","repo":"/work/shop","stage":"commit","tools":[{"name":"ruff","seconds":0.0,"skipped":true,"findings":{},"excused":{}},{"name":"gitleaks","seconds":0.0,"findings":{},"excused":{}}],"findings":[],"excused":0}"#;
+    let log = quiet_runs("review-rule-four", 4);
+    let path = log.join("2026-11.jsonl");
+    let text = std::fs::read_to_string(&path).unwrap() + skipped + "\n";
+    std::fs::write(&path, text).unwrap();
+    let (_, text) = review_in(&log, &log, &NOVEMBER);
+    assert!(text.contains(", 5 runs: 5 commit\n"), "{text}");
+    assert_eq!(
+        section(&text, SUGGESTIONS),
+        [
+            "  suggestion: gitleaks never fires: no findings in 5 runs; check that it is handed the files it should read"
         ],
         "{text}"
     );
