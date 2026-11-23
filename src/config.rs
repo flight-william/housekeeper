@@ -114,7 +114,8 @@ pub fn tests_for(config: &Config, stage: Stage) -> &[Vec<String>] {
 
 /// `[paths]`: `exclude` lists prefix globs (a folder, a file, `*` and `**/` as in
 /// `[protected]`); a file under one is dropped from every stage's file list before
-/// the adapters see it. The policy checks (approval) still see every change.
+/// the adapters see it, and a finding a tool still reports on one (gitleaks reads the
+/// git history) is dropped. The policy checks (approval) still see every change.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Paths {
