@@ -11,7 +11,7 @@
 //! keeps the findings on the files the stage checks; without one, the files are
 //! named.
 
-use super::{Exits, relative};
+use super::{Exits, relative, stage_file};
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
 use crate::finding::{Finding, Place};
 use serde::Deserialize;
@@ -105,23 +105,31 @@ impl Adapter for SwiftLint {
                 fix: "run swiftlint lint and read its error".to_string(),
             }
         })?;
-        let findings = violations
+        // Each finding with the stage file it is on, if any.
+        let (on, findings): (Vec<Option<String>>, Vec<Finding>) = violations
             .into_iter()
-            .map(|v| Finding {
-                rule: house_rule(&v.rule_id).to_string(),
-                place: Place::File(relative(&ctx.root, &v.file)),
-                line: v.line,
-                what: v.reason.trim_end_matches('.').to_string(),
-                fix: format!("fix the SwiftLint rule {}", v.rule_id),
-                tool_rule: format!("swiftlint {}", v.rule_id),
-                measure: None,
+            .map(|v| {
+                let on = stage_file(&ctx.root, &ctx.files, &v.file);
+                let file = on.clone().unwrap_or_else(|| relative(&ctx.root, &v.file));
+                let finding = Finding {
+                    rule: house_rule(&v.rule_id).to_string(),
+                    place: Place::File(file),
+                    line: v.line,
+                    what: v.reason.trim_end_matches('.').to_string(),
+                    fix: format!("fix the SwiftLint rule {}", v.rule_id),
+                    tool_rule: format!("swiftlint {}", v.rule_id),
+                    measure: None,
+                };
+                (on, finding)
             })
-            .collect();
+            .unzip();
         // Judged on every finding: exit 2 may come from a file outside the stage's.
         let findings = EXITS.judge("swiftlint", out, findings)?;
-        Ok(findings
+        Ok(on
             .into_iter()
-            .filter(|f| matches!(&f.place, Place::File(file) if ctx.files.contains(file)))
+            .zip(findings)
+            .filter(|(on, _)| on.is_some())
+            .map(|(_, f)| f)
             .filter(|f| f.tool_rule != format!("swiftlint {FILE_LENGTH}"))
             .collect())
     }

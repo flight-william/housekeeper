@@ -6,7 +6,7 @@
 //! It runs only when `.house.toml` names it: Apple's swift format is the Swift
 //! formatter by default, and two formatters on one file disagree.
 
-use super::{Exits, relative};
+use super::{Exits, relative, stage_file};
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
 use crate::finding::{Finding, Place};
 use crate::run::first_line;
@@ -81,7 +81,8 @@ impl Adapter for Swiftformat {
         let findings = violations
             .into_iter()
             .map(|v| {
-                let file = relative(&ctx.root, &v.file);
+                let file = stage_file(&ctx.root, &ctx.files, &v.file)
+                    .unwrap_or_else(|| relative(&ctx.root, &v.file));
                 Finding {
                     rule: "R1".into(),
                     fix: format!("run swiftformat {file}"),
