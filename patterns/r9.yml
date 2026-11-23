@@ -17,8 +17,10 @@
 #   Swift `try?` is exempt in `defer`, `deinit` and tearDown/tearDownWithError,
 #   anywhere on a FileManager removeItem(at:) or removeItem(atPath:), on a call
 #   named close, remove, delete or unlink (and their File/Directory forms), and
-#   where its result is checked: compared with == or != in parentheses, or
-#   inside #expect, #require or an XCTAssert call.
+#   where its result is checked: compared with == or != in parentheses (as in
+#   #expect((try? x) == nil)), or the value XCTAssertNil, XCTAssertNotNil,
+#   XCTUnwrap or #require inspects. XCTAssertNoThrow(try? x) and a try? in an
+#   assertion's message are still reported.
 rules:
   # ---- Python ----
   - id: r9-python-noqa
@@ -171,8 +173,9 @@ rules:
         - "**/Tests/**"
     # Semgrep's Swift AST treats `try?` and `try` alike, so this is text; `\K`
     # starts the match at `try?`, and only when no `//` comes before it on the line.
+    # `\G` goes on from the last match, so every try? on a line is seen.
     patterns:
-      - pattern-regex: '(?m)^(?:(?!//)[^\n])*?\K\btry\?(?=\s)'
+      - pattern-regex: '(?m)(?:^|\G)(?:(?!//)[^\n])*?\K\btry\?(?=\s)'
       - pattern-not-inside: '"..."'
       - pattern-not-inside: "defer { ... }"
       - pattern-not-inside: "func tearDown() { ... }"
@@ -189,9 +192,11 @@ rules:
       - pattern-not-regex: '\btry\?\s+[\w.]*\b(?:close|closeFile|remove|removeFile|removeDirectory|delete|deleteFile|unlink)\s*\('
       # A result that is compared: `(try? x) == nil`, `!= nil` or `== value`.
       - pattern-not-regex: '\(\s*try\?(?:[^()\n]|\((?:[^()\n]|\([^()\n]*\))*\))*\)\s*[!=]='
-      # A result that is asserted: inside #expect(...), #require(...) or an
-      # XCTAssert...(...) call, three levels of nested parentheses inside.
-      - pattern-not-regex: '(?:#(?:expect|require)|\bXCTAssert\w*)\s*\((?:[^()]|\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))*\)'
+      # A result that an assertion inspects, as the value it checks: the first
+      # argument of XCTAssertNil, XCTAssertNotNil or XCTUnwrap, or of #require,
+      # which unwraps it. Anywhere else in an assertion (XCTAssertNoThrow, a
+      # message, a #expect that is not a comparison) the error is still swallowed.
+      - pattern-not-regex: '(?:\bXCTAssert(?:Nil|NotNil)|\bXCTUnwrap|#require)\s*\(\s*try\?'
 
   # ---- Rust ----
   - id: r9-rust-allow

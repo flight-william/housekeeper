@@ -13,10 +13,11 @@ r9-swift-expected-failure swift/AppTests/CleanupTests.swift: let markers = "XCTS
 r9-swift-testing-disabled swift/App/ContentView.swift: .disabled(!ok)
 r9-swift-try-optional-in-tests swift/AppTests/CleanupTests.swift: defer { try? FileManager.default.removeItem(at: url) }
 r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: #expect((try? parse("bad")) == nil)
-r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: #expect(try? parse("good") != nil)
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: #expect((try? parse("fine")) != nil)
 r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: let value = try #require(try? parse("good"))
 r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertNil(try? parse("bad"))
 r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertNotNil(try? parse("good"))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: _ = try XCTUnwrap(try? parse("good"))
 r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: let failed = (try? parse("bad")) == nil
 r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: if (try? parse("good")) != nil {
 r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: try? handle.close()

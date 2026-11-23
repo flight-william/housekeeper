@@ -51,3 +51,7 @@ r9-swift-try-optional-in-tests swift/AppTests/PlantedTests.swift:62
 r9-swift-try-optional-in-tests swift/AppTests/PlantedTests.swift:63
 r9-swift-try-optional-in-tests swift/AppTests/PlantedTests.swift:64
 r9-swift-try-optional-in-tests swift/AppTests/PlantedTests.swift:65
+r9-swift-try-optional-in-tests swift/AppTests/UncheckedTests.swift:7
+r9-swift-try-optional-in-tests swift/AppTests/UncheckedTests.swift:8
+r9-swift-try-optional-in-tests swift/AppTests/UncheckedTests.swift:9
+r9-swift-try-optional-in-tests swift/AppTests/UncheckedTests.swift:14
