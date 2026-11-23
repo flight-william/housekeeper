@@ -24,26 +24,60 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 /// Which runs a review covers: those whose start day is within `from..=to` (either
-/// end open when `None`), in `repo` when given: the record's repo path itself, or its
-/// last folder name.
+/// end open when `None`), in `repo` when given.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Filter {
     pub from: Option<Date>,
     pub to: Option<Date>,
-    pub repo: Option<String>,
+    pub repo: Option<Repo>,
+}
+
+/// The repository `--repo` names: a repository, not one of its folders.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Repo {
+    /// A path, resolved to its top folder and the root commit of its repository.
+    /// A record with a root commit is the repository's when the roots are the
+    /// same; a record without one (before 0.3.1), or a path with none, when the
+    /// folders are the same.
+    Path {
+        folder: String,
+        root_commit: Option<String>,
+    },
+    /// A name: a record's folder is the repository's when the folder's last part or
+    /// its main checkout's last part is the name.
+    Name(String),
+}
+
+impl Repo {
+    fn holds(&self, run: &Run) -> bool {
+        match self {
+            Repo::Path {
+                folder,
+                root_commit,
+            } => match (root_commit, &run.root_commit) {
+                (Some(want), Some(root)) => want == root,
+                _ => run.repo == *folder,
+            },
+            Repo::Name(name) => {
+                same_repo(&run.repo, name)
+                    || run
+                        .main_checkout
+                        .as_deref()
+                        .is_some_and(|main| same_repo(main, name))
+            }
+        }
+    }
 }
 
 impl Filter {
-    fn covers(&self, day: Date, repo: &str) -> bool {
+    fn covers(&self, day: Date, run: &Run) -> bool {
         self.from.is_none_or(|from| day >= from)
             && self.to.is_none_or(|to| day <= to)
-            && self.in_repo(repo)
+            && self.in_repo(run)
     }
 
-    fn in_repo(&self, repo: &str) -> bool {
-        self.repo
-            .as_deref()
-            .is_none_or(|want| same_repo(repo, want))
+    fn in_repo(&self, run: &Run) -> bool {
+        self.repo.as_ref().is_none_or(|want| want.holds(run))
     }
 }
 
@@ -242,7 +276,7 @@ impl Review {
             self.skipped_lines += 1;
             return;
         };
-        if self.filter.in_repo(&run.repo) {
+        if self.filter.in_repo(&run) {
             for tool in &run.tools {
                 for rule in tool.rules() {
                     let tools = slot(&mut self.rule_tools, rule);
@@ -253,7 +287,7 @@ impl Review {
                 }
             }
         }
-        if self.filter.covers(day, &run.repo) {
+        if self.filter.covers(day, &run) {
             self.add(&run, day);
         }
     }

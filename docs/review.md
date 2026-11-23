@@ -35,12 +35,31 @@ house review [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--repo <path or name>] [--js
 It reads the run records (`$HOUSE_LOG_DIR`, else `~/Library/Logs/house/runs`) and prints one
 report for the runs that started in the period. The days are UTC days: house writes each
 run's start in UTC, a start written with another offset counts under its UTC day, and `--to`
-is today in UTC when not given. `--repo`
-takes a repo's path or its folder name, for a record folder shared by several repos.
+is today in UTC when not given. `--repo` picks one repository, for a record folder
+shared by several (see [Which runs `--repo` counts](#which-runs---repo-counts)).
 `--json` prints the same report as one JSON object. The exit is 0, or 2 when the record
 folder cannot be read.
 
 A weekly look is `house review --from` the day a week ago.
+
+### Which runs `--repo` counts
+
+`--repo` matches a repository, not a folder. Agents work in many git worktrees of one
+repository, each its own folder, and every run records the folder it ran in. So since
+0.3.1 each record also names the repository: `root_commit`, its root commit (`git rev-list
+--max-parents=0 HEAD`, the oldest by commit time when there are several), the same in every
+worktree; and `main_checkout`, the folder holding the `.git` folder its worktrees share
+(`git rev-parse --git-common-dir`'s parent). Both are `null` when unknown: no commit yet, or
+a bare repository.
+
+| `--repo` | A record counts when |
+|---|---|
+| a path (it holds a `/` or starts with `.`) | its `root_commit` is the root commit of the repository at that path, from whichever folder it ran in, a worktree since removed included. A record with no `root_commit` (before 0.3.1), or a path with none (not a repository, or no commit yet), counts when its folder is the path's top folder, as before. |
+| a name | its folder's last part is the name, or its `main_checkout`'s last part is. `--repo shop` counts runs in `/work/shop` and in `/work/trees/feature-a` when that worktree's main checkout is `/work/shop`. A record from before 0.3.1 counts by its folder's last part only. |
+
+A path is the exact match: two unrelated repositories never share a root commit, while two
+folders may share a name. A record written before 0.3.1 in a worktree other than the path's
+own folder is not counted by a path; its folder's name still finds it.
 
 ---
 

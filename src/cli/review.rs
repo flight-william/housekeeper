@@ -3,7 +3,7 @@
 
 use super::{Cmd, USAGE, today};
 use crate::excuses::Date;
-use crate::review::{self, Filter, ReviewError};
+use crate::review::{self, Filter, Repo, ReviewError};
 use crate::{files, record};
 use std::path::Path;
 
@@ -89,15 +89,19 @@ pub(super) fn run_review(
 }
 
 /// A path (it holds a `/` or starts with `.`) becomes its repo's top folder, as the
-/// records name it; anything else is a repo's folder name.
-fn repo_key(cwd: &Path, repo: &str) -> String {
+/// records name it, and its repository's root commit; anything else is a name.
+fn repo_key(cwd: &Path, repo: &str) -> Repo {
     if !repo.contains('/') && !repo.starts_with('.') {
-        return repo.to_string();
+        return Repo::Name(repo.to_string());
     }
     let path = cwd.join(repo);
-    files::repo_root(&path)
+    let folder = files::repo_root(&path)
         .or_else(|_| path.canonicalize().map_err(|_| ()))
         .map_or(repo.trim_end_matches('/').to_string(), |p| {
             p.display().to_string()
-        })
+        });
+    Repo::Path {
+        folder,
+        root_commit: path.is_dir().then(|| files::root_commit(&path)).flatten(),
+    }
 }

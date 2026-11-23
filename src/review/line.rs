@@ -14,6 +14,11 @@ pub(super) struct Run {
     pub(super) start: String,
     #[serde(default)]
     pub(super) repo: String,
+    /// The repository's root commit and main checkout; absent before 0.3.1.
+    #[serde(default)]
+    pub(super) root_commit: Option<String>,
+    #[serde(default)]
+    pub(super) main_checkout: Option<String>,
     pub(super) stage: String,
     pub(super) tools: Vec<Tool>,
     /// The run's excused total. Every count is a `u32`, the most house writes: a

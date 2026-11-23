@@ -114,7 +114,19 @@ skipped on every run is left out); the places (rule, file, tool rule) that faile
 than one run, most often first; and suggestions to weigh, not orders: a rule or tool that
 never fires (no findings in at least 5 runs that checked it), one that looks noisy (its
 findings mostly excused, or failing again on the same places), and a tool that takes most of
-the time. `--repo` takes a repo's path or its folder name. A line in the folder that is not
+the time.
+
+`--repo` picks one repository's runs, from all its folders: its main checkout and every
+worktree. Since 0.3.1 each record names the repository by its root commit (the oldest, if it
+has several) and its main checkout, beside the folder the run was in. `--repo <path>` (it
+holds a `/` or starts with `.`) takes the root commit of the repository at that path and
+counts every record with that root commit, from whichever folder; a record without one,
+written before 0.3.1, counts when its folder is the path's top folder. `--repo <name>`
+counts a record when its folder's last part is the name, or its main checkout's last part
+is: `--repo shop` counts runs in `/work/shop` and in a worktree `/work/trees/feature-a` of
+it.
+
+A line in the folder that is not
 a house run record, another program's or a broken one, is skipped and counted. So is an
 entry named like a month's file that is not a regular file (a folder, a FIFO, a link). A
 record written before 0.3.0 keeps only the run's excused total, so those excuses are counted
