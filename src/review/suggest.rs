@@ -108,13 +108,14 @@ fn never_fires(subject: &str, runs: usize, check: &str) -> Suggestion {
 /// Looks noisy when most of its findings were excused, or most of those left to fix
 /// were on places that failed on another run too, so were not fixed in between.
 fn noisy(subject: &str, count: &Count, repeats: u64, what: &str) -> Option<Suggestion> {
-    let all = count.findings + count.excused;
+    // In u128: two u64 counts add, and a count doubles, without overflow.
+    let all = u128::from(count.findings) + u128::from(count.excused);
     let repeats = repeats.min(count.findings);
     let mut reasons = Vec::new();
     if count.excused > count.findings {
         reasons.push(format!("{} of {all} findings excused", count.excused));
     }
-    if repeats * 2 > count.findings {
+    if u128::from(repeats) * 2 > u128::from(count.findings) {
         reasons.push(format!(
             "{repeats} of {} left to fix on places that failed before",
             count.findings

@@ -55,9 +55,10 @@ struct Run {
     repo: String,
     stage: String,
     tools: Vec<Tool>,
-    /// The run's excused total.
+    /// The run's excused total. Every count is a `u32`, the most house writes: a
+    /// larger or negative one makes the line not a house record.
     #[serde(default)]
-    excused: u64,
+    excused: u32,
     /// The findings left to fix, one entry each.
     #[serde(default)]
     findings: Vec<Failed>,
@@ -79,12 +80,12 @@ struct Tool {
     #[serde(default)]
     skipped: bool,
     #[serde(default)]
-    findings: BTreeMap<String, u64>,
+    findings: BTreeMap<String, u32>,
     #[serde(default)]
     cannot_check: Option<String>,
     /// Rule to count; `None` in records written before house 0.3.0.
     #[serde(default)]
-    excused: Option<BTreeMap<String, u64>>,
+    excused: Option<BTreeMap<String, u32>>,
 }
 
 impl Tool {
@@ -173,6 +174,8 @@ pub struct Review {
     pub tools: BTreeMap<String, ToolStat>,
     /// Excused findings in records that name no tool's excused map.
     pub excused_unattributed: u64,
+    /// A sum passed `u64::MAX`; the review is then refused, never wrapped.
+    pub overflowed: bool,
     /// Each place a finding was on, with the number of runs it was found in.
     pub places: BTreeMap<Place, usize>,
     /// The runs a place was found in by a tool: the one tool of the run whose
@@ -195,7 +198,20 @@ pub fn review_folder(dir: &Path, filter: &Filter) -> std::io::Result<Review> {
     };
     let folder = read::each_line(dir, |line| r.add_line(line))?;
     r.skipped_files = folder.skipped_files;
+    if r.overflowed {
+        return Err(std::io::Error::other(
+            "a count in the records adds up to more than 18446744073709551615",
+        ));
+    }
     Ok(r)
+}
+
+/// `total + n`, or `overflowed` set and `total` kept when the sum does not fit.
+fn add_count(total: &mut u64, n: u32, overflowed: &mut bool) {
+    match total.checked_add(u64::from(n)) {
+        Some(sum) => *total = sum,
+        None => *overflowed = true,
+    }
 }
 
 impl Review {
@@ -230,7 +246,11 @@ impl Review {
         *self.stages.entry(run.stage.clone()).or_default() += 1;
         self.repos.insert(run.repo.clone());
         if run.tools.iter().all(|t| t.excused.is_none()) {
-            self.excused_unattributed += run.excused;
+            add_count(
+                &mut self.excused_unattributed,
+                run.excused,
+                &mut self.overflowed,
+            );
         }
         for tool in &run.tools {
             self.add_tool(tool);
@@ -249,12 +269,14 @@ impl Review {
         stat.checked += usize::from(tool.cannot_check.is_none());
         stat.seconds.push(tool.seconds);
         for (rule, n) in &tool.findings {
-            stat.count.findings += n;
-            self.rules.entry(rule.clone()).or_default().findings += n;
+            add_count(&mut stat.count.findings, *n, &mut self.overflowed);
+            let by_rule = &mut self.rules.entry(rule.clone()).or_default().findings;
+            add_count(by_rule, *n, &mut self.overflowed);
         }
         for (rule, n) in tool.excused.iter().flatten() {
-            stat.count.excused += n;
-            self.rules.entry(rule.clone()).or_default().excused += n;
+            add_count(&mut stat.count.excused, *n, &mut self.overflowed);
+            let by_rule = &mut self.rules.entry(rule.clone()).or_default().excused;
+            add_count(by_rule, *n, &mut self.overflowed);
         }
         if tool.cannot_check.is_some() {
             stat.count.cannot_check += 1;
