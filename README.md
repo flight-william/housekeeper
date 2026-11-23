@@ -56,7 +56,11 @@ record. Each command may run for `timeout_seconds` (in `[tests]`, 600 when unset
 running then is stopped, and that is an R7 finding naming the command and the limit, so a
 suite that waits on a dialog no one can click fails instead of holding the push. Each
 command runs in a process group of its own, and the whole group is stopped (SIGTERM, then
-SIGKILL two seconds later), so no process the suite started lives on after it. At push the
+SIGKILL two seconds later), so no process in that group lives on after it; one the suite
+moves to a session of its own (`start_new_session=True`) is out of house's reach. The same
+stop happens when house itself ends while a suite runs, by Ctrl-C, SIGTERM, SIGHUP or even
+SIGKILL, and house ends with that signal. Being in its own group, a suite cannot read the
+terminal: one that asks for a password or a passphrase waits until the limit. At push the
 tests run whenever the push changes anything, a deletion alone included, though no file is
 left for the tools; a push with no change skips them. An unknown table or key in
 `.house.toml` is a "cannot check" naming it.

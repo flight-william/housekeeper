@@ -3,8 +3,9 @@
 //!
 //! A `[tests]` suite runs with `run_group`: in a process group of its own, so that at
 //! its limit the whole group is stopped, SIGTERM then SIGKILL after `GRACE`, and no
-//! process it started (a hung code-signing helper) lives on. Being its own group, a
-//! suite does not get the terminal's Ctrl-C; it stops when house stops reading it.
+//! process in its group (a hung code-signing helper) lives on. Being its own group, a
+//! suite does not get the terminal's Ctrl-C; a watcher stops the group when house
+//! ends first, however it ends (`group`).
 
 use crate::adapter::{CannotCheck, Command, Output};
 use std::io::{ErrorKind, Read};
@@ -14,6 +15,8 @@ use std::process::{Child, Stdio};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
+
+mod group;
 
 /// The hang guard: one hour, then the child is killed.
 pub const HANG_GUARD: Duration = Duration::from_secs(3600);
@@ -141,6 +144,8 @@ fn run_inner(
             },
         })
     })?;
+    // Dropped on every return, after any stop below: the watcher goes last.
+    let _watcher = group.then(|| group::Watcher::start(child.id()));
     let (sent, streams) = mpsc::channel();
     reader(child.stdout.take(), 0, sent.clone());
     reader(child.stderr.take(), 1, sent);
@@ -188,41 +193,14 @@ fn run_inner(
 }
 
 /// Stop `child` at the guard: the child alone, or with `group` its whole process
-/// group, SIGTERM first and SIGKILL to whatever is left after `GRACE`, and then up to
-/// `GRACE` more until no process of the group is left.
+/// group (`group::stop`).
 fn stop(child: &mut Child, group: bool) {
-    if !group {
+    if group {
+        group::stop(child);
+    } else {
         let _ = child.kill();
         let _ = child.wait();
-        return;
     }
-    let id = format!("-{}", child.id());
-    signal(&id, "TERM");
-    // The leader is reaped as it exits, so the group lives while any other does.
-    let gone = |child: &mut Child| child.try_wait().is_err() || !signal(&id, "0");
-    let until = Instant::now() + GRACE;
-    while Instant::now() < until && !gone(child) {
-        thread::sleep(Duration::from_millis(20));
-    }
-    signal(&id, "KILL");
-    // The leader alone, should `kill` itself not have run.
-    let _ = child.kill();
-    let _ = child.wait();
-    let until = Instant::now() + GRACE;
-    while Instant::now() < until && !gone(child) {
-        thread::sleep(Duration::from_millis(20));
-    }
-}
-
-/// `kill -<signal> -- <target>`; true when it reached a process (`0` sends none).
-fn signal(target: &str, signal: &str) -> bool {
-    std::process::Command::new("kill")
-        .args([&format!("-{signal}"), "--", target])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
 }
 
 /// Read `pipe` to its end on a thread, then send (`which`, the text).

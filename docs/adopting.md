@@ -190,7 +190,8 @@ All three must hold before the old checks are gone for good.
   unset) and reported as an R7 finding naming the command and the limit; set a limit that
   fits the suite, and make the suite fail fast where it can. The command's whole process
   group is stopped, so a helper it started (a signing tool waiting on that dialog) goes
-  with it.
+  with it, and so is it when house is interrupted (Ctrl-C) or killed. A suite cannot read
+  the terminal: one that asks for a password or a passphrase waits until the limit.
 - **The base has no rules.** Step 2 before step 1: the runner finds no `.house.toml` on the
   base and cannot check. Adopt the rules in their own commit first.
 
