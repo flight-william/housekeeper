@@ -67,23 +67,28 @@ impl Review {
         })
     }
 
-    /// The runs a rule failed on places found on more than one run.
+    /// A rule's findings on places found on more than one run, every finding counted.
+    /// The sum is only compared, and shown capped at the rule's checked total, so a
+    /// saturated sum gives the same suggestion as the exact one.
     fn rule_repeats(&self, rule: &str) -> u64 {
-        self.places
+        self.place_findings
             .iter()
-            .filter(|(p, runs)| **runs > 1 && p.rule == rule)
-            .map(|(_, runs)| *runs as u64)
-            .sum()
+            .filter(|(p, _)| p.rule == rule && self.repeated_place(p))
+            .map(|(_, n)| *n)
+            .fold(0, u64::saturating_add)
     }
 
-    /// The runs a tool found places that were found on more than one run.
+    /// A tool's findings on places found on more than one run, every finding counted.
     fn tool_repeats(&self, tool: &str) -> u64 {
-        let repeated = |p| self.places.get(p).is_some_and(|runs| *runs > 1);
         self.place_tools
             .iter()
-            .filter(|((p, t), _)| t == tool && repeated(p))
-            .map(|(_, runs)| *runs as u64)
-            .sum()
+            .filter(|((p, t), _)| t == tool && self.repeated_place(p))
+            .map(|(_, n)| *n)
+            .fold(0, u64::saturating_add)
+    }
+
+    fn repeated_place(&self, place: &super::Place) -> bool {
+        self.places.get(place).is_some_and(|runs| *runs > 1)
     }
 
     /// The tool with more than half of all the tools' seconds, when two or more ran.

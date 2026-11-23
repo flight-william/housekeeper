@@ -202,9 +202,12 @@ pub struct Review {
     pub overflowed: bool,
     /// Each place a finding was on, with the number of runs it was found in.
     pub places: BTreeMap<Place, usize>,
-    /// The runs a place was found in by a tool: the one tool of the run whose
-    /// findings hold the place's rule (none is counted when two tools hold it).
-    pub place_tools: BTreeMap<(Place, String), usize>,
+    /// The findings on each place, every one counted, across the covered runs.
+    pub place_findings: BTreeMap<Place, u64>,
+    /// The findings on a place by a tool: the one tool of the run whose findings hold
+    /// the place's rule. When two tools hold it, the finding is no tool's: the record
+    /// does not say which, and none is invented.
+    pub place_tools: BTreeMap<(Place, String), u64>,
 }
 
 /// A house record line and its start day, or `None` for any other line.
@@ -256,7 +259,11 @@ pub fn review_folder(dir: &Path, filter: &Filter) -> Result<Review, ReviewError>
 
 /// `total + n`, or `overflowed` set and `total` kept when the sum does not fit.
 fn add_count(total: &mut u64, n: u32, overflowed: &mut bool) {
-    match total.checked_add(u64::from(n)) {
+    add_findings(total, u64::from(n), overflowed);
+}
+
+fn add_findings(total: &mut u64, n: u64, overflowed: &mut bool) {
+    match total.checked_add(n) {
         Some(sum) => *total = sum,
         None => *overflowed = true,
     }
@@ -360,27 +367,34 @@ impl Review {
         }
     }
 
-    /// Each place the run's findings were on, once per run, and the tool that found it.
+    /// The places the run's findings were on: each place's runs count once per run,
+    /// its findings once per finding, by the tool that found them.
     fn add_places(&mut self, run: &Run) {
-        let places: BTreeSet<Place> = run
-            .findings
-            .iter()
-            .map(|f| Place {
+        let mut places: BTreeMap<Place, u64> = BTreeMap::new();
+        for f in &run.findings {
+            let place = Place {
                 repo: run.repo.clone(),
                 rule: f.rule.clone(),
                 place: f.place.clone(),
                 tool_rule: f.tool_rule.clone(),
-            })
-            .collect();
-        for place in places {
+            };
+            *places.entry(place).or_default() += 1;
+        }
+        for (place, n) in places {
             let mut holders = run
                 .tools
                 .iter()
                 .filter(|t| t.findings.contains_key(&place.rule));
             if let (Some(tool), None) = (holders.next(), holders.next()) {
                 let key = (place.clone(), tool.name.clone());
-                *self.place_tools.entry(key).or_default() += 1;
+                add_findings(
+                    self.place_tools.entry(key).or_default(),
+                    n,
+                    &mut self.overflowed,
+                );
             }
+            let findings = self.place_findings.entry(place.clone()).or_default();
+            add_findings(findings, n, &mut self.overflowed);
             *self.places.entry(place).or_default() += 1;
         }
     }

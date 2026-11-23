@@ -150,3 +150,24 @@ fn a_rule_counts_only_the_runs_its_tools_checked() {
         "{text}"
     );
 }
+
+#[test]
+fn every_finding_on_a_repeated_place_counts_toward_looking_noisy() {
+    // Two long functions in one file, on each of two runs: four findings, all on a
+    // place that failed on both runs.
+    let run = r#"{"start":"2026-11-02T09:00:00Z","repo":"/work/shop","stage":"commit","tools":[{"name":"r3","seconds":0.1,"findings":{"R3":2},"excused":{}}],"findings":[{"rule":"R3","place":"src/big.rs","line":2,"tool_rule":"r3 function"},{"rule":"R3","place":"src/big.rs","line":20,"tool_rule":"r3 function"}],"excused":0}"#;
+    let log = repeated_runs("review-two-per-place", run, 2);
+    let (_, text) = review_in(&log, &log, &NOVEMBER);
+    assert!(
+        text.contains("\n  R3 src/big.rs [r3 function]: 2 runs\n"),
+        "{text}"
+    );
+    assert_eq!(
+        section(&text, SUGGESTIONS),
+        [
+            "  suggestion: R3 looks noisy: 4 of 4 left to fix on places that failed before; fix that code, or tune the rule",
+            "  suggestion: r3 looks noisy: 4 of 4 left to fix on places that failed before; fix that code, or tune the tool",
+        ],
+        "{text}"
+    );
+}
