@@ -47,3 +47,7 @@ r9-swift-expected-failure swift/AppTests/PlantedTests.swift:39
 r9-swift-expected-failure swift/AppTests/PlantedTests.swift:46
 r9-swift-try-optional-in-tests swift/AppTests/PlantedTests.swift:55
 r9-swift-try-optional-in-tests swift/AppTests/PlantedTests.swift:56
+r9-swift-try-optional-in-tests swift/AppTests/PlantedTests.swift:62
+r9-swift-try-optional-in-tests swift/AppTests/PlantedTests.swift:63
+r9-swift-try-optional-in-tests swift/AppTests/PlantedTests.swift:64
+r9-swift-try-optional-in-tests swift/AppTests/PlantedTests.swift:65

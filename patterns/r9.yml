@@ -15,7 +15,10 @@
 #   try_wait, send, flush, shutdown or join (a method) or remove_file or
 #   remove_dir_all, whatever its arguments.
 #   Swift `try?` is exempt in `defer`, `deinit` and tearDown/tearDownWithError,
-#   and anywhere on a FileManager removeItem(at:) or removeItem(atPath:).
+#   anywhere on a FileManager removeItem(at:) or removeItem(atPath:), on a call
+#   named close, remove, delete or unlink (and their File/Directory forms), and
+#   where its result is checked: compared with == or != in parentheses, or
+#   inside #expect, #require or an XCTAssert call.
 rules:
   # ---- Python ----
   - id: r9-python-noqa
@@ -180,6 +183,15 @@ rules:
       # Removing a file or folder anywhere: `try?` straight on a FileManager
       # removeItem(at:) or removeItem(atPath:) call, the receiver a plain name chain.
       - pattern-not-regex: '\btry\?\s+[\w.]*\bremoveItem\s*\(\s*(?:at|atPath)\s*:'
+      # Other cleanup anywhere: `try?` straight on a call named close, closeFile,
+      # remove, removeFile, removeDirectory, delete, deleteFile or unlink. A call
+      # that only starts with one of those names (closeAccount) is not cleanup.
+      - pattern-not-regex: '\btry\?\s+[\w.]*\b(?:close|closeFile|remove|removeFile|removeDirectory|delete|deleteFile|unlink)\s*\('
+      # A result that is compared: `(try? x) == nil`, `!= nil` or `== value`.
+      - pattern-not-regex: '\(\s*try\?(?:[^()\n]|\((?:[^()\n]|\([^()\n]*\))*\))*\)\s*[!=]='
+      # A result that is asserted: inside #expect(...), #require(...) or an
+      # XCTAssert...(...) call, three levels of nested parentheses inside.
+      - pattern-not-regex: '(?:#(?:expect|require)|\bXCTAssert\w*)\s*\((?:[^()]|\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\))*\)'
 
   # ---- Rust ----
   - id: r9-rust-allow

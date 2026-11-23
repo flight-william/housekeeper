@@ -65,6 +65,7 @@ fn semgrep_finds_every_planted_silencer_and_nothing_in_clean_code() {
         "CleanTests.swift",
         "CleanupTests.swift",
         "RemoveTests.swift",
+        "AssertedTests.swift",
         "test_clean.py",
         "clean.rs",
         "cleanup.rs",

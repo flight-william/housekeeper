@@ -12,6 +12,16 @@ r9-swift-xctskip swift/AppTests/CleanupTests.swift: let markers = "XCTSkip(\"lat
 r9-swift-expected-failure swift/AppTests/CleanupTests.swift: let markers = "XCTSkip(\"later\") XCTExpectFailure withKnownIssue"
 r9-swift-testing-disabled swift/App/ContentView.swift: .disabled(!ok)
 r9-swift-try-optional-in-tests swift/AppTests/CleanupTests.swift: defer { try? FileManager.default.removeItem(at: url) }
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: #expect((try? parse("bad")) == nil)
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: #expect(try? parse("good") != nil)
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: let value = try #require(try? parse("good"))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertNil(try? parse("bad"))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: XCTAssertNotNil(try? parse("good"))
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: let failed = (try? parse("bad")) == nil
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: if (try? parse("good")) != nil {
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: try? handle.close()
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: try? store.remove(key: "k")
+r9-swift-try-optional-in-tests swift/AppTests/AssertedTests.swift: try? store.removeFile(named: "k")
 r9-rust-allow rust/src/clean.rs: pub const SAMPLE: &str = "#[allow(dead_code)] fn x() {}";
 r9-rust-ignore rust/src/clean.rs: // #[allow(dead_code)] and #[ignore] here are words in a comment.
 r9-rust-let-underscore-in-test-mod rust/src/clean.rs: let _ = std::fs::remove_file(&self.0);
