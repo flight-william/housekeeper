@@ -7,12 +7,14 @@
 //! reads it as its UTC day), a `stage` and a `tools` list of named tools; any other
 //! line, a blank or broken one included, is skipped and counted.
 
+mod filter;
 mod line;
 mod read;
 mod start;
 mod suggest;
 mod text;
 
+pub use filter::{Filter, Repo};
 pub use line::MAX_SECONDS;
 pub use read::MAX_LINE;
 pub use suggest::{NEVER_FIRES_MIN_RUNS, Suggestion};
@@ -22,34 +24,6 @@ use crate::reply::cannot_rule;
 use line::{Run, Tool, parse};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
-
-/// Which runs a review covers: those whose start day is within `from..=to` (either
-/// end open when `None`), in `repo` when given: the record's repo path itself, or its
-/// last folder name.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Filter {
-    pub from: Option<Date>,
-    pub to: Option<Date>,
-    pub repo: Option<String>,
-}
-
-impl Filter {
-    fn covers(&self, day: Date, repo: &str) -> bool {
-        self.from.is_none_or(|from| day >= from)
-            && self.to.is_none_or(|to| day <= to)
-            && self.in_repo(repo)
-    }
-
-    fn in_repo(&self, repo: &str) -> bool {
-        self.repo
-            .as_deref()
-            .is_none_or(|want| same_repo(repo, want))
-    }
-}
-
-fn same_repo(repo: &str, want: &str) -> bool {
-    repo == want || Path::new(repo).file_name().is_some_and(|name| name == want)
-}
 
 /// A place a rule failed: the repo, the rule, the file (or "repo") and the tool's
 /// own rule, which stands in for the symbol the record does not keep.
@@ -119,8 +93,10 @@ pub struct Review {
     pub skipped_lines: usize,
     /// Entries named like a month's record file that are not regular files.
     pub skipped_files: usize,
-    /// Every repo a covered run was in.
+    /// Every folder a covered run was in.
     pub repos: BTreeSet<String>,
+    /// Every root commit a covered run's record names.
+    pub roots: BTreeSet<String>,
     /// Every rule a record of the repo names, in the period or not, with its counts
     /// in the period.
     pub rules: BTreeMap<String, Count>,
@@ -223,7 +199,8 @@ impl Review {
             + self.checked_sets.len()
             + self.tools.len()
             + self.stages.len()
-            + self.repos.len();
+            + self.repos.len()
+            + self.roots.len();
         keys > MAX_KEYS
     }
 
@@ -242,7 +219,7 @@ impl Review {
             self.skipped_lines += 1;
             return;
         };
-        if self.filter.in_repo(&run.repo) {
+        if self.filter.in_repo(&run) {
             for tool in &run.tools {
                 for rule in tool.rules() {
                     let tools = slot(&mut self.rule_tools, rule);
@@ -253,7 +230,7 @@ impl Review {
                 }
             }
         }
-        if self.filter.covers(day, &run.repo) {
+        if self.filter.covers(day, &run) {
             self.add(&run, day);
         }
     }
@@ -265,7 +242,14 @@ impl Review {
         self.last = Some(self.last.map_or(day, |d| d.max(day)));
         self.runs += 1;
         *self.stages.entry(run.stage.clone()).or_default() += 1;
-        self.repos.insert(run.repo.clone());
+        if !self.repos.contains(&run.repo) {
+            self.repos.insert(run.repo.clone());
+        }
+        if let Some(root) = &run.root_commit
+            && !self.roots.contains(root)
+        {
+            self.roots.insert(root.clone());
+        }
         let unattributed = run.excused > 0 && run.tools.iter().all(|t| t.excused.is_none());
         if unattributed {
             add_count(

@@ -35,12 +35,43 @@ house review [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--repo <path or name>] [--js
 It reads the run records (`$HOUSE_LOG_DIR`, else `~/Library/Logs/house/runs`) and prints one
 report for the runs that started in the period. The days are UTC days: house writes each
 run's start in UTC, a start written with another offset counts under its UTC day, and `--to`
-is today in UTC when not given. `--repo`
-takes a repo's path or its folder name, for a record folder shared by several repos.
+is today in UTC when not given. `--repo` picks one repository, for a record folder
+shared by several (see [Which runs `--repo` counts](#which-runs---repo-counts)).
 `--json` prints the same report as one JSON object. The exit is 0, or 2 when the record
 folder cannot be read.
 
 A weekly look is `house review --from` the day a week ago.
+
+### Which runs `--repo` counts
+
+`--repo` matches a repository, not a folder. Agents work in many git worktrees of one
+repository, each its own folder and on its own branch, and every run records the folder it
+ran in. So since 0.3.1 each record also names the repository, in two fields that are known
+or `null` each on its own:
+
+- `root_commit`: the root commit of the repository's default branch, the first of
+  `refs/remotes/origin/HEAD`, `refs/heads/main` and `refs/heads/master` that exists (`git
+  rev-list --max-parents=0 <branch>`, the oldest by commit time when there are several). It
+  does not depend on the worktree's own HEAD, so a worktree on an unrelated or orphan branch
+  records the same root as the main checkout. It is `null` when no commit or none of those
+  branches exists, and in a shallow clone (`git rev-parse --is-shallow-repository`), whose
+  oldest commit is where its history was cut, not its root.
+- `main_checkout`: the folder holding the `.git` folder its worktrees share (`git rev-parse
+  --git-common-dir`'s parent). It is known in a repository with no commit yet, and `null`
+  when that folder is not named `.git`, as in a bare repository.
+
+| `--repo` | A record counts when |
+|---|---|
+| a path (it holds a `/` or starts with `.`) | its `root_commit` is the root commit of the repository at that path, from whichever folder it ran in, a worktree since removed included. A record with no `root_commit` (before 0.3.1, or `null`), or a path with none (not a repository, no default branch, or a shallow clone), counts when its folder is the path's top folder, as before. |
+| a name | its folder's last part is the name, or its `main_checkout`'s last part is. `--repo shop` counts runs in `/work/shop` and in `/work/trees/feature-a` when that worktree's main checkout is `/work/shop`. A record from before 0.3.1 counts by its folder's last part only. |
+
+A path is the exact match: two unrelated repositories never share a root commit, while two
+folders may share a name. A record with a `null` root is found by a path only from its own
+folder: one written before 0.3.1, or in a shallow clone, in a worktree other than the
+path's own folder is not counted; its folder's name still finds it. The root is read again
+on every run, so when the default branch's oldest root changes (an older, unrelated history
+merged into it, or another branch made the default), the runs before that keep the old root
+and a path no longer counts them.
 
 ---
 
@@ -80,6 +111,7 @@ suggestions (to weigh, not orders):
 | Part | What it shows |
 |---|---|
 | **Header** | The period asked for, `--from` to `--to` (a bound not given is the day of the first or last run covered; the cli gives today for `--to`), the number of runs, and the runs per stage: commit, commit-msg, push and all. |
+| **repo** | Only with `--repo`: `repo: shop, root commit 1a2b3c4d5e6f, runs from 3 folders`. The repository's name (a path's main checkout's last part, or the name given), its root commit's first 12 characters when known, and how many folders its runs came from: its main checkout and each worktree count once. A name whose runs name more than one root commit adds `2 root commits: the name matches more than one repository; give a path to pick one`. `--json` holds it as `repo`: `name`, `root_commit` and the `folders` themselves; `null` without `--repo`. |
 | **lines skipped** | `N lines skipped: not house run records`. The record folder can hold lines another program wrote, or a broken one; they are skipped and counted. So is a blank line, a line that is not valid UTF-8, and a line longer than 1 MiB, which is never held in memory. The line is absent when none were skipped. |
 | **record files skipped** | `N record files skipped: not regular files`. Only a regular file named `<YYYY-MM>.jsonl` is read. A folder, a FIFO or a symbolic link with such a name is skipped and counted, never followed or waited on. A regular file that cannot be read stops the review (exit 2). The line is absent when none were skipped. |
 | **per rule** | For each rule: the findings left to fix, the excused findings and the cannot-checks. A cannot-check is counted under the rule of the tool that could not run. |

@@ -1,6 +1,6 @@
 //! The review as plain text, one report, or as one JSON object (`--json`).
 
-use super::{Count, Review};
+use super::{Count, Repo, Review};
 use serde_json::{Value, json};
 
 /// The stages in the order a change meets them; any other name follows, by name.
@@ -11,6 +11,7 @@ impl Review {
     pub fn text(&self) -> String {
         let mut out = self.header();
         out.push('\n');
+        out.push_str(&self.repo_text());
         if self.skipped_lines > 0 {
             let lines = plural(self.skipped_lines, "line", "lines");
             out.push_str(&format!("{lines} skipped: not house run records\n"));
@@ -55,6 +56,40 @@ impl Review {
             }
         }
         out
+    }
+
+    /// `repo: <name>, root commit <12 hex>, runs from N folders` under `--repo`: the
+    /// repository and how many folders (its main checkout, its worktrees) its runs
+    /// came from; a name whose runs name more than one root commit says so.
+    fn repo_text(&self) -> String {
+        let Some(repo) = &self.filter.repo else {
+            return String::new();
+        };
+        let mut out = format!("repo: {}", repo.name());
+        if let Some(root) = self.repo_root() {
+            out.push_str(&format!(", root commit {}", short(root)));
+        }
+        let folders = plural(self.repos.len(), "folder", "folders");
+        out.push_str(&format!(", runs from {folders}"));
+        if matches!(repo, Repo::Name(_)) && self.roots.len() > 1 {
+            out.push_str(&format!(
+                ", {} root commits: the name matches more than one repository; give a path to pick one",
+                self.roots.len()
+            ));
+        }
+        out.push('\n');
+        out
+    }
+
+    /// The root commit of the repository `--repo` names: a path's own, or the one
+    /// root commit a name's runs name; `None` when it has none, or a name's runs
+    /// name none or several.
+    fn repo_root(&self) -> Option<&str> {
+        match self.filter.repo.as_ref()? {
+            Repo::Path { root_commit, .. } => root_commit.as_deref(),
+            Repo::Name(_) if self.roots.len() == 1 => self.roots.first().map(String::as_str),
+            Repo::Name(_) => None,
+        }
     }
 
     /// The repeated places; each names its repo's folder when the runs span repos.
@@ -116,7 +151,11 @@ impl Review {
                 json!({"repo": p.repo, "rule": p.rule, "place": p.place, "tool_rule": p.tool_rule, "runs": runs})
             })
             .collect();
+        let repo = self.filter.repo.as_ref().map(|repo| {
+            json!({"name": repo.name(), "root_commit": self.repo_root(), "folders": self.repos})
+        });
         json!({
+            "repo": repo,
             "from": from.map(|d| d.to_string()),
             "to": to.map(|d| d.to_string()),
             "runs": self.runs,
@@ -167,6 +206,11 @@ impl Review {
             .map(|(s, n)| (s.as_str(), *n));
         known.chain(others).collect()
     }
+}
+
+/// A root commit's first 12 characters, as `git log --abbrev=12` would show it.
+fn short(root: &str) -> &str {
+    root.get(..12).unwrap_or(root)
 }
 
 fn folder_name(repo: &str) -> &str {

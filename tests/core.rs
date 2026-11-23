@@ -155,6 +155,7 @@ fn record_line_keeps_the_unread_count_and_files() {
         start: UNIX_EPOCH,
         root: Path::new("/r"),
         head: None,
+        identity: Default::default(),
         user: "u".into(),
     };
     let mut semgrep = tool("semgrep", vec![], None);
@@ -191,6 +192,7 @@ fn record_line_has_run_tools_and_findings_but_no_bodies() {
         start,
         root: Path::new("/r"),
         head: None,
+        identity: Default::default(),
         user: "u".into(),
     };
     let line = record::line(&info, &sample());

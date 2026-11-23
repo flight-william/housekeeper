@@ -1,6 +1,7 @@
 //! One JSON line per run, appended to `$HOUSE_LOG_DIR/<YYYY-MM>.jsonl`
 //! (default `$HOME/Library/Logs/house/runs/`). No message bodies.
 
+use crate::files::Identity;
 use crate::reply::{Report, place_text, stage_name};
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
@@ -31,6 +32,9 @@ pub struct RunInfo<'a> {
     pub start: SystemTime,
     pub root: &'a Path,
     pub head: Option<String>,
+    /// The repository (`files::identity`): the same for all its worktrees, where
+    /// `root` is the one folder the run was in.
+    pub identity: Identity,
     pub user: String,
 }
 
@@ -72,6 +76,16 @@ pub fn line(info: &RunInfo, report: &Report) -> Value {
     m.insert("start".into(), rfc3339(info.start).into());
     m.insert("repo".into(), info.root.display().to_string().into());
     m.insert("head".into(), info.head.clone().into());
+    m.insert(
+        "root_commit".into(),
+        info.identity.root_commit.clone().into(),
+    );
+    let main = info
+        .identity
+        .main_checkout
+        .as_ref()
+        .map(|p| p.display().to_string());
+    m.insert("main_checkout".into(), main.into());
     m.insert("stage".into(), stage_name(report.stage).into());
     m.insert("user".into(), info.user.clone().into());
     m.insert("seconds".into(), round(report.seconds).into());
