@@ -10,7 +10,7 @@
 mod suggest;
 mod text;
 
-pub use suggest::Suggestion;
+pub use suggest::{NEVER_FIRES_MIN_RUNS, Suggestion};
 
 use crate::excuses::Date;
 use crate::reply::cannot_rule;
@@ -126,18 +126,24 @@ pub struct ToolStat {
 
 impl ToolStat {
     pub fn total_seconds(&self) -> f64 {
-        self.seconds.iter().sum()
+        not_negative(self.seconds.iter().sum())
     }
 
     pub fn median_seconds(&self) -> f64 {
         let mut s = self.seconds.clone();
         s.sort_by(f64::total_cmp);
-        match s.len() {
+        not_negative(match s.len() {
             0 => 0.0,
             n if n % 2 == 1 => s[n / 2],
             n => (s[n / 2 - 1] + s[n / 2]) / 2.0,
-        }
+        })
     }
+}
+
+/// Seconds are never below zero: a sum of no runs is -0.0 in Rust, and a record may
+/// hold -0.0, either of which would print as "-0.0 s".
+fn not_negative(seconds: f64) -> f64 {
+    if seconds > 0.0 { seconds } else { 0.0 }
 }
 
 /// What the runs in a period add up to.
@@ -157,6 +163,7 @@ pub struct Review {
     /// Every rule a record of the repo names, in the period or not, with its counts
     /// in the period.
     pub rules: BTreeMap<String, Count>,
+    /// Every tool that ran (was not skipped) on a covered run.
     pub tools: BTreeMap<String, ToolStat>,
     /// Excused findings in records that name no tool's excused map.
     pub excused_unattributed: u64,
@@ -259,13 +266,16 @@ impl Review {
         self.add_places(run);
     }
 
+    /// A tool skipped on a run did not run: a tool skipped on every run of the period
+    /// is not one of its tools.
     fn add_tool(&mut self, tool: &Tool) {
-        let stat = self.tools.entry(tool.name.clone()).or_default();
-        if !tool.skipped {
-            stat.runs += 1;
-            stat.checked += usize::from(tool.cannot_check.is_none());
-            stat.seconds.push(tool.seconds);
+        if tool.skipped {
+            return;
         }
+        let stat = self.tools.entry(tool.name.clone()).or_default();
+        stat.runs += 1;
+        stat.checked += usize::from(tool.cannot_check.is_none());
+        stat.seconds.push(tool.seconds);
         for (rule, n) in &tool.findings {
             stat.count.findings += n;
             self.rules.entry(rule.clone()).or_default().findings += n;

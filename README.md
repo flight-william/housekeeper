@@ -108,13 +108,14 @@ house review --from 2026-11-01
 the run records (`$HOUSE_LOG_DIR`, else `~/Library/Logs/house/runs`) and prints one report
 for the runs that started in the period (`--to` is today when not given): the runs per
 stage; per rule and per tool, the findings, the excused findings and the cannot-checks; each
-tool's total and median seconds; the places (rule, file, tool rule) that failed on more
-than one run, most often first; and suggestions to weigh, not orders: a rule or tool that
-never fires, one that looks noisy (its findings mostly excused, or failing again on the same
-places), and a tool that takes most of the time. `--repo` takes a repo's path or its folder
-name. A line in the folder that is not a house run record, another program's or a broken
-one, is skipped and counted. A record written before 0.3.0 keeps only the run's excused
-total, so those excuses are counted apart from the rules.
+tool's total and median seconds (a tool skipped on every run is left out); the places (rule,
+file, tool rule) that failed on more than one run, most often first; and suggestions to
+weigh, not orders: a rule or tool that never fires (no findings in at least 5 runs of the
+period, the tool's own runs for a tool), one that looks noisy (its findings mostly excused,
+or failing again on the same places), and a tool that takes most of the time. `--repo` takes
+a repo's path or its folder name. A line in the folder that is not a house run record,
+another program's or a broken one, is skipped and counted. A record written before 0.3.0
+keeps only the run's excused total, so those excuses are counted apart from the rules.
 
 ## On a runner
 

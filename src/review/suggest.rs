@@ -4,6 +4,10 @@
 use super::{Count, Review};
 use serde::Serialize;
 
+/// The fewest runs in the period, of the review or of the tool, after which a rule
+/// or tool with no findings is said to never fire: fewer runs are too few to tell.
+pub const NEVER_FIRES_MIN_RUNS: usize = 5;
+
 /// One suggestion: its kind (`never_fires`, `looks_noisy`, `slow`), the rule or tool
 /// it is about, and the plain sentence.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -19,12 +23,12 @@ impl Review {
     pub fn suggestions(&self) -> Vec<Suggestion> {
         let mut out = Vec::new();
         for (rule, count) in self.rules_in_order() {
-            if self.runs > 0 && silent(count) {
+            if self.runs >= NEVER_FIRES_MIN_RUNS && silent(count) {
                 out.push(never_fires(rule, self.runs, RULE_CHECK));
             }
         }
         for (tool, stat) in &self.tools {
-            if stat.checked > 0 && silent(&stat.count) {
+            if stat.checked >= NEVER_FIRES_MIN_RUNS && silent(&stat.count) {
                 out.push(never_fires(tool, stat.checked, TOOL_CHECK));
             }
         }
