@@ -102,6 +102,18 @@ fn a_limit_below_one_second_cannot_be_checked() {
     assert!(config::parse("[tests]\ntimeout_seconds = -5\n").is_err());
 }
 
+/// A limit past the clock's range panicked when the deadline was added; one day is
+/// the ceiling, a "cannot check" above it.
+#[test]
+fn a_limit_above_one_day_cannot_be_checked() {
+    let day = config::parse("[tests]\ntimeout_seconds = 86400\n").unwrap();
+    assert_eq!(config::test_limit(&day), Duration::from_secs(86400));
+    for over in ["86401", "9223372036854775807"] {
+        let err = config::parse(&format!("[tests]\ntimeout_seconds = {over}\n")).unwrap_err();
+        assert!(err.what.contains("86400"), "{}", err.what);
+    }
+}
+
 /// Whether process `pid` is alive. house waits for a stopped suite's whole group to
 /// be gone before it reports, so one look is enough.
 fn alive(pid: &str) -> bool {

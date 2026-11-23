@@ -52,7 +52,9 @@ moved or copied out of an excluded folder (`git mv`) is reported at its new path
 `[tests]`, `commit = [["cargo", "test"]]` and `push = [...]` (push falls back to commit) list test
 commands, each a program and its arguments with no shell, run from the repo root after the
 tools; a failing one is an R7 finding, and the last 20 lines of its output go to the run
-record. Each command may run for `timeout_seconds` (in `[tests]`, 600 when unset); one still
+record. Each command may run for `timeout_seconds` (in `[tests]`, 600 when unset, at most
+86400). Before 0.4.0 a command could run for an hour, so a slower suite needs the key set on
+upgrade. One still
 running then is stopped, and that is an R7 finding naming the command and the limit, so a
 suite that waits on a dialog no one can click fails instead of holding the push. Each
 command runs in a process group of its own, and the whole group is stopped (SIGTERM, then

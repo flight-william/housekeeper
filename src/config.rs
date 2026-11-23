@@ -22,7 +22,7 @@
 //! [tests]                           # the test step (`tests_step`), after the tools
 //! commit = [["cargo", "test", "--offline"]]   # each a program and its arguments, no shell
 //! push = [["cargo", "test"]]        # optional; falls back to `commit`
-//! timeout_seconds = 600             # optional; each command's time limit, 600 when unset
+//! timeout_seconds = 600             # optional; each command's time limit, 600 when unset, at most 86400
 //! ```
 //!
 //! Every table and key is known: any other is a cannot-check naming it. A house older
@@ -103,12 +103,16 @@ fn version(text: &str) -> Option<(u64, u64, u64)> {
 pub struct Tests {
     pub commit: Option<Vec<Vec<String>>>,
     pub push: Option<Vec<Vec<String>>>,
-    /// Each command's time limit in seconds (`TEST_LIMIT` when unset), 1 or more.
+    /// Each command's time limit in seconds (`TEST_LIMIT` when unset), 1 to
+    /// `TEST_LIMIT_MAX` seconds.
     pub timeout_seconds: Option<u64>,
 }
 
 /// A test command's time limit when `[tests] timeout_seconds` is unset.
 pub const TEST_LIMIT: Duration = Duration::from_secs(600);
+
+/// The longest `[tests] timeout_seconds`: one day.
+pub const TEST_LIMIT_MAX: u64 = 86_400;
 
 /// How long each test command may run before it is stopped and reported.
 pub fn test_limit(config: &Config) -> Duration {
@@ -190,10 +194,18 @@ pub fn parse(text: &str) -> Result<Config, CannotCheck> {
     if let Some(minimum) = &config.house.minimum {
         minimum_met(minimum, env!("CARGO_PKG_VERSION"))?;
     }
-    if config.tests.timeout_seconds == Some(0) {
-        return Err(bad(format!(
-            "{FILE} [tests] timeout_seconds is 0: give the seconds each test command may run, 1 or more"
-        )));
+    match config.tests.timeout_seconds {
+        Some(0) => {
+            return Err(bad(format!(
+                "{FILE} [tests] timeout_seconds is 0: give the seconds each test command may run, 1 or more"
+            )));
+        }
+        Some(s) if s > TEST_LIMIT_MAX => {
+            return Err(bad(format!(
+                "{FILE} [tests] timeout_seconds is {s}: give at most {TEST_LIMIT_MAX} (one day)"
+            )));
+        }
+        _ => {}
     }
     let (commit, push) = (&config.tests.commit, &config.tests.push);
     for (stage, list) in [("commit", commit), ("push", push)] {
