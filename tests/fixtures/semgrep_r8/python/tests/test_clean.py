@@ -3,6 +3,7 @@ import random
 import socket
 import subprocess
 import time
+import unittest
 from unittest import mock
 
 import pytest
@@ -70,3 +71,19 @@ def test_runs_a_harmless_command():
 @pytest.mark.slow
 def test_marked_slow_is_not_rerun():
     assert True
+
+
+# A stand-in `security` in a temp HOME logs what it was asked: asserting on that
+# text reads no keychain.
+def test_asserts_on_the_stand_in_log(log):
+    assert "find-generic-password" in log
+    assert log == "add-generic-password -s svc\n", log
+
+
+class StandInTest(unittest.TestCase):
+    def test_reads_the_stand_in_log(self):
+        self.assertIn("find-generic-password", self.log)
+        self.assertEqual(
+            self.log.splitlines()[0],
+            "delete-generic-password -s svc",
+        )

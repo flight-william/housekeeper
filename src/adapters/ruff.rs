@@ -2,7 +2,7 @@
 //! `ruff format --check` (R1). Both read ruff's JSON output (captured with ruff 0.17.6).
 
 use super::Exits;
-use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
+use crate::adapter::{Adapter, CannotCheck, Command, Context, Language, Output};
 use crate::finding::{Finding, Measure, Place};
 use crate::run::first_line;
 use serde::Deserialize;
@@ -129,7 +129,9 @@ fn command(sub: &[&str], ctx: &Context) -> Option<Command> {
     let py: Vec<String> = ctx
         .files
         .iter()
-        .filter(|f| f.ends_with(".py") || f.ends_with(".pyi"))
+        .filter(|f| {
+            f.ends_with(".py") || f.ends_with(".pyi") || ctx.first_line_is(f, Language::Python)
+        })
         .cloned()
         .collect();
     if py.is_empty() {

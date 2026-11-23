@@ -61,6 +61,11 @@ pub fn parse_lines(text: &str) -> Result<Vec<PushLine>, CannotCheck> {
 pub struct Push {
     /// Relative to `root`, `/`-separated, sorted, no repeats; deletes and links dropped.
     pub files: Vec<String>,
+    /// Every pushed path but deletes, links kept (`files::not_deleted`).
+    pub changed: Vec<String>,
+    /// The push changes some path: deletes, type changes, links and excluded paths
+    /// count, so the test step runs though no file is left for the tools.
+    pub touched: bool,
     /// The widest ref's range; `None` when nothing is pushed or the push is unbounded.
     pub range: Option<String>,
     /// A pushed ref has no base (a first push without origin/main): the push sends
@@ -84,6 +89,8 @@ pub fn pushed(root: &Path, stdin_text: &str) -> Result<Push, CannotCheck> {
     if lines.is_empty() {
         return Ok(Push {
             files: Vec::new(),
+            changed: Vec::new(),
+            touched: false,
             range: None,
             unbounded: false,
         });
@@ -123,6 +130,8 @@ pub fn pushed(root: &Path, stdin_text: &str) -> Result<Push, CannotCheck> {
         "commit or stash the change, then push again",
     )?;
     Ok(Push {
+        changed: files::not_deleted(&changes),
+        touched: !changes.is_empty(),
         files,
         range: range.filter(|_| !unbounded).map(|(_, r)| r),
         unbounded,

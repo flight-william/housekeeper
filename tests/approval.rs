@@ -133,3 +133,45 @@ fn rust_tool_settings_at_the_root_are_protected() {
         assert_eq!(check(&s(&[path]), &protected(), "m").len(), 1, "{path}");
     }
 }
+
+/// The settings that silence ShellCheck (it reads `.shellcheckrc` and `shellcheckrc`
+/// in the script's folder and each parent) and gitleaks (`.gitleaksignore` lists
+/// findings to skip) are protected, at the root and in any folder.
+#[test]
+fn shellcheck_and_gitleaks_suppression_files_are_protected() {
+    for path in [
+        ".shellcheckrc",
+        "scripts/.shellcheckrc",
+        "shellcheckrc",
+        "a/b/shellcheckrc",
+        ".gitleaksignore",
+        "sub/.gitleaksignore",
+        "Sub/.GitleaksIgnore",
+    ] {
+        assert_eq!(check(&s(&[path]), &protected(), "m").len(), 1, "{path}");
+    }
+    assert!(
+        check(
+            &s(&["x.shellcheckrc", "gitleaksignore.md"]),
+            &protected(),
+            "m"
+        )
+        .is_empty()
+    );
+}
+
+/// This repo's CODEOWNERS names every protected glob, as `house init` writes it.
+#[test]
+fn this_repos_codeowners_lists_every_protected_glob() {
+    let text = include_str!("../.github/CODEOWNERS");
+    for glob in PROTECTED {
+        let pattern = if glob.starts_with("**/") {
+            glob.to_string()
+        } else {
+            format!("/{glob}")
+        };
+        let line = format!("{pattern} @flight-william");
+        assert!(text.lines().any(|l| l == line), "missing: {line}");
+    }
+    assert_eq!(text.lines().count(), PROTECTED.len() + 1, "{text}");
+}

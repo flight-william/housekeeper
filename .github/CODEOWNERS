@@ -1,0 +1,25 @@
+# house: the files only the owner may change
+/.house.toml @flight-william
+/.house-excuses.toml @flight-william
+/.github/workflows/** @flight-william
+/.githooks/** @flight-william
+**/CODEOWNERS @flight-william
+**/pyproject.toml @flight-william
+**/ruff.toml @flight-william
+**/.ruff.toml @flight-william
+**/clippy.toml @flight-william
+**/.clippy.toml @flight-william
+**/rustfmt.toml @flight-william
+**/.rustfmt.toml @flight-william
+**/.swiftlint.yml @flight-william
+**/.swift-format @flight-william
+**/.coveragerc @flight-william
+**/setup.cfg @flight-william
+**/.semgrepignore @flight-william
+**/.gitleaks.toml @flight-william
+**/.gitleaksignore @flight-william
+**/.shellcheckrc @flight-william
+**/shellcheckrc @flight-william
+**/deny.toml @flight-william
+**/.cargo/config.toml @flight-william
+**/.cargo/config @flight-william

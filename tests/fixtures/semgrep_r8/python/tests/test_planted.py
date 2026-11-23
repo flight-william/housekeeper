@@ -95,3 +95,7 @@ def test_paths():
 @pytest.mark.flaky(reruns=3)
 def test_rerun():
     assert True
+
+
+def test_keychain_call_inside_an_assert():
+    assert subprocess.run(["security", "find-generic-password"]).returncode == 0

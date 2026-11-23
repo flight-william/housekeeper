@@ -47,7 +47,23 @@ and the git hooks. Commit them. Files listed under `[paths] exclude` in `.house.
 `commit = [["cargo", "test"]]` and `push = [...]` (push falls back to commit) list test
 commands, each a program and its arguments with no shell, run from the repo root after the
 tools; a failing one is an R7 finding, and the last 20 lines of its output go to the run
-record. An unknown table or key in `.house.toml` is a "cannot check" naming it.
+record. At push the tests run whenever the push changes anything, a deletion alone
+included, though no file is left for the tools; a push with no change skips them. An
+unknown table or key in `.house.toml` is a "cannot check" naming it.
+
+`[house] minimum = "0.2.3"` names the oldest house the rules run on: an older house is a
+"cannot check" naming both versions, and the same or a newer one runs. A house older than
+0.2.3 does not know `[house]`, so it refuses the file as an unknown table.
+
+Each tool gets the files it reads, chosen by extension. A file with no known extension is
+chosen by its first line: `#!/usr/bin/env python3` goes to ruff, ruff format, r3 and Semgrep,
+and `#!/bin/sh` or `#!/usr/bin/env bash` to ShellCheck, r3 and Semgrep. A zsh script, which
+ShellCheck cannot read, goes to none of them, nor does a binary file.
+
+Every `Cargo.toml` a stage sends is also read by house itself, whatever `[tools]` lists: a
+lint set to `allow` (or `expect`) in a `[lints]` or `[workspace.lints]` table silences it for
+the whole crate, so each such entry is an R9 finding at its line. `deny`, `forbid` and `warn`
+are not: under clippy's `-D warnings` a `warn` lint is still an error.
 
 ## The reply
 
@@ -65,6 +81,42 @@ the changed ones, and is the only run that reports a stale excuse (an entry in
 
 An excuse may record `added = "YYYY-MM-DD"`, the day it was written: its deadline may be at
 most 56 days after that day (after today for a new entry).
+
+An excuse covers at most `count` findings of its rule in its file (and naming its `symbol`,
+when it gives one); `count` is 1 when the entry gives none. A matching finding beyond the
+count is to fix, so a new suppression beside an excused one is reported, though the list
+has not changed. Raising a count is the list growing.
+
+The list may only shrink: an entry added since the base (HEAD at commit, the push base at
+push), or a deadline moved later, is a finding. The first list, added where the base has
+none, is adoption, not growth. Its deadlines are still capped at 56 days, and it is a
+protected file, so the commit still needs the owner's approval line.
+
+A changed path whose name matches a protected settings file only when case is ignored, such
+as `.SEMGREPIGNORE` or `sub/Pyproject.toml`, is an R9 finding at commit and push, whatever
+the commit message says: on a case-insensitive filesystem the tool reads it as its settings,
+while CODEOWNERS matches case-sensitively and asks no owner to review it. Use the canonical
+name.
+
+## On a runner
+
+A pull request can change `.house.toml` and `.house-excuses.toml`, so on a runner the rules
+come from the base: `house check --stage push --config-from <rev>` reads both files from
+that revision's git objects, never the working tree, and judges the pushed content with
+them. A file the revision does not hold is absent: the pull request's copy is not used in
+its place. A revision with no `.house.toml` at all is "cannot check": `no rules at <rev>`,
+fix: adopt the rules in their own commit first, then change code. A change never judges
+itself. A revision or file that cannot be read is "cannot check" too. The pushed excuse list is still judged: growth, deadlines and expired
+entries.
+
+On a self-hosted GitHub Actions runner, house refuses to run for a public repository, or when
+it cannot read the event payload at `GITHUB_EVENT_PATH` (exit 2): there anyone's pull request
+code would run on the runner's machine.
+
+A fork can edit the workflow and skip house, so the runner needs a guard outside every
+workflow: `runner/job-started.sh` refuses any job from a repository that is not private.
+Install it with `ACTIONS_RUNNER_HOOK_JOB_STARTED=<path to runner/job-started.sh>` in the
+runner folder's `.env`, then restart the runner service.
 
 ## Licence
 

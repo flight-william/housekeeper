@@ -4,7 +4,9 @@
 //!
 //! An entry excuses a finding with the same rule and file, whose `what` names the
 //! entry's symbol as a whole word (when the entry has one), measuring no more than the
-//! entry's value (when both have one). A new function in an excused file is not excused.
+//! entry's value (when both have one). It excuses at most `count` such findings (1 when
+//! the entry gives none): a new function in an excused file is not excused, nor a new
+//! suppression beside an excused one.
 
 use crate::adapter::CannotCheck;
 use crate::finding::{Finding, Place};
@@ -19,7 +21,7 @@ pub const FILE: &str = ".house-excuses.toml";
 /// The house rule the excuse list's own findings report (R9, nothing silenced).
 const RULE: &str = "R9";
 
-const SHAPE: &str = "fix .house-excuses.toml: each [[excuse]] has rule, file, deadline (YYYY-MM-DD) and reason, optional symbol, value and added (YYYY-MM-DD)";
+const SHAPE: &str = "fix .house-excuses.toml: each [[excuse]] has rule, file, deadline (YYYY-MM-DD) and reason, optional symbol, value, count (1 or more) and added (YYYY-MM-DD)";
 
 /// A calendar day. `today` is always passed in; nothing here reads the clock.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -91,6 +93,8 @@ pub struct Excuse {
     pub file: String,
     pub symbol: Option<String>,
     pub value: Option<f64>,
+    /// How many matching findings the entry excuses; 1 when the entry gives none.
+    pub count: u32,
     pub deadline: Date,
     pub reason: String,
     /// The day the entry was added, when the entry records it.
@@ -141,21 +145,22 @@ pub struct Applied {
     pub problems: Vec<Finding>,
 }
 
-/// Sort `findings` by the list. An entry excuses while `today <= deadline`; an expired
-/// entry excuses nothing and gives an "excuse expired" finding; a live entry that matches
-/// no finding gives a "stale excuse" finding. Stale is only meaningful when `findings`
-/// come from a run over every file the list names.
+/// Sort `findings` by the list, in their order. An entry excuses while `today <=
+/// deadline`, up to its `count` findings; a matching finding beyond that is to fix. An
+/// expired entry excuses nothing and gives an "excuse expired" finding; a live entry that
+/// matches no finding gives a "stale excuse" finding. Stale is only meaningful when
+/// `findings` come from a run over every file the list names.
 pub fn apply(findings: Vec<Finding>, excuses: &[Excuse], today: Date) -> Applied {
     let mut out = Applied::default();
-    let mut used = vec![false; excuses.len()];
+    let mut used = vec![0_u32; excuses.len()];
     for f in findings {
         let live = excuses
             .iter()
-            .enumerate()
-            .find(|(_, e)| e.deadline >= today && e.matches(&f));
+            .zip(&used)
+            .position(|(e, &n)| e.deadline >= today && n < e.count && e.matches(&f));
         match live {
-            Some((i, _)) => {
-                used[i] = true;
+            Some(i) => {
+                used[i] += 1;
                 out.excused.push(f);
             }
             None => out.to_fix.push(f),
@@ -163,15 +168,8 @@ pub fn apply(findings: Vec<Finding>, excuses: &[Excuse], today: Date) -> Applied
     }
     for (e, used) in excuses.iter().zip(used) {
         if e.deadline < today {
-            out.problems.push(problem(
-                "house excuse-expired",
-                format!("excuse expired: {}, deadline {}", e.shown(), e.deadline),
-                format!(
-                    "fix the {} finding in {}, then delete the entry",
-                    e.rule, e.file
-                ),
-            ));
-        } else if !used {
+            out.problems.push(expired_problem(e));
+        } else if used == 0 {
             out.problems.push(problem(
                 "house excuse-stale",
                 format!("stale excuse: {} matches no finding", e.shown()),
@@ -182,9 +180,29 @@ pub fn apply(findings: Vec<Finding>, excuses: &[Excuse], today: Date) -> Applied
     out
 }
 
+/// An "excuse expired" finding for each entry of `excuses` past its deadline.
+pub fn expired(excuses: &[Excuse], today: Date) -> Vec<Finding> {
+    excuses
+        .iter()
+        .filter(|e| e.deadline < today)
+        .map(expired_problem)
+        .collect()
+}
+
+fn expired_problem(e: &Excuse) -> Finding {
+    problem(
+        "house excuse-expired",
+        format!("excuse expired: {}, deadline {}", e.shown(), e.deadline),
+        format!(
+            "fix the {} finding in {}, then delete the entry",
+            e.rule, e.file
+        ),
+    )
+}
+
 /// The list may only shrink: each entry of `now` that `base` lacks (same rule, file and
-/// symbol), or whose value is above base's (or dropped), or whose deadline is later, is
-/// an "excuse list grew" finding. `base` is the list at HEAD (commit) or the push base.
+/// symbol), or whose value is above base's (or dropped), or whose count is above base's,
+/// or whose deadline is later, is an "excuse list grew" finding. `base` is the list at HEAD (commit) or the push base.
 pub fn grew(base: &[Excuse], now: &[Excuse]) -> Vec<Finding> {
     let key = |e: &Excuse| (e.rule.clone(), e.file.clone(), e.symbol.clone());
     now.iter()
@@ -197,7 +215,7 @@ pub fn grew(base: &[Excuse], now: &[Excuse]) -> Vec<Finding> {
                 (Some(_), None) => true,
                 (None, _) => false,
             };
-            raised || e.deadline > b.deadline
+            raised || e.count > b.count || e.deadline > b.deadline
         })
         .map(|e| {
             problem(
@@ -290,11 +308,20 @@ pub fn parse(text: &str) -> Result<Vec<Excuse>, CannotCheck> {
                 ))
             })?),
         };
+        let count = match r.count {
+            None => 1,
+            Some(n) => u32::try_from(n).ok().filter(|n| *n >= 1).ok_or_else(|| {
+                bad(format!(
+                    "{entry}: count `{n}` is not a whole number of 1 or more"
+                ))
+            })?,
+        };
         let e = Excuse {
             rule: r.rule,
             file: r.file,
             symbol: r.symbol,
             value: r.value,
+            count,
             deadline,
             reason: r.reason,
             added,
@@ -310,27 +337,35 @@ pub fn parse(text: &str) -> Result<Vec<Excuse>, CannotCheck> {
     Ok(list)
 }
 
-/// The list as committed at `rev` (`HEAD`, or a push base): empty when `rev` is not
-/// a commit yet (a repo before its first commit) or holds no list; a list there that
-/// cannot be read is cannot-check.
-pub fn at_rev(root: &Path, rev: &str) -> Result<Vec<Excuse>, CannotCheck> {
-    if git(
+/// The list as committed at `rev` (`HEAD`, or a push base): `None` when `rev` is not
+/// a commit yet (a repo before its first commit) or holds no list, so the list is being
+/// adopted; a list there that is not a file or cannot be read is cannot-check.
+pub fn at_rev(root: &Path, rev: &str) -> Result<Option<Vec<Excuse>>, CannotCheck> {
+    let Ok(sha) = git(
         root,
         &["rev-parse", "--verify", "-q", &format!("{rev}^{{commit}}")],
-    )
-    .is_err()
-    {
-        return Ok(Vec::new());
-    }
-    let spec = format!("{rev}:{FILE}");
-    if git(root, &["cat-file", "-e", &spec]).is_err() {
-        return Ok(Vec::new());
-    }
-    let text = git(root, &["show", &spec])?.stdout;
-    parse(&text).map_err(|c| CannotCheck {
+    ) else {
+        return Ok(None);
+    };
+    let Some(text) = crate::rules::file_at(root, sha.stdout.trim(), FILE)? else {
+        return Ok(None);
+    };
+    parse(&text).map(Some).map_err(|c| CannotCheck {
         what: format!("the list at {rev}: {}", c.what),
         fix: c.fix,
     })
+}
+
+/// The list in the working tree at `root`: `None` when there is no file.
+pub fn in_tree(root: &Path) -> Result<Option<Vec<Excuse>>, CannotCheck> {
+    match std::fs::read_to_string(root.join(FILE)) {
+        Ok(text) => parse(&text).map(Some),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(CannotCheck {
+            what: format!("{FILE} cannot be read: {e}"),
+            fix: format!("make {FILE} readable"),
+        }),
+    }
 }
 
 fn one_line(message: &str) -> String {
@@ -352,6 +387,7 @@ struct RawExcuse {
     file: String,
     symbol: Option<String>,
     value: Option<f64>,
+    count: Option<i64>,
     deadline: String,
     reason: String,
     added: Option<String>,

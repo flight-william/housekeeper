@@ -78,6 +78,22 @@ fn replacing_a_protected_file_with_a_link_needs_approval() {
     needs_approval(&dir, "ruff.toml");
 }
 
+// Adoption (a first excuse list) is not growth at pre-commit, so this is what keeps the
+// owner in the loop: the new protected file still needs the approval line.
+#[test]
+fn adopting_the_excuse_list_needs_approval() {
+    let dir = repo("approval-adopt");
+    std::fs::write(
+        dir.join(".house-excuses.toml"),
+        "[[excuse]]\nrule = \"R3\"\nfile = \"a.py\"\ndeadline = \"2026-12-31\"\nreason = \"split\"\n",
+    )
+    .unwrap();
+    common::git(&dir, &["add", "-A"]);
+    needs_approval(&dir, ".house-excuses.toml");
+    let (code, text) = commit_msg(&dir, &format!("{GOOD}Owner-approved: 2026-11-22 \"yes\"\n"));
+    assert_eq!(code, 0, "{text}");
+}
+
 #[test]
 fn globs_the_house_toml_lists_under_protected_extra_need_approval() {
     let dir = repo("approval-extra");

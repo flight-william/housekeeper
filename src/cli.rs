@@ -14,22 +14,34 @@ pub use stage::{check, check_all};
 use crate::adapter::Stage;
 use crate::excuses::Date;
 use crate::reply::{Report, stage_name};
-use crate::{adapters, files, init, record, run};
+use crate::rules::Rules;
+use crate::{adapters, files, init, record, run, runner};
 use message::commit_msg;
 use serde_json::Value;
 use stage::{Mode, check_from};
 use std::path::Path;
 use std::time::SystemTime;
 
-pub const USAGE: &str = "usage: house check --stage commit|push [--json] | house check --all [--json] | house commit-msg <message file> | house init [--owner @user] | house --version";
+pub const USAGE: &str = "usage: house check --stage commit|push [--json] | house check --stage push --config-from <rev> [--json] | house check --all [--json] | house commit-msg <message file> | house init [--owner @user] | house --version";
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Cmd {
-    Check { stage: Stage, json: bool },
-    CheckAll { json: bool },
-    CommitMsg { file: String },
+    /// `config_from`: the revision whose rules judge a push (`--config-from`).
+    Check {
+        stage: Stage,
+        json: bool,
+        config_from: Option<String>,
+    },
+    CheckAll {
+        json: bool,
+    },
+    CommitMsg {
+        file: String,
+    },
     Init,
-    InitOwner { owner: String },
+    InitOwner {
+        owner: String,
+    },
     Version,
 }
 
@@ -55,11 +67,19 @@ fn parse_check(rest: &[&str]) -> Result<Cmd, String> {
     let mut stage = None;
     let mut json = false;
     let mut all = false;
+    let mut config_from = None;
     let mut it = rest.iter();
     while let Some(arg) = it.next() {
         match *arg {
             "--json" => json = true,
             "--all" => all = true,
+            // A revision, never an option git would read: `-x` is refused.
+            "--config-from" => match it.next() {
+                Some(rev) if !rev.is_empty() && !rev.starts_with('-') => {
+                    config_from = Some(rev.to_string())
+                }
+                _ => return Err(USAGE.into()),
+            },
             "--stage" => {
                 stage = Some(match it.next() {
                     Some(&"commit") => Stage::Commit,
@@ -70,9 +90,14 @@ fn parse_check(rest: &[&str]) -> Result<Cmd, String> {
             _ => return Err(USAGE.into()),
         }
     }
-    match (stage, all) {
-        (None, true) => Ok(Cmd::CheckAll { json }),
-        (Some(stage), false) => Ok(Cmd::Check { stage, json }),
+    match (stage, all, &config_from) {
+        (None, true, None) => Ok(Cmd::CheckAll { json }),
+        (Some(Stage::Commit), false, Some(_)) => Err(USAGE.into()),
+        (Some(stage), false, _) => Ok(Cmd::Check {
+            stage,
+            json,
+            config_from,
+        }),
         _ => Err(USAGE.into()),
     }
 }
@@ -91,8 +116,12 @@ pub fn main(args: &[String], cwd: &Path) -> i32 {
         Ok(Cmd::Init) => run_init(cwd, None),
         Ok(Cmd::InitOwner { owner }) => run_init(cwd, Some(&owner)),
         Ok(Cmd::CommitMsg { file }) => commit_msg(cwd, &file),
-        Ok(Cmd::Check { stage, json }) => check_and_record(cwd, Mode::Stage(stage), json),
-        Ok(Cmd::CheckAll { json }) => check_and_record(cwd, Mode::All, json),
+        Ok(Cmd::Check {
+            stage,
+            json,
+            config_from,
+        }) => check_and_record(cwd, Mode::Stage(stage), json, config_from.as_deref()),
+        Ok(Cmd::CheckAll { json }) => check_and_record(cwd, Mode::All, json, None),
     }
 }
 
@@ -109,7 +138,12 @@ fn run_init(cwd: &Path, owner: Option<&str>) -> i32 {
     }
 }
 
-fn check_and_record(cwd: &Path, mode: Mode, json: bool) -> i32 {
+/// Check by the working tree's rules, or with `config_from` by that revision's.
+fn check_and_record(cwd: &Path, mode: Mode, json: bool, config_from: Option<&str>) -> i32 {
+    if let Some(line) = runner::refusal(&|key| std::env::var(key).ok()) {
+        println!("{line}");
+        return 2;
+    }
     let start = SystemTime::now();
     let label = match mode {
         Mode::Stage(stage) => stage_name(stage),
@@ -118,11 +152,15 @@ fn check_and_record(cwd: &Path, mode: Mode, json: bool) -> i32 {
     let Some(root) = root_or_say(cwd, label) else {
         return 2;
     };
-    let checked = check_from(&root, mode, adapters::all());
+    let rules = match config_from {
+        Some(rev) => Rules::at(&root, rev),
+        None => Rules::working_tree(&root),
+    };
+    let checked = check_from(&root, mode, &rules, adapters::all());
     let mut report = checked.report;
     let base = checked.base.as_deref();
     let excused = match mode {
-        Mode::Stage(_) => excuse(&mut report, &root, today(), base),
+        Mode::Stage(_) => excuse::excuse_by(&mut report, &root, today(), base, &rules),
         Mode::All => excuse_all(&mut report, &root, today(), base),
     };
     if json {

@@ -106,6 +106,7 @@ fn a_workspace_is_one_command_and_each_finding_once() {
         stage: Stage::Commit,
         files: staged(&repo),
         push_range: None,
+        languages: Default::default(),
     };
     let cmds = Clippy.commands(&ctx);
     assert_eq!(cmds.len(), 1, "{cmds:?}");

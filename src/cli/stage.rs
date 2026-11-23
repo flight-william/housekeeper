@@ -4,19 +4,21 @@
 use crate::adapter::{Adapter, CannotCheck, Context, Stage};
 use crate::finding::Finding;
 use crate::reply::{Report, ToolRun};
+use crate::rules::Rules;
 use crate::tests_step::{self, FailedOutput, TestRun};
-use crate::{config, files, run};
+use crate::{approval, config, files, lints, run};
 use std::path::Path;
 use std::time::Instant;
 
 /// Run the stage's adapters, then its test commands, in `root` and collect the report.
 pub fn check(root: &Path, stage: Stage, all: Vec<Box<dyn Adapter>>) -> Report {
-    check_from(root, Mode::Stage(stage), all).report
+    let rules = Rules::working_tree(root);
+    check_from(root, Mode::Stage(stage), &rules, all).report
 }
 
 /// `house check --all`: the push stage's adapters and tests on every tracked file.
 pub fn check_all(root: &Path, all: Vec<Box<dyn Adapter>>) -> Report {
-    check_from(root, Mode::All, all).report
+    check_from(root, Mode::All, &Rules::working_tree(root), all).report
 }
 
 /// What a check runs on: a stage's files, or every tracked file (`--all`).
@@ -47,7 +49,13 @@ pub(super) struct Checked {
     pub failed_tests: Vec<FailedOutput>,
 }
 
-pub(super) fn check_from(root: &Path, mode: Mode, all: Vec<Box<dyn Adapter>>) -> Checked {
+/// Run by `rules`' `.house.toml`: its tools, excluded paths and test commands.
+pub(super) fn check_from(
+    root: &Path,
+    mode: Mode,
+    rules: &Rules,
+    all: Vec<Box<dyn Adapter>>,
+) -> Checked {
     let stage = mode.stage();
     let start = Instant::now();
     let mut checked = Checked {
@@ -60,13 +68,13 @@ pub(super) fn check_from(root: &Path, mode: Mode, all: Vec<Box<dyn Adapter>>) ->
         failed_tests: Vec::new(),
     };
     let tools = &mut checked.report.tools;
-    let (chosen, exclude, tests, config_cannot) = match config::load(root) {
+    let (chosen, exclude, tests, config_cannot) = match &rules.config {
         Ok(cfg) => {
-            let tests = config::tests_for(&cfg, stage).to_vec();
-            let (chosen, unknown) = config::select(&cfg, stage, all);
-            (chosen, cfg.paths.exclude, tests, unknown)
+            let tests = config::tests_for(cfg, stage).to_vec();
+            let (chosen, unknown) = config::select(cfg, stage, all);
+            (chosen, cfg.paths.exclude.clone(), tests, unknown)
         }
-        Err(c) => (all, Vec::new(), Vec::new(), vec![c]),
+        Err(c) => (all, Vec::new(), Vec::new(), vec![c.clone()]),
     };
     for c in config_cannot {
         tools.push(cannot_run("house", c));
@@ -83,14 +91,19 @@ pub(super) fn check_from(root: &Path, mode: Mode, all: Vec<Box<dyn Adapter>>) ->
             if scope.unbounded {
                 checked.base = None;
             }
+            let scope_changed = scope.changed;
+            let tests_due = scope.run_tests;
             let ctx = Context {
                 root: root.to_path_buf(),
                 stage,
+                languages: files::languages(root, &scope.files),
                 files: scope.files,
                 push_range: scope.push_range,
             };
             tools.extend(chosen.iter().map(|a| run_one(a.as_ref(), &ctx)));
-            for test in run_tests(&ctx, &tests) {
+            tools.extend(lints::run(&ctx));
+            tools.extend(settings_case(&scope_changed, rules));
+            for test in run_tests(&ctx, &tests, tests_due) {
                 tools.push(test.tool);
                 checked.failed_tests.extend(test.failed);
             }
@@ -101,26 +114,51 @@ pub(super) fn check_from(root: &Path, mode: Mode, all: Vec<Box<dyn Adapter>>) ->
     checked
 }
 
+/// The wrong-case settings names among `changed`, against the built-in protected
+/// list and the rules' `[protected] extra`; `None` when there are none.
+fn settings_case(changed: &[String], rules: &Rules) -> Option<ToolRun> {
+    let mut protected: Vec<String> = approval::PROTECTED.iter().map(|g| g.to_string()).collect();
+    if let Ok(config) = &rules.config {
+        protected.extend(config.protected.extra.iter().cloned());
+    }
+    let findings = approval::wrong_case(changed, &protected);
+    (!findings.is_empty()).then(|| ToolRun {
+        name: "settings-case".into(),
+        seconds: 0.0,
+        exit: None,
+        skipped: false,
+        findings,
+        cannot: None,
+        unread: Vec::new(),
+    })
+}
+
 /// Every tracked file still in the working copy, links and `exclude` dropped: what
 /// `--all` hands the tools, with no push range (gitleaks then reads all history).
+/// Every tracked path, links and all, is what the policy checks judge.
 fn every_file(root: &Path, exclude: &[String]) -> Result<files::Scope, CannotCheck> {
-    let tracked = files::without_links(root, files::tracked(root)?);
+    let changed = files::tracked(root)?;
+    let tracked = files::without_links(root, changed.clone());
     let present = tracked
         .into_iter()
         .filter(|f| root.join(f).is_file())
         .collect();
+    let files = files::without_excluded(present, exclude);
     Ok(files::Scope {
-        files: files::without_excluded(present, exclude),
+        run_tests: !files.is_empty(),
+        files,
+        changed,
         push_range: None,
         unbounded: false,
     })
 }
 
-/// The test step after the adapters: skipped when there is no file to check.
-fn run_tests(ctx: &Context, tests: &[Vec<String>]) -> Vec<TestRun> {
+/// The test step after the adapters: skipped unless `due` (`Scope::run_tests`): at push
+/// when the push changes any path, at commit and `--all` when there is a file to check.
+fn run_tests(ctx: &Context, tests: &[Vec<String>], due: bool) -> Vec<TestRun> {
     if tests.is_empty() {
         Vec::new()
-    } else if ctx.files.is_empty() {
+    } else if !due {
         vec![tests_step::skipped()]
     } else {
         tests_step::run(&ctx.root, tests, run::HANG_GUARD)

@@ -34,9 +34,10 @@ fn config_args() -> Vec<String> {
         .collect()
 }
 
-/// The files Semgrep should scan: a concerned extension, not under tests/fixtures/,
-/// and not prefixed by a `.semgrepignore` line (Semgrep ignores that file for explicit targets).
-fn targets(files: &[String], semgrepignore: &str) -> Vec<String> {
+/// The files Semgrep should scan: a concerned extension or a first-line language
+/// (`Context::languages`), not under tests/fixtures/, and not prefixed by a
+/// `.semgrepignore` line (Semgrep ignores that file for explicit targets).
+fn targets(ctx: &Context, semgrepignore: &str) -> Vec<String> {
     let ignored: Vec<&str> = semgrepignore
         .lines()
         .map(str::trim)
@@ -44,9 +45,9 @@ fn targets(files: &[String], semgrepignore: &str) -> Vec<String> {
         .map(|l| l.trim_start_matches("./").trim_start_matches('/'))
         .chain(["tests/fixtures/"])
         .collect();
-    files
+    ctx.files
         .iter()
-        .filter(|f| EXTENSIONS.iter().any(|ext| f.ends_with(ext)))
+        .filter(|f| EXTENSIONS.iter().any(|ext| f.ends_with(ext)) || ctx.languages.contains_key(*f))
         .filter(|f| !ignored.iter().any(|prefix| f.starts_with(prefix)))
         .cloned()
         .collect()
@@ -80,7 +81,7 @@ impl Adapter for Semgrep {
 
     fn command(&self, ctx: &Context) -> Option<Command> {
         let ignore = std::fs::read_to_string(ctx.root.join(".semgrepignore")).unwrap_or_default();
-        let files = targets(&ctx.files, &ignore);
+        let files = targets(ctx, &ignore);
         if files.is_empty() {
             return None;
         }

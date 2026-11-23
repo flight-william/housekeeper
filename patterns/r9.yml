@@ -10,9 +10,12 @@
 #   tests.rs file.
 # - Rust `let _ = ` cannot see types, so it reports every `let _ =` in tests,
 #   not only those on a Result. Cleanup is exempt, where there is nobody to hand
-#   the error to: a `Drop` impl, a `defer!` block, and a function named teardown
-#   or tear_down. Swift `try?` is exempt in the same places: `defer`, `deinit`,
-#   and tearDown/tearDownWithError.
+#   the error to: a `Drop` impl, a `defer!` block, a function named teardown
+#   or tear_down, and anywhere a `let _ =` straight on a call to kill, wait,
+#   try_wait, send, flush, shutdown or join (a method) or remove_file or
+#   remove_dir_all, whatever its arguments.
+#   Swift `try?` is exempt in `defer`, `deinit` and tearDown/tearDownWithError,
+#   and anywhere on a FileManager removeItem(at:) or removeItem(atPath:).
 rules:
   # ---- Python ----
   - id: r9-python-noqa
@@ -174,6 +177,9 @@ rules:
       # Semgrep's Swift patterns cannot name a deinit, so it is text (one level
       # of nested braces inside).
       - pattern-not-regex: '\bdeinit\s*\{(?:[^{}]|\{[^{}]*\})*\}'
+      # Removing a file or folder anywhere: `try?` straight on a FileManager
+      # removeItem(at:) or removeItem(atPath:) call, the receiver a plain name chain.
+      - pattern-not-regex: '\btry\?\s+[\w.]*\bremoveItem\s*\(\s*(?:at|atPath)\s*:'
 
   # ---- Rust ----
   - id: r9-rust-allow
@@ -214,6 +220,19 @@ rules:
       - pattern-not-inside: "defer! { ... }"
       - pattern-not-inside: "fn teardown(...) { ... }"
       - pattern-not-inside: "fn tear_down(...) { ... }"
+      # Cleanup anywhere: the call the dropped value comes from is one of these
+      # (Semgrep cannot see the type), its arguments nested to any depth.
+      - pattern-not: let _ = $R.kill(...);
+      - pattern-not: let _ = $R.wait(...);
+      - pattern-not: let _ = $R.try_wait(...);
+      - pattern-not: let _ = $R.send(...);
+      - pattern-not: let _ = $R.flush(...);
+      - pattern-not: let _ = $R.shutdown(...);
+      - pattern-not: let _ = $R.join(...);
+      - pattern-not: let _ = remove_file(...);
+      - pattern-not: let _ = $P::remove_file(...);
+      - pattern-not: let _ = remove_dir_all(...);
+      - pattern-not: let _ = $P::remove_dir_all(...);
 
   - id: r9-rust-let-underscore-in-tests-dir
     languages: [rust]
@@ -231,3 +250,16 @@ rules:
       - pattern-not-inside: "defer! { ... }"
       - pattern-not-inside: "fn teardown(...) { ... }"
       - pattern-not-inside: "fn tear_down(...) { ... }"
+      # Cleanup anywhere: the call the dropped value comes from is one of these
+      # (Semgrep cannot see the type), its arguments nested to any depth.
+      - pattern-not: let _ = $R.kill(...);
+      - pattern-not: let _ = $R.wait(...);
+      - pattern-not: let _ = $R.try_wait(...);
+      - pattern-not: let _ = $R.send(...);
+      - pattern-not: let _ = $R.flush(...);
+      - pattern-not: let _ = $R.shutdown(...);
+      - pattern-not: let _ = $R.join(...);
+      - pattern-not: let _ = remove_file(...);
+      - pattern-not: let _ = $P::remove_file(...);
+      - pattern-not: let _ = remove_dir_all(...);
+      - pattern-not: let _ = $P::remove_dir_all(...);

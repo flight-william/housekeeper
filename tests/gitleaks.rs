@@ -49,6 +49,7 @@ fn push_scans_the_pushed_commits_for_a_committed_secret() {
         stage: Stage::Push,
         files: vec!["credential.txt".into()],
         push_range: Some(format!("{base}..{topic}")),
+        languages: Default::default(),
     };
     let cmd = Gitleaks.command(&ctx).unwrap();
     let out = run::run(&cmd, &repo, "gitleaks", run::HANG_GUARD)

@@ -121,6 +121,7 @@ mod tests {
             stage: Stage::Commit,
             files: vec!["conf.txt".into()],
             push_range: None,
+            languages: Default::default(),
         }
     }
 
@@ -169,6 +170,7 @@ mod tests {
         let push = Context {
             stage: Stage::Push,
             push_range: Some("abc..def".into()),
+            languages: Default::default(),
             ..ctx()
         };
         let c = Gitleaks.command(&push).unwrap();

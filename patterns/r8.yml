@@ -149,7 +149,12 @@ rules:
       - pattern: subprocess.$F(["/usr/bin/security", ...], ...)
       - pattern: subprocess.$F("=~/^(\/usr\/bin\/)?security\s/", ...)
       - pattern: keyring.$F(...)
-      - pattern: '"=~/^(security[ ]+)?(find|add|delete)-(generic|internet)-password([^-a-z]|$)/"'
+      # A string in an assertion is text a test compares, never a keychain read.
+      - patterns:
+          - pattern: '"=~/^(security[ ]+)?(find|add|delete)-(generic|internet)-password([^-a-z]|$)/"'
+          - pattern-not-inside: assert $X
+          - pattern-not-inside: assert $X, $Y
+          - pattern-not-regex: '\bself\.assert\w*\s*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)'
 
   - id: python-test-network
     languages: [python]
@@ -352,8 +357,13 @@ rules:
       - pattern: SecItemAdd(...)
       - pattern: SecItemUpdate(...)
       - pattern: SecItemDelete(...)
-      - pattern: '"=~/^[/]usr[/]bin[/]security$/"'
-      - pattern: '"=~/^(security[ ]+)?(find|add|delete)-(generic|internet)-password([^-a-z]|$)/"'
+      # A string in an assertion is text a test compares, never a keychain read.
+      # (Semgrep's Swift parser cannot read #expect yet; it is named for when it can.)
+      - patterns:
+          - pattern-either:
+              - pattern: '"=~/^[/]usr[/]bin[/]security$/"'
+              - pattern: '"=~/^(security[ ]+)?(find|add|delete)-(generic|internet)-password([^-a-z]|$)/"'
+          - pattern-not-regex: '(?:\bXCTAssert\w*|#expect)\s*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)'
 
   - id: swift-test-network
     languages: [swift]
@@ -527,7 +537,10 @@ rules:
       - pattern: std::process::Command::new("security")
       - pattern: std::process::Command::new("/usr/bin/security")
       - pattern: keyring::Entry::new(...)
-      - pattern: '"=~/^(security[ ]+)?(find|add|delete)-(generic|internet)-password([^-a-z]|$)/"'
+      # A string in an assertion is text a test compares, never a keychain read.
+      - patterns:
+          - pattern: '"=~/^(security[ ]+)?(find|add|delete)-(generic|internet)-password([^-a-z]|$)/"'
+          - pattern-not-regex: '\b(?:debug_)?assert(?:_eq|_ne)?!\s*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)'
 
   - id: rust-test-network
     languages: [rust]
@@ -707,7 +720,10 @@ rules:
           - pattern: std::process::Command::new("security")
           - pattern: std::process::Command::new("/usr/bin/security")
           - pattern: keyring::Entry::new(...)
-          - pattern: '"=~/^(security[ ]+)?(find|add|delete)-(generic|internet)-password([^-a-z]|$)/"'
+          # A string in an assertion is text a test compares, never a keychain read.
+          - patterns:
+              - pattern: '"=~/^(security[ ]+)?(find|add|delete)-(generic|internet)-password([^-a-z]|$)/"'
+              - pattern-not-regex: '\b(?:debug_)?assert(?:_eq|_ne)?!\s*\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)'
 
   - id: rust-test-mod-network
     languages: [rust]

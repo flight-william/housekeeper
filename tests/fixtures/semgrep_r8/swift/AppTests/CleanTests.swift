@@ -36,4 +36,13 @@ final class CleanTests: XCTestCase {
         let value = await compute()
         XCTAssertEqual(value, 1)
     }
+
+    func testAssertsOnTheStandInLog() {
+        let log = ""
+        XCTAssertEqual(log, "find-generic-password -s svc")
+        XCTAssertTrue(log.hasPrefix("/usr/bin/security"))
+        XCTAssertFalse(
+            log.contains("/usr/bin/security")
+        )
+    }
 }

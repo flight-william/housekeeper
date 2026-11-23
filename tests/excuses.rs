@@ -35,17 +35,17 @@ reason = "old code, split in the refactor slice"
 
 // This test replaced `a_matching_entry_excuses_every_finding_of_that_rule_in_that_file`,
 // which pinned a v0 shortcut (rule + file only). The rule: an entry excuses its rule,
-// file and symbol, up to its value.
+// file and symbol, up to its value, and at most `count` findings (default 1); it once
+// excused every match, so a second finding of `run` in src/old.rs was excused too.
 #[test]
 fn an_entry_excuses_findings_of_its_rule_file_and_symbol() {
     let findings = vec![
         finding("R3", "src/old.rs", 10),
-        finding("R3", "src/old.rs", 90),
         finding("R4", "src/old.rs", 10),
         finding("R3", "src/new.rs", 10),
     ];
     let out = apply(findings, &list(ONE), today());
-    assert_eq!(out.excused.len(), 2);
+    assert_eq!(out.excused.len(), 1);
     assert!(out.excused.iter().all(|f| f.rule == "R3"));
     assert_eq!(out.to_fix.len(), 2);
     assert!(out.problems.is_empty());

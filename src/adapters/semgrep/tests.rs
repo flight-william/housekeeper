@@ -14,6 +14,7 @@ fn ctx(files: &[&str]) -> Context {
         stage: Stage::Commit,
         files: files.iter().map(|f| (*f).to_string()).collect(),
         push_range: None,
+        languages: Default::default(),
     }
 }
 
@@ -81,13 +82,9 @@ fn command_passes_the_pattern_file_and_only_the_concerned_files() {
     );
 }
 
-fn strings(items: &[&str]) -> Vec<String> {
-    items.iter().map(|s| (*s).to_string()).collect()
-}
-
 #[test]
 fn fixture_files_are_never_targets() {
-    let files = strings(&[
+    let files = ctx(&[
         "tests/fixtures/semgrep/planted/tests/clock.rs",
         "tests/a.rs",
     ]);
@@ -96,7 +93,7 @@ fn fixture_files_are_never_targets() {
 
 #[test]
 fn semgrepignore_lines_drop_files_by_prefix() {
-    let files = strings(&["vendor/x.py", "build/gen.rs", "src/app.py", "docs/a.py"]);
+    let files = ctx(&["vendor/x.py", "build/gen.rs", "src/app.py", "docs/a.py"]);
     let ignore = "# generated\n\nvendor/\n/build\n./docs/\n";
     assert_eq!(targets(&files, ignore), ["src/app.py"]);
 }

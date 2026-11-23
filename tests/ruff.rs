@@ -14,6 +14,7 @@ fn ctx(files: &[&str]) -> Context {
         stage: Stage::Commit,
         files: files.iter().map(|f| f.to_string()).collect(),
         push_range: None,
+        languages: Default::default(),
     }
 }
 

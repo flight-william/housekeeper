@@ -53,7 +53,9 @@ impl Adapter for R3 {
         let files: Vec<String> = ctx
             .files
             .iter()
-            .filter(|f| EXTENSIONS.iter().any(|ext| f.ends_with(ext)))
+            .filter(|f| {
+                EXTENSIONS.iter().any(|ext| f.ends_with(ext)) || ctx.languages.contains_key(*f)
+            })
             .cloned()
             .collect();
         if files.is_empty() {

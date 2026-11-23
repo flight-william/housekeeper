@@ -1,9 +1,10 @@
 //! Which files a stage checks: commit, the staged files; push, the files the push sends.
 
-use crate::adapter::{CannotCheck, Stage};
+use crate::adapter::{CannotCheck, Language, Stage};
 use crate::approval::glob_matches;
 use crate::run::git;
-use std::io::{IsTerminal, Read};
+use std::collections::BTreeMap;
+use std::io::{BufRead, IsTerminal, Read};
 use std::path::{Path, PathBuf};
 
 /// The repo's top folder, from any folder inside it.
@@ -16,6 +17,12 @@ pub fn repo_root(cwd: &Path) -> Result<PathBuf, CannotCheck> {
 /// (`push::Push`).
 pub struct Scope {
     pub files: Vec<String>,
+    /// Every changed path but deletes, links and excluded paths kept: what the
+    /// policy checks (`approval::wrong_case`) judge.
+    pub changed: Vec<String>,
+    /// The test step runs: at push when the push changes any path (`Push::touched`),
+    /// else when there is a file to check.
+    pub run_tests: bool,
     pub push_range: Option<String>,
     pub unbounded: bool,
 }
@@ -38,7 +45,9 @@ pub fn for_stage_excluding(
 ) -> Result<Scope, CannotCheck> {
     match stage {
         Stage::Commit => {
-            let files = without_excluded(staged(root)?, exclude);
+            let all = staged_changes(root)?;
+            let changed = not_deleted(&all);
+            let files = without_excluded(for_tools(root, &all), exclude);
             let unstaged = split_nul(&git(root, &["diff", "--name-only", "-z"])?.stdout);
             refuse_changed(
                 &files,
@@ -47,7 +56,9 @@ pub fn for_stage_excluding(
                 "stage or stash the rest: git add the file, or git stash push --keep-index",
             )?;
             Ok(Scope {
+                run_tests: !files.is_empty(),
                 files,
+                changed,
                 push_range: None,
                 unbounded: false,
             })
@@ -71,6 +82,8 @@ pub fn for_stage_excluding(
             let push = crate::push::pushed(root, &text)?;
             Ok(Scope {
                 files: without_excluded(push.files, exclude),
+                changed: push.changed,
+                run_tests: push.touched,
                 push_range: push.range,
                 unbounded: push.unbounded,
             })
@@ -159,6 +172,18 @@ pub(crate) fn changes(root: &Path, diff: &[&str]) -> Result<Vec<Change>, CannotC
         .collect())
 }
 
+/// The paths of `changes` not deleted, links and all, sorted, no repeats.
+pub(crate) fn not_deleted(changes: &[Change]) -> Vec<String> {
+    let mut paths: Vec<String> = changes
+        .iter()
+        .filter(|c| c.status != 'D')
+        .map(|c| c.path.clone())
+        .collect();
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
 /// The paths of `changes` a tool can read: not deleted, not a link.
 pub(crate) fn for_tools(root: &Path, changes: &[Change]) -> Vec<String> {
     let kept = changes.iter().filter(|c| c.status != 'D');
@@ -186,4 +211,55 @@ pub(crate) fn split_nul(text: &str) -> Vec<String> {
         .filter(|s| !s.is_empty())
         .map(str::to_string)
         .collect()
+}
+
+/// The extensions the adapters choose files by. A file with any other name has its
+/// first line read (`languages`).
+const KNOWN: [&str; 6] = [".py", ".pyi", ".sh", ".bash", ".rs", ".swift"];
+
+/// The longest first line read: a shebang longer than this names no language.
+const FIRST_LINE_MAX: u64 = 256;
+
+/// The language of each of `files` (relative to `root`) whose name has no known
+/// extension, from its first line (`language_of`). Each such file is opened once and
+/// at most its first line read; a file that cannot be read, or whose first line is not
+/// text (a binary file), has none.
+pub fn languages(root: &Path, files: &[String]) -> BTreeMap<String, Language> {
+    files
+        .iter()
+        .filter(|f| !KNOWN.iter().any(|ext| f.ends_with(ext)))
+        .filter_map(|f| {
+            let file = std::fs::File::open(root.join(f)).ok()?;
+            let mut line = Vec::new();
+            std::io::BufReader::new(file.take(FIRST_LINE_MAX))
+                .read_until(b'\n', &mut line)
+                .ok()?;
+            let cut = line.len() as u64 == FIRST_LINE_MAX && !line.ends_with(b"\n");
+            let text = std::str::from_utf8(&line).ok()?;
+            if cut || text.contains('\0') {
+                return None;
+            }
+            Some((f.clone(), language_of(text.trim_end())?))
+        })
+        .collect()
+}
+
+/// The language a first line names: `#!` then the interpreter, by its name, directly
+/// or through `env` (`#!/usr/bin/env python3`). python, python3, python3.13: Python;
+/// sh, bash, dash, ksh: shell. Anything else, zsh among them, is none.
+pub fn language_of(first_line: &str) -> Option<Language> {
+    let mut words = first_line.strip_prefix("#!")?.split_whitespace();
+    let name = |path: &str| path.rsplit('/').next().unwrap_or(path).to_string();
+    let mut program = name(words.next()?);
+    if program == "env" {
+        program = name(words.find(|w| !w.starts_with('-') && !w.contains('='))?);
+    }
+    match program.as_str() {
+        "sh" | "bash" | "dash" | "ksh" => Some(Language::Shell),
+        _ => {
+            let version = program.strip_prefix("python")?;
+            let digits = version.chars().all(|c| c.is_ascii_digit() || c == '.');
+            digits.then_some(Language::Python)
+        }
+    }
 }

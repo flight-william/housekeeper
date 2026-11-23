@@ -1,8 +1,8 @@
 //! shellcheck: shell scripts (R2). Captured with ShellCheck 0.11.0.
-//! v0 picks files by the `.sh` extension only (no shebang sniffing).
+//! Files by the `.sh` extension, or a shell first line (`Context::languages`).
 
 use super::Exits;
-use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
+use crate::adapter::{Adapter, CannotCheck, Command, Context, Language, Output};
 use crate::finding::{Finding, Place};
 use serde::Deserialize;
 
@@ -45,7 +45,7 @@ impl Adapter for Shellcheck {
         let files: Vec<String> = ctx
             .files
             .iter()
-            .filter(|f| f.ends_with(".sh"))
+            .filter(|f| f.ends_with(".sh") || ctx.first_line_is(f, Language::Shell))
             .cloned()
             .collect();
         if files.is_empty() {
@@ -99,6 +99,7 @@ mod tests {
             stage: Stage::Commit,
             files: files.iter().map(|f| f.to_string()).collect(),
             push_range: None,
+            languages: Default::default(),
         }
     }
 

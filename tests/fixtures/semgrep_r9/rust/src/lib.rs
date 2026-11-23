@@ -17,6 +17,7 @@ mod tests {
     #[ignore]
     fn slow() {
         let _ = helper();
+        let _ = foo(bar(baz()));
     }
 
     #[test]
