@@ -1,4 +1,11 @@
 //! SwiftLint: R2 lint, R3 length, R4 complexity.
+//!
+//! SwiftLint applies a config's `included:` only when it picks the files itself:
+//! files named on its command line are all linted (0.65.1), so the repo's own
+//! scope (probes, scripts left out) would be skipped. With a `.swiftlint.yml` at
+//! the root, SwiftLint is run with no paths, as the project runs it, and house
+//! keeps the findings on the files the stage checks; without one, the files are
+//! named.
 
 use super::Exits;
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
@@ -22,6 +29,13 @@ struct Violation {
     reason: String,
     rule_id: String,
 }
+
+/// The config SwiftLint reads from the folder it runs in.
+const CONFIG: &str = ".swiftlint.yml";
+
+/// SwiftLint's error, exit 1, when its scope holds no Swift file (every one left
+/// out by the config): it checked nothing by the project's own choice.
+const NO_LINTABLE: &str = "Error: No lintable files found at paths: ";
 
 /// The house rule for a SwiftLint rule id; unknown ones are R2.
 fn house_rule(rule_id: &str) -> &'static str {
@@ -68,7 +82,9 @@ impl Adapter for SwiftLint {
             .iter()
             .map(|a| a.to_string())
             .collect();
-        args.extend(files);
+        if !ctx.root.join(CONFIG).is_file() {
+            args.extend(files);
+        }
         Some(Command {
             program: "swiftlint".to_string(),
             args,
@@ -76,6 +92,12 @@ impl Adapter for SwiftLint {
     }
 
     fn parse(&self, ctx: &Context, out: &Output) -> Result<Vec<Finding>, CannotCheck> {
+        let nothing_in_scope = out.exit == 1
+            && out.stdout.trim().is_empty()
+            && out.stderr.lines().any(|l| l.starts_with(NO_LINTABLE));
+        if nothing_in_scope {
+            return Ok(Vec::new());
+        }
         let violations: Vec<Violation> = serde_json::from_str(&out.stdout).map_err(|_| {
             let why = out.stderr.lines().next().unwrap_or("no output");
             CannotCheck {
@@ -98,7 +120,12 @@ impl Adapter for SwiftLint {
                 measure: None,
             })
             .collect();
-        EXITS.judge("swiftlint", out, findings)
+        // Judged on every finding: exit 2 may come from a file outside the stage's.
+        let findings = EXITS.judge("swiftlint", out, findings)?;
+        Ok(findings
+            .into_iter()
+            .filter(|f| matches!(&f.place, Place::File(file) if ctx.files.contains(file)))
+            .collect())
     }
 }
 

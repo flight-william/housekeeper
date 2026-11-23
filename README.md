@@ -61,6 +61,10 @@ chosen by its first line: `#!/usr/bin/env python3` goes to ruff, ruff format, r3
 and `#!/bin/sh` or `#!/usr/bin/env bash` to ShellCheck, r3 and Semgrep. A zsh script, which
 ShellCheck cannot read, goes to none of them, nor does a binary file.
 
+SwiftLint keeps to the repo's own scope: with a `.swiftlint.yml` at the root, SwiftLint picks
+the files itself, by its `included:` and `excluded:`, and only its findings on the files the
+stage checks count. Without one, the stage's Swift files are named to it.
+
 Every `Cargo.toml` a stage sends is also read by house itself, whatever `[tools]` lists: a
 lint set to `allow` (or `expect`) in a `[lints]` or `[workspace.lints]` table silences it for
 the whole crate, so each such entry is an R9 finding at its line. `deny`, `forbid` and `warn`

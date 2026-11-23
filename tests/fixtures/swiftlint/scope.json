@@ -1,0 +1,20 @@
+[
+  {
+    "character" : 20,
+    "file" : "/repo/Sources/A.swift",
+    "line" : 2,
+    "reason" : "Force casts should be avoided",
+    "rule_id" : "force_cast",
+    "severity" : "Error",
+    "type" : "Force Cast"
+  },
+  {
+    "character" : 12,
+    "file" : "/repo/Sources/B.swift",
+    "line" : 1,
+    "reason" : "Lines should not have trailing semicolons",
+    "rule_id" : "trailing_semicolon",
+    "severity" : "Warning",
+    "type" : "Trailing Semicolon"
+  }
+]
