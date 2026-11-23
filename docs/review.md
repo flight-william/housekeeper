@@ -46,32 +46,40 @@ A weekly look is `house review --from` the day a week ago.
 
 ## What the report holds
 
-A made-up sample:
+A made-up sample: the whole report over the made-up records in `tests/fixtures/review_docs`,
+which a test checks against this page.
+
+```sh
+house review --from 2026-11-16 --to 2026-11-22
+```
 
 ```
-house review: 2026-11-16 to 2026-11-22, 40 runs: 20 commit, 14 push, 6 all
+house review: 2026-11-16 to 2026-11-22, 10 runs: 6 commit, 3 push, 1 all
 2 lines skipped: not house run records
 per rule:
-  R3: 4 findings, 6 excused, 0 cannot check
+  R2: 0 findings, 0 excused, 1 cannot check
+  R3: 1 finding, 6 excused, 0 cannot check
   R4: 3 findings, 0 excused, 0 cannot check
-  R8: 0 findings, 0 excused, 1 cannot check
 5 excused in records that do not say which rule (before house 0.3.0)
 per tool:
-  gitleaks: 18 runs, 0 findings, 0 excused, 0 cannot check, 9.0 s total, 0.5 s median
-  r3: 20 runs, 4 findings, 6 excused, 0 cannot check, 4.0 s total, 0.2 s median
-  ruff: 20 runs, 3 findings, 0 excused, 0 cannot check, 20.0 s total, 1.0 s median
-  semgrep: 6 runs, 0 findings, 0 excused, 1 cannot check, 120.0 s total, 20.0 s median
+  gitleaks: 9 runs, 0 findings, 0 excused, 0 cannot check, 4.5 s total, 0.5 s median
+  r3: 10 runs, 1 finding, 6 excused, 0 cannot check, 2.0 s total, 0.2 s median
+  ruff: 10 runs, 3 findings, 0 excused, 0 cannot check, 10.0 s total, 1.0 s median
+  semgrep: 4 runs, 0 findings, 0 excused, 1 cannot check, 60.0 s total, 20.0 s median
 repeated places (failed on more than one run):
   R4 src/score.py [ruff C901]: 3 runs
 suggestions (to weigh, not orders):
-  suggestion: gitleaks never fires: no findings in 18 runs; check that it is handed the files it should read
-  suggestion: R3 looks noisy: 6 of 10 findings excused; fix that code, or tune the rule
-  suggestion: semgrep takes most of the time: 120.0 of 153.0 s (78%); run it at push only, or hand it fewer files
+  suggestion: gitleaks never fires: no findings in 9 runs; check that it is handed the files it should read
+  suggestion: R3 looks noisy: 6 of 7 findings excused; fix that code, or tune the rule
+  suggestion: R4 looks noisy: 3 of 3 left to fix on places that failed before; fix that code, or tune the rule
+  suggestion: r3 looks noisy: 6 of 7 findings excused; fix that code, or tune the tool
+  suggestion: ruff looks noisy: 3 of 3 left to fix on places that failed before; fix that code, or tune the tool
+  suggestion: semgrep takes most of the time: 60.0 of 76.5 s (78%); run it at push only, or hand it fewer files
 ```
 
 | Part | What it shows |
 |---|---|
-| **Header** | The first and last day of the runs covered, the number of runs, and the runs per stage: commit, commit-msg, push and all. |
+| **Header** | The period asked for, `--from` to `--to` (a bound not given is the day of the first or last run covered; the cli gives today for `--to`), the number of runs, and the runs per stage: commit, commit-msg, push and all. |
 | **lines skipped** | `N lines skipped: not house run records`. The record folder can hold lines another program wrote, or a broken one; they are skipped and counted. So is a blank line, a line that is not valid UTF-8, and a line longer than 1 MiB, which is never held in memory. The line is absent when none were skipped. |
 | **record files skipped** | `N record files skipped: not regular files`. Only a regular file named `<YYYY-MM>.jsonl` is read. A folder, a FIFO or a symbolic link with such a name is skipped and counted, never followed or waited on. A regular file that cannot be read stops the review (exit 2). The line is absent when none were skipped. |
 | **per rule** | For each rule: the findings left to fix, the excused findings and the cannot-checks. A cannot-check is counted under the rule of the tool that could not run. |
