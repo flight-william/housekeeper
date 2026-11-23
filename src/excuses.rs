@@ -99,6 +99,9 @@ pub struct Applied {
     pub to_fix: Vec<Finding>,
     /// Findings a live entry excuses: recorded, not replied.
     pub excused: Vec<Finding>,
+    /// For each finding given, in order, whether it is excused: identical findings
+    /// are told apart by place in the list, never by equality.
+    pub excused_at: Vec<bool>,
     /// The list's own problems (expired or stale entries): the agent fixes these too.
     pub problems: Vec<Finding>,
 }
@@ -114,6 +117,7 @@ pub fn apply(findings: Vec<Finding>, excuses: &[Excuse], today: Date) -> Applied
     let given = fit(&findings, excuses, today);
     let mut used = vec![0_u32; excuses.len()];
     for (f, entry) in findings.into_iter().zip(given) {
+        out.excused_at.push(entry.is_some());
         match entry {
             Some(e) => {
                 used[e] += 1;

@@ -87,10 +87,12 @@ pub(super) fn apply_list(
         total: sorted.excused.len(),
         by_tool: Vec::new(),
     };
+    // `all` is every tool's findings in order, so the verdicts follow them one by one.
+    let mut verdicts = sorted.excused_at.iter();
     for t in &mut report.tools {
         let mut by_rule = std::collections::BTreeMap::new();
         t.findings.retain(|f| {
-            let keep = !sorted.excused.contains(f);
+            let keep = !verdicts.next().copied().unwrap_or(false);
             if !keep {
                 *by_rule.entry(f.rule.clone()).or_insert(0) += 1;
             }

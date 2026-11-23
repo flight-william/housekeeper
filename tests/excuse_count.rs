@@ -176,3 +176,48 @@ fn an_existing_suppression_is_excused_and_a_new_one_in_the_same_file_is_reported
         assert!(text.contains("R9 hooks/old.py:6"), "{args:?}: {text}");
     }
 }
+
+/// Three identical findings (ruff's undefined name, three times on one line) and an
+/// entry with `count = 1`: one leaves the reply, two stay. The reply was filtered by
+/// equality with the excused finding, so all three left it while one was counted.
+#[test]
+fn count_one_takes_one_of_several_identical_findings_out_of_the_reply() {
+    use house::adapter::Stage;
+    use house::reply::{Report, ToolRun};
+    let root = repo("excuse-count-identical");
+    let entry = "[[excuse]]\nrule = \"R2\"\nfile = \"a.py\"\nsymbol = \"missing\"\ncount = 1\ndeadline = \"2026-12-31\"\nreason = \"the old loader goes in the next slice\"\n";
+    std::fs::write(root.join(".house-excuses.toml"), entry).unwrap();
+    git(&root, &["add", "-A"]);
+    git(&root, &["commit", "-qm", "list"]);
+    let missing = Finding {
+        rule: "R2".into(),
+        place: Place::File("a.py".into()),
+        line: Some(1),
+        what: "Undefined name `missing`".into(),
+        fix: "fix the ruff rule F821".into(),
+        tool_rule: "ruff F821".into(),
+        measure: None,
+    };
+    let other = Finding {
+        line: Some(2),
+        what: "Undefined name `other`".into(),
+        ..missing.clone()
+    };
+    let mut report = Report {
+        stage: Stage::Commit,
+        seconds: 0.0,
+        tools: vec![ToolRun {
+            name: "ruff".into(),
+            seconds: 0.0,
+            exit: Some(1),
+            skipped: false,
+            findings: vec![missing.clone(), missing.clone(), missing.clone(), other],
+            cannot: None,
+            unread: Vec::new(),
+        }],
+    };
+    let excused = house::cli::excuse(&mut report, &root, today(), Some("HEAD"));
+    assert_eq!(excused, 1);
+    let left: Vec<Option<u32>> = report.findings().iter().map(|f| f.line).collect();
+    assert_eq!(left, [Some(1), Some(1), Some(2)], "{}", report.text());
+}
