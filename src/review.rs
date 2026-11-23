@@ -1,12 +1,13 @@
 //! `house review`: the run records read back into one report, so the rules are tuned
-//! with evidence. Pure but for `load`: the records' lines and a filter in, a `Review`
-//! out. Nothing here reads the clock; the cli gives the period.
+//! with evidence: the record folder (`read`) and a filter in, a `Review` out. Nothing
+//! here reads the clock; the cli gives the period.
 //!
 //! The record folder also holds lines other programs wrote. A line is house's own
 //! record when it is a JSON object with a `start` that begins with a real date, a
 //! `stage` and a `tools` list of named tools; any other line, a broken one included,
 //! is skipped and counted.
 
+mod read;
 mod suggest;
 mod text;
 
@@ -32,10 +33,13 @@ impl Filter {
     fn covers(&self, day: Date, repo: &str) -> bool {
         self.from.is_none_or(|from| day >= from)
             && self.to.is_none_or(|to| day <= to)
-            && self
-                .repo
-                .as_deref()
-                .is_none_or(|want| same_repo(repo, want))
+            && self.in_repo(repo)
+    }
+
+    fn in_repo(&self, repo: &str) -> bool {
+        self.repo
+            .as_deref()
+            .is_none_or(|want| same_repo(repo, want))
     }
 }
 
@@ -158,6 +162,8 @@ pub struct Review {
     pub stages: BTreeMap<String, usize>,
     /// Lines in the record files that are not house's run records.
     pub skipped_lines: usize,
+    /// Entries named like a month's record file that are not regular files.
+    pub skipped_files: usize,
     /// Every repo a covered run was in.
     pub repos: BTreeSet<String>,
     /// Every rule a record of the repo names, in the period or not, with its counts
@@ -174,48 +180,6 @@ pub struct Review {
     pub place_tools: BTreeMap<(Place, String), usize>,
 }
 
-/// The lines of every `<YYYY-MM>.jsonl` in `dir`, oldest month first; a folder that
-/// does not exist holds no records. Bytes that are not UTF-8 make a broken line.
-pub fn load(dir: &Path) -> std::io::Result<Vec<String>> {
-    let entries = match std::fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(e),
-    };
-    let mut files = Vec::new();
-    for entry in entries {
-        let path = entry?.path();
-        if path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .is_some_and(month_file)
-        {
-            files.push(path);
-        }
-    }
-    files.sort();
-    let mut lines = Vec::new();
-    for file in files {
-        let bytes = std::fs::read(&file)?;
-        let text = String::from_utf8_lossy(&bytes);
-        lines.extend(
-            text.lines()
-                .filter(|l| !l.trim().is_empty())
-                .map(String::from),
-        );
-    }
-    Ok(lines)
-}
-
-/// `YYYY-MM.jsonl`, the name house gives a month's records.
-fn month_file(name: &str) -> bool {
-    let b = name.as_bytes();
-    name.len() == 13
-        && name.ends_with(".jsonl")
-        && b[4] == b'-'
-        && b[..4].iter().chain(&b[5..7]).all(u8::is_ascii_digit)
-}
-
 /// A house record line and its start day, or `None` for any other line.
 fn parse(line: &str) -> Option<(Run, Date)> {
     let run: Run = serde_json::from_str(line).ok()?;
@@ -223,31 +187,39 @@ fn parse(line: &str) -> Option<(Run, Date)> {
     Some((run, day))
 }
 
-/// The review of `lines` (from `load`) for the runs `filter` covers.
-pub fn review(lines: &[String], filter: &Filter) -> Review {
+/// The review of the records in `dir` for the runs `filter` covers.
+pub fn review_folder(dir: &Path, filter: &Filter) -> std::io::Result<Review> {
     let mut r = Review {
         filter: filter.clone(),
         ..Review::default()
     };
-    let in_repo = Filter {
-        repo: filter.repo.clone(),
-        ..Filter::default()
-    };
-    for line in lines {
+    let folder = read::each_line(dir, |line| r.add_line(line))?;
+    r.skipped_files = folder.skipped_files;
+    Ok(r)
+}
+
+impl Review {
+    /// One line of a record file: a covered run is added, a line that is not a house
+    /// record is counted. A blank line is neither.
+    fn add_line(&mut self, bytes: &[u8]) {
+        let text = String::from_utf8_lossy(bytes);
+        let line = text.as_ref();
+        if line.trim().is_empty() {
+            return;
+        }
         let Some((run, day)) = parse(line) else {
-            r.skipped_lines += 1;
-            continue;
+            self.skipped_lines += 1;
+            return;
         };
-        if in_repo.covers(day, &run.repo) {
+        if self.filter.in_repo(&run.repo) {
             for rule in run.tools.iter().flat_map(Tool::rules) {
-                r.rules.entry(rule).or_default();
+                self.rules.entry(rule).or_default();
             }
         }
-        if filter.covers(day, &run.repo) {
-            r.add(&run, day);
+        if self.filter.covers(day, &run.repo) {
+            self.add(&run, day);
         }
     }
-    r
 }
 
 impl Review {

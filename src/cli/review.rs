@@ -59,8 +59,13 @@ pub(super) fn run_review(
         );
         return 2;
     };
-    let lines = match review::load(&dir) {
-        Ok(lines) => lines,
+    let filter = Filter {
+        from,
+        to: Some(to.unwrap_or_else(today)),
+        repo: repo.map(|r| repo_key(cwd, r)),
+    };
+    let review = match review::review_folder(&dir, &filter) {
+        Ok(review) => review,
         Err(e) => {
             println!(
                 "house review: cannot read the records in {}: {e}. fix: set HOUSE_LOG_DIR to a folder you can read",
@@ -69,12 +74,6 @@ pub(super) fn run_review(
             return 2;
         }
     };
-    let filter = Filter {
-        from,
-        to: Some(to.unwrap_or_else(today)),
-        repo: repo.map(|r| repo_key(cwd, r)),
-    };
-    let review = review::review(&lines, &filter);
     if json {
         println!("{}", review.json());
     } else {

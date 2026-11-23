@@ -15,6 +15,15 @@ impl Review {
             let lines = plural(self.skipped_lines, "line", "lines");
             out.push_str(&format!("{lines} skipped: not house run records\n"));
         }
+        if self.skipped_files > 0 {
+            let files = plural(self.skipped_files, "record file", "record files");
+            let what = if self.skipped_files == 1 {
+                "not a regular file"
+            } else {
+                "not regular files"
+            };
+            out.push_str(&format!("{files} skipped: {what}\n"));
+        }
         out.push_str("per rule:\n");
         for (rule, count) in self.rules_in_order() {
             out.push_str(&format!("  {rule}: {}\n", counts(count)));
@@ -113,6 +122,7 @@ impl Review {
             "runs": self.runs,
             "stages": stages,
             "skipped_lines": self.skipped_lines,
+            "skipped_files": self.skipped_files,
             "rules": rules,
             "tools": tools,
             "excused_unattributed": self.excused_unattributed,

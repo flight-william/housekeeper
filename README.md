@@ -115,7 +115,8 @@ weigh, not orders: a rule or tool that never fires (no findings in at least 5 ru
 period, the tool's own runs for a tool), one that looks noisy (its findings mostly excused,
 or failing again on the same places), and a tool that takes most of the time. `--repo` takes
 a repo's path or its folder name. A line in the folder that is not a house run record,
-another program's or a broken one, is skipped and counted. A record written before 0.3.0
+another program's or a broken one, is skipped and counted. So is an entry named like a month's
+file that is not a regular file (a folder, a FIFO, a link). A record written before 0.3.0
 keeps only the run's excused total, so those excuses are counted apart from the rules.
 
 ## On a runner
