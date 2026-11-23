@@ -98,6 +98,24 @@ the commit message says: on a case-insensitive filesystem the tool reads it as i
 while CODEOWNERS matches case-sensitively and asks no owner to review it. Use the canonical
 name.
 
+## Review the records
+
+```sh
+house review --from 2026-11-01
+```
+
+`house review [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--repo <path or name>] [--json]` reads
+the run records (`$HOUSE_LOG_DIR`, else `~/Library/Logs/house/runs`) and prints one report
+for the runs that started in the period (`--to` is today when not given): the runs per
+stage; per rule and per tool, the findings, the excused findings and the cannot-checks; each
+tool's total and median seconds; the places (rule, file, tool rule) that failed on more
+than one run, most often first; and suggestions to weigh, not orders: a rule or tool that
+never fires, one that looks noisy (its findings mostly excused, or failing again on the same
+places), and a tool that takes most of the time. `--repo` takes a repo's path or its folder
+name. A line in the folder that is not a house run record, another program's or a broken
+one, is skipped and counted. A record written before 0.3.0 keeps only the run's excused
+total, so those excuses are counted apart from the rules.
+
 ## On a runner
 
 A pull request can change `.house.toml` and `.house-excuses.toml`, so on a runner the rules

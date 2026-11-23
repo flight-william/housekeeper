@@ -1,10 +1,13 @@
 //! `house check --stage commit|push [--json]`, `house check --all [--json]`,
 //! `house commit-msg <file>`,
+//! `house review [--from D] [--to D] [--repo R] [--json]`,
 //! `house init [--owner @user]`, `house --version`. Arguments are parsed by hand.
-//! The cli is the only place that reads the clock for the excuse list's "today".
+//! The cli is the only place that reads the clock: for the excuse list's "today",
+//! and for the last day `house review` covers when `--to` is not given.
 
 mod excuse;
 mod message;
+mod review;
 mod stage;
 
 pub use excuse::{excuse, excuse_all};
@@ -17,12 +20,13 @@ use crate::reply::{Report, stage_name};
 use crate::rules::Rules;
 use crate::{adapters, files, init, record, run, runner};
 use message::commit_msg;
+use review::{parse_review, run_review};
 use serde_json::Value;
 use stage::{Mode, check_from};
 use std::path::Path;
 use std::time::SystemTime;
 
-pub const USAGE: &str = "usage: house check --stage commit|push [--json] | house check --stage push --config-from <rev> [--json] | house check --all [--json] | house commit-msg <message file> | house init [--owner @user] | house --version";
+pub const USAGE: &str = "usage: house check --stage commit|push [--json] | house check --stage push --config-from <rev> [--json] | house check --all [--json] | house commit-msg <message file> | house review [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--repo <path or name>] [--json] | house init [--owner @user] | house --version";
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Cmd {
@@ -42,6 +46,13 @@ pub enum Cmd {
     InitOwner {
         owner: String,
     },
+    /// `to`: the last day; the cli takes today when it is `None`.
+    Review {
+        from: Option<Date>,
+        to: Option<Date>,
+        repo: Option<String>,
+        json: bool,
+    },
     Version,
 }
 
@@ -59,6 +70,7 @@ pub fn parse(args: &[String]) -> Result<Cmd, String> {
             file: file.to_string(),
         }),
         ["check", rest @ ..] => parse_check(rest),
+        ["review", rest @ ..] => parse_review(rest),
         _ => Err(USAGE.into()),
     }
 }
@@ -122,6 +134,12 @@ pub fn main(args: &[String], cwd: &Path) -> i32 {
             config_from,
         }) => check_and_record(cwd, Mode::Stage(stage), json, config_from.as_deref()),
         Ok(Cmd::CheckAll { json }) => check_and_record(cwd, Mode::All, json, None),
+        Ok(Cmd::Review {
+            from,
+            to,
+            repo,
+            json,
+        }) => run_review(cwd, from, to, repo.as_deref(), json),
     }
 }
 

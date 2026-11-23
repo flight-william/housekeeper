@@ -1,0 +1,352 @@
+//! `house review`: one plain report over the run records in `$HOUSE_LOG_DIR`. The
+//! records in tests/fixtures/review are made up: four November runs (three in
+//! /work/shop, one in /work/blog), one October run, two lines another program wrote
+//! and one broken line.
+
+mod common;
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+fn fixtures() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/review")
+}
+
+/// `house review <args>` over the records in `log`, from `cwd`: (exit, stdout).
+fn review_in(cwd: &Path, log: &Path, args: &[&str]) -> (i32, String) {
+    let out = Command::new(env!("CARGO_BIN_EXE_house"))
+        .arg("review")
+        .args(args)
+        .current_dir(cwd)
+        .env("HOUSE_LOG_DIR", log)
+        .env_remove("CLAUDECODE")
+        .output()
+        .unwrap();
+    (
+        out.status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+    )
+}
+
+fn review(args: &[&str]) -> (i32, String) {
+    review_in(&common::fresh("review-cwd"), &fixtures(), args)
+}
+
+const NOVEMBER: [&str; 4] = ["--from", "2026-11-01", "--to", "2026-11-30"];
+
+#[test]
+fn the_header_names_the_period_and_the_runs_per_stage() {
+    let (code, text) = review(&NOVEMBER);
+    assert_eq!(code, 0, "{text}");
+    assert!(
+        text.starts_with(
+            "house review: 2026-11-01 to 2026-11-30, 4 runs: 2 commit, 1 push, 1 all\n"
+        ),
+        "{text}"
+    );
+}
+
+#[test]
+fn the_period_is_inclusive_and_read_from_each_records_start() {
+    let (_, text) = review(&["--from", "2026-11-03", "--to", "2026-11-05"]);
+    assert!(
+        text.starts_with("house review: 2026-11-03 to 2026-11-05, 2 runs: 1 commit, 1 push\n"),
+        "{text}"
+    );
+    let (_, text) = review(&["--to", "2026-10-31"]);
+    assert!(
+        text.starts_with("house review: 2026-10-15 to 2026-10-31, 1 run: 1 commit\n"),
+        "{text}"
+    );
+}
+
+#[test]
+fn lines_that_are_not_house_records_are_skipped_and_counted_in_one_line() {
+    // Two lines with "schema_version" and no "tools", and one cut-off line; notes.json
+    // is not a month's record file and is not read.
+    let (code, text) = review(&NOVEMBER);
+    assert_eq!(code, 0, "{text}");
+    let skipped: Vec<&str> = text.lines().filter(|l| l.contains("skipped")).collect();
+    assert_eq!(
+        skipped,
+        ["3 lines skipped: not house run records"],
+        "{text}"
+    );
+}
+
+#[test]
+fn each_rule_has_its_findings_excused_and_cannot_checks() {
+    let (_, text) = review(&NOVEMBER);
+    let block = section(&text, "per rule:");
+    assert_eq!(
+        block,
+        [
+            "  R2: 2 findings, 0 excused, 1 cannot check",
+            "  R3: 3 findings, 6 excused, 0 cannot check",
+            "  R4: 2 findings, 0 excused, 0 cannot check",
+            // Known from October's record, silent in November.
+            "  R8: 0 findings, 0 excused, 0 cannot check",
+        ],
+        "{text}"
+    );
+}
+
+#[test]
+fn each_tool_has_its_runs_findings_and_seconds_total_and_median() {
+    let (_, text) = review(&NOVEMBER);
+    let block = section(&text, "per tool:");
+    assert_eq!(
+        block,
+        [
+            // Skipped on the first run: two runs.
+            "  clippy: 2 runs, 1 finding, 0 excused, 0 cannot check, 17.0 s total, 8.5 s median",
+            "  gitleaks: 4 runs, 0 findings, 0 excused, 0 cannot check, 1.9 s total, 0.5 s median",
+            "  r3: 3 runs, 3 findings, 6 excused, 0 cannot check, 0.7 s total, 0.2 s median",
+            "  ruff: 4 runs, 3 findings, 0 excused, 0 cannot check, 3.5 s total, 0.9 s median",
+            "  semgrep: 1 run, 0 findings, 0 excused, 1 cannot check, 0.0 s total, 0.0 s median",
+        ],
+        "{text}"
+    );
+}
+
+/// A record with one run line, in a fresh record folder.
+fn folder_with(name: &str, lines: &[&str]) -> PathBuf {
+    let log = common::fresh(name);
+    std::fs::write(log.join("2026-11.jsonl"), lines.join("\n") + "\n").unwrap();
+    log
+}
+
+const OLD_RUN: &str = r#"{"start":"2026-11-02T09:00:00Z","repo":"/work/shop","stage":"commit","seconds":1.0,"exit":0,"tools":[{"name":"r3","seconds":0.2,"skipped":false,"findings":{},"cannot_check":null}],"findings":[],"excused":2}"#;
+
+#[test]
+fn excuses_in_a_record_without_a_tools_excused_map_are_counted_apart() {
+    // Records written before house 0.3.0 keep only the run's excused total.
+    let log = folder_with("review-old", &[OLD_RUN]);
+    let (code, text) = review_in(&log, &log, &NOVEMBER);
+    assert_eq!(code, 0, "{text}");
+    assert!(
+        text.contains("\n2 excused in records that do not say which rule (before house 0.3.0)\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("  r3: 1 run, 0 findings, 0 excused,"),
+        "{text}"
+    );
+}
+
+/// The indented lines under `heading`.
+fn section<'a>(text: &'a str, heading: &str) -> Vec<&'a str> {
+    text.lines()
+        .skip_while(|l| *l != heading)
+        .skip(1)
+        .take_while(|l| l.starts_with("  "))
+        .collect()
+}
+
+#[test]
+fn a_place_that_failed_on_more_than_one_run_is_listed_most_frequent_first() {
+    let (_, text) = review(&NOVEMBER);
+    // Two repos in the period: each place names its repo.
+    assert_eq!(
+        section(&text, "repeated places (failed on more than one run):"),
+        [
+            "  R3 src/big.py [r3 file] in shop: 3 runs",
+            "  R4 src/score.py [ruff C901] in shop: 2 runs",
+        ],
+        "{text}"
+    );
+    // October's R4 on the same place is outside the period.
+    let (_, text) = review(&["--from", "2026-11-03", "--to", "2026-11-30"]);
+    assert_eq!(
+        section(&text, "repeated places (failed on more than one run):"),
+        ["  R3 src/big.py [r3 file] in shop: 2 runs"],
+        "{text}"
+    );
+}
+
+#[test]
+fn a_place_found_twice_in_one_run_is_not_repeated() {
+    let run = r#"{"start":"2026-11-02T09:00:00Z","repo":"/work/shop","stage":"commit","tools":[{"name":"ruff","seconds":1.0,"findings":{"R4":2},"excused":{}}],"findings":[{"rule":"R4","place":"src/a.py","line":3,"tool_rule":"ruff C901"},{"rule":"R4","place":"src/a.py","line":9,"tool_rule":"ruff C901"}],"excused":0}"#;
+    let log = folder_with("review-once", &[run]);
+    let (_, text) = review_in(&log, &log, &NOVEMBER);
+    assert!(text.contains("\nrepeated places: none\n"), "{text}");
+}
+
+#[test]
+fn repo_takes_a_folder_name_or_a_path_and_names_no_repo_on_the_places() {
+    let (_, text) = review(&[&NOVEMBER[..], &["--repo", "shop"]].concat());
+    assert!(
+        text.starts_with("house review: 2026-11-01 to 2026-11-30, 3 runs: 2 commit, 1 push\n"),
+        "{text}"
+    );
+    assert_eq!(
+        section(&text, "repeated places (failed on more than one run):"),
+        [
+            "  R3 src/big.py [r3 file]: 3 runs",
+            "  R4 src/score.py [ruff C901]: 2 runs",
+        ],
+        "{text}"
+    );
+    let (_, text) = review(&[&NOVEMBER[..], &["--repo", "/work/blog"]].concat());
+    assert!(
+        text.starts_with("house review: 2026-11-01 to 2026-11-30, 1 run: 1 all\n"),
+        "{text}"
+    );
+    // A path is its repo's top folder, from anywhere inside it.
+    let repo = common::repo("review-path");
+    std::fs::create_dir_all(repo.join("sub")).unwrap();
+    let run = OLD_RUN.replace("/work/shop", &repo.display().to_string());
+    let log = folder_with("review-path-log", &[&run, OLD_RUN]);
+    let (_, text) = review_in(
+        &repo.join("sub"),
+        &log,
+        &[&NOVEMBER[..], &["--repo", ".."]].concat(),
+    );
+    assert!(text.contains(", 1 run: 1 commit\n"), "{text}");
+    let (_, text) = review_in(&repo, &log, &[&NOVEMBER[..], &["--repo", "./sub"]].concat());
+    assert!(text.contains(", 1 run: 1 commit\n"), "{text}");
+}
+
+const SUGGESTIONS: &str = "suggestions (to weigh, not orders):";
+
+#[test]
+fn suggestions_name_what_never_fires_what_looks_noisy_and_the_slow_tool() {
+    let (_, text) = review(&NOVEMBER);
+    assert_eq!(
+        section(&text, SUGGESTIONS),
+        [
+            "  suggestion: R8 never fires: no findings in 4 runs; check that a tool still checks it, or drop it",
+            "  suggestion: gitleaks never fires: no findings in 4 runs; check that it is handed the files it should read",
+            "  suggestion: R3 looks noisy: 6 of 9 findings excused, 3 of 3 left to fix on places that failed before; fix that code, or tune the rule",
+            "  suggestion: R4 looks noisy: 2 of 2 left to fix on places that failed before; fix that code, or tune the rule",
+            "  suggestion: r3 looks noisy: 6 of 9 findings excused, 3 of 3 left to fix on places that failed before; fix that code, or tune the tool",
+            "  suggestion: ruff looks noisy: 2 of 3 left to fix on places that failed before; fix that code, or tune the tool",
+            "  suggestion: clippy takes most of the time: 17.0 of 23.1 s (74%); run it at push only, or hand it fewer files",
+        ],
+        "{text}"
+    );
+}
+
+#[test]
+fn a_rule_mostly_excused_looks_noisy_without_repeating() {
+    let run = r#"{"start":"2026-11-02T09:00:00Z","repo":"/work/shop","stage":"commit","tools":[{"name":"r3","seconds":0.1,"findings":{"R3":1},"excused":{"R3":3}},{"name":"ruff","seconds":0.1,"findings":{},"excused":{}}],"findings":[{"rule":"R3","place":"src/a.py","tool_rule":"r3 file"}],"excused":3}"#;
+    let log = folder_with("review-excused", &[run]);
+    let (_, text) = review_in(&log, &log, &NOVEMBER);
+    let lines = section(&text, SUGGESTIONS);
+    assert!(
+        lines.contains(&"  suggestion: R3 looks noisy: 3 of 4 findings excused; fix that code, or tune the rule"),
+        "{text}"
+    );
+}
+
+#[test]
+fn nothing_to_suggest_says_so() {
+    // One tool, one run, nothing excused or repeated.
+    let run = r#"{"start":"2026-11-02T09:00:00Z","repo":"/work/shop","stage":"commit","tools":[{"name":"ruff","seconds":1.0,"findings":{"R4":1},"excused":{}}],"findings":[{"rule":"R4","place":"src/a.py","tool_rule":"ruff C901"}],"excused":0}"#;
+    let log = folder_with("review-quiet", &[run]);
+    let (_, text) = review_in(&log, &log, &NOVEMBER);
+    assert!(text.ends_with("\nsuggestions: none\n"), "{text}");
+}
+
+#[test]
+fn json_holds_the_same_report_as_one_object() {
+    let (code, text) = review(&[&NOVEMBER[..], &["--json"]].concat());
+    assert_eq!(code, 0, "{text}");
+    assert_eq!(text.lines().count(), 1, "{text}");
+    let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(v["from"], "2026-11-01");
+    assert_eq!(v["to"], "2026-11-30");
+    assert_eq!(v["runs"], 4);
+    assert_eq!(
+        v["stages"],
+        serde_json::json!({"commit": 2, "push": 1, "all": 1})
+    );
+    assert_eq!(v["skipped_lines"], 3);
+    assert_eq!(
+        v["rules"][1],
+        serde_json::json!({"rule": "R3", "findings": 3, "excused": 6, "cannot_check": 0})
+    );
+    assert_eq!(
+        v["tools"][0],
+        serde_json::json!({"tool": "clippy", "runs": 2, "findings": 1, "excused": 0, "cannot_check": 0, "seconds_total": 17.0, "seconds_median": 8.5})
+    );
+    assert_eq!(v["excused_unattributed"], 0);
+    assert_eq!(
+        v["repeated"][0],
+        serde_json::json!({"repo": "/work/shop", "rule": "R3", "place": "src/big.py", "tool_rule": "r3 file", "runs": 3})
+    );
+    assert_eq!(v["repeated"].as_array().unwrap().len(), 2);
+    assert_eq!(v["suggestions"].as_array().unwrap().len(), 7);
+    assert_eq!(
+        v["suggestions"][6],
+        serde_json::json!({"kind": "slow", "subject": "clippy", "text": "clippy takes most of the time: 17.0 of 23.1 s (74%); run it at push only, or hand it fewer files"})
+    );
+    assert_eq!(v["suggestions"][0]["kind"], "never_fires");
+    assert_eq!(v["suggestions"][2]["kind"], "looks_noisy");
+}
+
+#[test]
+fn broken_lines_are_skipped_and_counted_never_a_crash() {
+    let log = folder_with(
+        "review-broken",
+        &[
+            "[1, 2]",
+            "42",
+            "not json at all",
+            r#"{"start":"2026-11-02T09:00:00Z","stage":"commit","tools":{"name":"ruff"}}"#,
+            r#"{"start":"yesterday","stage":"commit","tools":[]}"#,
+            r#"{"start":"2026-02-30T09:00:00Z","stage":"commit","tools":[]}"#,
+            r#"{"start":"2026-11-02T09:00:00Z","stage":"commit","tools":[{"seconds":1}]}"#,
+            r#"{"schema_version":1,"start":"2026-11-02T09:00:00Z","stage":"commit"}"#,
+            OLD_RUN,
+        ],
+    );
+    let mut bytes = std::fs::read(log.join("2026-11.jsonl")).unwrap();
+    bytes.extend_from_slice(b"{\"start\":\"2026-11-02\xff\xfe\n");
+    std::fs::write(log.join("2026-11.jsonl"), bytes).unwrap();
+    let (code, text) = review_in(&log, &log, &NOVEMBER);
+    assert_eq!(code, 0, "{text}");
+    assert!(text.contains(", 1 run: 1 commit\n"), "{text}");
+    assert!(
+        text.contains("\n9 lines skipped: not house run records\n"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_record_folder_that_does_not_exist_holds_no_runs() {
+    let missing = common::fresh("review-missing").join("runs");
+    let (code, text) = review_in(missing.parent().unwrap(), &missing, &NOVEMBER);
+    assert_eq!(code, 0, "{text}");
+    assert!(
+        text.starts_with("house review: 2026-11-01 to 2026-11-30, 0 runs\n"),
+        "{text}"
+    );
+    assert!(!text.contains("skipped"), "{text}");
+    assert!(text.ends_with("\nsuggestions: none\n"), "{text}");
+}
+
+#[test]
+fn a_bad_date_or_an_unknown_option_is_a_usage_error() {
+    for args in [
+        &["--from", "2026-13-01"][..],
+        &["--to", "today"],
+        &["--from", "2026-11-30", "--to", "2026-11-01"],
+        &["--repo"],
+        &["--since", "2026-11-01"],
+    ] {
+        let (code, text) = review(args);
+        assert_eq!(code, 2, "{args:?}: {text}");
+    }
+}
+
+#[test]
+fn without_to_the_review_runs_to_today() {
+    // Every fixture run is in the past, so each one is covered.
+    let (code, text) = review(&["--from", "2026-10-01"]);
+    assert_eq!(code, 0, "{text}");
+    assert!(
+        text.contains(", 5 runs: 3 commit, 1 push, 1 all\n"),
+        "{text}"
+    );
+}
