@@ -136,14 +136,21 @@ pub struct Review {
     pub excused_unattributed: u64,
     /// A sum passed `u64::MAX`; the review is then refused, never wrapped.
     pub overflowed: bool,
-    /// Each place a finding was on, with the number of runs it was found in.
-    pub places: BTreeMap<Place, usize>,
-    /// The findings on each place, every one counted, across the covered runs.
-    pub place_findings: BTreeMap<Place, u64>,
-    /// The findings on a place by a tool: the one tool of the run whose findings hold
-    /// the place's rule. When two tools hold it, the finding is no tool's: the record
-    /// does not say which, and none is invented.
-    pub place_tools: BTreeMap<(Place, String), u64>,
+    /// Each place a finding was on: its runs, its findings and who found them.
+    pub places: BTreeMap<Place, PlaceStat>,
+}
+
+/// A place across the covered runs.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PlaceStat {
+    /// The runs it was found in, once per run.
+    pub runs: usize,
+    /// Its findings, every one counted.
+    pub findings: u64,
+    /// Its findings by tool: the one tool of the run whose findings hold the place's
+    /// rule. When two tools hold it, the finding is no tool's: the record does not
+    /// say which, and none is invented.
+    pub by_tool: BTreeMap<String, u64>,
 }
 
 /// The most distinct places, rules, tools, stages and repos a review keeps: what it
@@ -184,6 +191,15 @@ pub fn review_folder(dir: &Path, filter: &Filter) -> Result<Review, ReviewError>
         )));
     }
     Ok(r)
+}
+
+/// The value at `key`, made empty first when absent: the key is copied only then,
+/// not on every one of the many lookups that find it.
+fn slot<'a, V: Default>(map: &'a mut BTreeMap<String, V>, key: &str) -> &'a mut V {
+    if !map.contains_key(key) {
+        map.insert(key.to_string(), V::default());
+    }
+    map.get_mut(key).expect("the key was inserted above")
 }
 
 /// `total + n`, or `overflowed` set and `total` kept when the sum does not fit.
@@ -228,9 +244,11 @@ impl Review {
         if self.filter.in_repo(&run.repo) {
             for tool in &run.tools {
                 for rule in tool.rules() {
-                    let tools = self.rule_tools.entry(rule.clone()).or_default();
-                    tools.insert(tool.name.clone());
-                    self.rules.entry(rule).or_default();
+                    let tools = slot(&mut self.rule_tools, rule);
+                    if !tools.contains(&tool.name) {
+                        tools.insert(tool.name.clone());
+                    }
+                    slot(&mut self.rules, rule);
                 }
             }
         }
@@ -274,19 +292,19 @@ impl Review {
         if tool.skipped {
             return;
         }
-        let stat = self.tools.entry(tool.name.clone()).or_default();
+        let stat = slot(&mut self.tools, &tool.name);
         stat.runs += 1;
         stat.excused_unknown |= excused_unknown;
         stat.checked += usize::from(tool.cannot_check.is_none());
         stat.seconds.push(tool.seconds);
         for (rule, n) in &tool.findings {
             add_count(&mut stat.count.findings, *n, &mut self.overflowed);
-            let by_rule = &mut self.rules.entry(rule.clone()).or_default().findings;
+            let by_rule = &mut slot(&mut self.rules, rule).findings;
             add_count(by_rule, *n, &mut self.overflowed);
         }
         for (rule, n) in tool.excused.iter().flatten() {
             add_count(&mut stat.count.excused, *n, &mut self.overflowed);
-            let by_rule = &mut self.rules.entry(rule.clone()).or_default().excused;
+            let by_rule = &mut slot(&mut self.rules, rule).excused;
             add_count(by_rule, *n, &mut self.overflowed);
         }
         if tool.cannot_check.is_some() {
@@ -297,34 +315,33 @@ impl Review {
     }
 
     /// The places the run's findings were on: each place's runs count once per run,
-    /// its findings once per finding, by the tool that found them.
+    /// its findings once per finding, by the tool that found them. One lookup per
+    /// place: the place map is the review's largest.
     fn add_places(&mut self, run: &Run) {
-        let mut places: BTreeMap<Place, u64> = BTreeMap::new();
+        let mut seen: BTreeMap<(&str, &str, &str), u64> = BTreeMap::new();
         for f in &run.findings {
-            let place = Place {
-                repo: run.repo.clone(),
-                rule: f.rule.clone(),
-                place: f.place.clone(),
-                tool_rule: f.tool_rule.clone(),
-            };
-            *places.entry(place).or_default() += 1;
+            let key = (f.rule.as_str(), f.place.as_str(), f.tool_rule.as_str());
+            *seen.entry(key).or_default() += 1;
         }
-        for (place, n) in places {
-            let mut holders = run
-                .tools
-                .iter()
-                .filter(|t| t.findings.contains_key(&place.rule));
-            if let (Some(tool), None) = (holders.next(), holders.next()) {
-                let key = (place.clone(), tool.name.clone());
-                add_findings(
-                    self.place_tools.entry(key).or_default(),
-                    n,
-                    &mut self.overflowed,
-                );
+        for ((rule, place, tool_rule), n) in seen {
+            let mut holders = run.tools.iter().filter(|t| t.findings.contains_key(rule));
+            let tool = match (holders.next(), holders.next()) {
+                (Some(tool), None) => Some(tool.name.as_str()),
+                _ => None,
+            };
+            let key = Place {
+                repo: run.repo.clone(),
+                rule: rule.to_string(),
+                place: place.to_string(),
+                tool_rule: tool_rule.to_string(),
+            };
+            let stat = self.places.entry(key).or_default();
+            stat.runs += 1;
+            add_findings(&mut stat.findings, n, &mut self.overflowed);
+            if let Some(tool) = tool {
+                let by_tool = stat.by_tool.entry(tool.to_string()).or_default();
+                add_findings(by_tool, n, &mut self.overflowed);
             }
-            let findings = self.place_findings.entry(place.clone()).or_default();
-            add_findings(findings, n, &mut self.overflowed);
-            *self.places.entry(place).or_default() += 1;
         }
     }
 
@@ -333,8 +350,8 @@ impl Review {
         let mut repeated: Vec<(&Place, usize)> = self
             .places
             .iter()
-            .filter(|(_, runs)| **runs > 1)
-            .map(|(p, runs)| (p, *runs))
+            .filter(|(_, stat)| stat.runs > 1)
+            .map(|(p, stat)| (p, stat.runs))
             .collect();
         repeated.sort_by_key(|(p, runs)| (std::cmp::Reverse(*runs), *p));
         repeated

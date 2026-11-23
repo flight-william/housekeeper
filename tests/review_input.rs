@@ -17,6 +17,11 @@ const HANG_GUARD: Duration = Duration::from_secs(20);
 /// `house review --from 2026-11-01 --to 2026-11-30` over `log`: (exit, stdout), or
 /// `None` when it was still running at the guard and was killed.
 fn review_guarded(log: &Path, extra: &[&str]) -> Option<(i32, String)> {
+    review_within(log, extra, HANG_GUARD)
+}
+
+/// `review_guarded` with its own guard: `None` when not done within `guard`.
+fn review_within(log: &Path, extra: &[&str], guard: Duration) -> Option<(i32, String)> {
     let child = Command::new(env!("CARGO_BIN_EXE_house"))
         .args(["review", "--from", "2026-11-01", "--to", "2026-11-30"])
         .args(extra)
@@ -30,7 +35,7 @@ fn review_guarded(log: &Path, extra: &[&str]) -> Option<(i32, String)> {
     let pid = child.id().to_string();
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || tx.send(child.wait_with_output().unwrap()));
-    match rx.recv_timeout(HANG_GUARD) {
+    match rx.recv_timeout(guard) {
         Ok(out) => Some((
             out.status.code().unwrap_or(-1),
             String::from_utf8_lossy(&out.stdout).into_owned(),
@@ -205,4 +210,36 @@ fn a_blank_line_is_not_a_record_and_is_counted_like_any_other() {
     assert_eq!(code, 0, "{text}");
     let v: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert_eq!(v["skipped_lines"], 3, "{text}");
+}
+
+#[test]
+fn suggestions_over_15000_distinct_rules_and_places_take_well_under_2_s() {
+    // 15000 rules, each with its own place, all on two runs: every place repeats.
+    // A pass over every place for every rule took 12 s here; one pass takes a
+    // fraction of a second, even in a debug build.
+    let log = common::fresh("review-many-subjects");
+    let mut lines = String::new();
+    for chunk in 0..15 {
+        let ids = chunk * 1000..(chunk + 1) * 1000;
+        let counts: Vec<String> = ids.clone().map(|i| format!(r#""R{i}":1"#)).collect();
+        let findings: Vec<String> = ids
+            .map(|i| format!(r#"{{"rule":"R{i}","place":"src/{i}.rs","tool_rule":"size"}}"#))
+            .collect();
+        lines.push_str(&format!(
+            r#"{{"start":"2026-11-01T00:00:00Z","repo":"/work/shop","stage":"commit","tools":[{{"name":"tool","seconds":0.1,"findings":{{{}}},"excused":{{}}}}],"findings":[{}],"excused":0}}"#,
+            counts.join(","),
+            findings.join(",")
+        ));
+        lines.push('\n');
+    }
+    std::fs::write(log.join("2026-11.jsonl"), lines.repeat(2)).unwrap();
+    let Some((code, text)) = review_within(&log, &["--json"], Duration::from_secs(2)) else {
+        panic!("house review over 15000 rules was not done within 2 s");
+    };
+    assert_eq!(code, 0, "{text}");
+    let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(v["runs"], 30, "{}", &text[..200.min(text.len())]);
+    assert_eq!(v["repeated"].as_array().unwrap().len(), 15000);
+    // Every rule's finding repeats: 15000 rules and the tool look noisy.
+    assert_eq!(v["suggestions"].as_array().unwrap().len(), 15001);
 }

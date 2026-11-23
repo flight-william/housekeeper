@@ -3,6 +3,7 @@
 
 use super::{Count, Review};
 use serde::Serialize;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The fewest runs in the period, of the review or of the tool, after which a rule
 /// or tool with no findings is said to never fire: fewer runs are too few to tell.
@@ -19,11 +20,15 @@ pub struct Suggestion {
 
 impl Review {
     /// Never fires (rules, then tools), looks noisy (rules, then tools), then the
-    /// tool that takes most of the time.
+    /// tool that takes most of the time. Every total is made in one pass over the
+    /// places and the checked runs, then looked up per rule and tool, so the time
+    /// grows with the records, not with rules times places.
     pub fn suggestions(&self) -> Vec<Suggestion> {
+        let checked = self.rule_checked_runs();
+        let (rule_repeats, tool_repeats) = self.repeats();
         let mut out = Vec::new();
         for (rule, count) in self.rules_in_order() {
-            let runs = self.rule_checked_runs(rule);
+            let runs = checked.get(rule).copied().unwrap_or(0);
             if runs >= NEVER_FIRES_MIN_RUNS && silent(count) && !self.rule_excused_unknown(rule) {
                 out.push(never_fires(rule, runs, RULE_CHECK));
             }
@@ -35,26 +40,40 @@ impl Review {
             }
         }
         for (rule, count) in self.rules_in_order() {
-            out.extend(noisy(rule, count, self.rule_repeats(rule), "rule"));
+            let repeats = rule_repeats.get(rule).copied().unwrap_or(0);
+            out.extend(noisy(rule, count, repeats, "rule"));
         }
         for (tool, stat) in &self.tools {
-            out.extend(noisy(tool, &stat.count, self.tool_repeats(tool), "tool"));
+            let repeats = tool_repeats.get(tool.as_str()).copied().unwrap_or(0);
+            out.extend(noisy(tool, &stat.count, repeats, "tool"));
         }
         out.extend(self.slow());
         out
     }
 
-    /// The covered runs in which a tool that names `rule` checked: a run where they
-    /// were all skipped or could not check says nothing about the rule.
-    fn rule_checked_runs(&self, rule: &str) -> usize {
-        let Some(tools) = self.rule_tools.get(rule) else {
-            return 0;
-        };
-        self.checked_sets
-            .iter()
-            .filter(|(checked, _)| !checked.is_disjoint(tools))
-            .map(|(_, runs)| runs)
-            .sum()
+    /// For each rule, the covered runs in which a tool that names it checked: a run
+    /// where they were all skipped or could not check says nothing about the rule.
+    /// Each set of checked tools adds its runs once to every rule its tools name.
+    fn rule_checked_runs(&self) -> BTreeMap<&str, usize> {
+        let mut tool_rules: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+        for (rule, tools) in &self.rule_tools {
+            for tool in tools {
+                tool_rules.entry(tool).or_default().push(rule);
+            }
+        }
+        let mut runs: BTreeMap<&str, usize> = BTreeMap::new();
+        for (checked, n) in &self.checked_sets {
+            let rules: BTreeSet<&str> = checked
+                .iter()
+                .filter_map(|t| tool_rules.get(t.as_str()))
+                .flatten()
+                .copied()
+                .collect();
+            for rule in rules {
+                *runs.entry(rule).or_default() += n;
+            }
+        }
+        runs
     }
 
     /// A tool that names `rule` ran where excuses were not tied to a rule (records
@@ -67,28 +86,22 @@ impl Review {
         })
     }
 
-    /// A rule's findings on places found on more than one run, every finding counted.
-    /// The sum is only compared, and shown capped at the rule's checked total, so a
-    /// saturated sum gives the same suggestion as the exact one.
-    fn rule_repeats(&self, rule: &str) -> u64 {
-        self.place_findings
-            .iter()
-            .filter(|(p, _)| p.rule == rule && self.repeated_place(p))
-            .map(|(_, n)| *n)
-            .fold(0, u64::saturating_add)
-    }
-
-    /// A tool's findings on places found on more than one run, every finding counted.
-    fn tool_repeats(&self, tool: &str) -> u64 {
-        self.place_tools
-            .iter()
-            .filter(|((p, t), _)| t == tool && self.repeated_place(p))
-            .map(|(_, n)| *n)
-            .fold(0, u64::saturating_add)
-    }
-
-    fn repeated_place(&self, place: &super::Place) -> bool {
-        self.places.get(place).is_some_and(|runs| *runs > 1)
+    /// The findings on places found on more than one run, every finding counted, by
+    /// rule and by the tool that found them. A sum is only compared, and shown capped
+    /// at the rule's or tool's own total, so a saturated sum gives the same
+    /// suggestion as the exact one.
+    fn repeats(&self) -> (BTreeMap<&str, u64>, BTreeMap<&str, u64>) {
+        let mut by_rule: BTreeMap<&str, u64> = BTreeMap::new();
+        let mut by_tool: BTreeMap<&str, u64> = BTreeMap::new();
+        for (place, stat) in self.places.iter().filter(|(_, s)| s.runs > 1) {
+            let total = by_rule.entry(place.rule.as_str()).or_default();
+            *total = total.saturating_add(stat.findings);
+            for (tool, n) in &stat.by_tool {
+                let total = by_tool.entry(tool.as_str()).or_default();
+                *total = total.saturating_add(*n);
+            }
+        }
+        (by_rule, by_tool)
     }
 
     /// The tool with more than half of all the tools' seconds, when two or more ran.

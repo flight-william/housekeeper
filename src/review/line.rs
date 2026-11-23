@@ -51,13 +51,17 @@ pub(super) struct Tool {
 
 impl Tool {
     /// The rules this tool's entry names: its findings, its excuses, its cannot-check.
-    pub(super) fn rules(&self) -> impl Iterator<Item = String> + '_ {
-        let excused = self.excused.iter().flat_map(|m| m.keys().cloned());
-        let cannot = self
-            .cannot_check
-            .as_ref()
-            .map(|_| cannot_rule(&self.name).to_string());
-        self.findings.keys().cloned().chain(excused).chain(cannot)
+    pub(super) fn rules(&self) -> impl Iterator<Item = &str> + '_ {
+        let excused = self
+            .excused
+            .iter()
+            .flat_map(|m| m.keys().map(String::as_str));
+        let cannot = self.cannot_check.as_ref().map(|_| cannot_rule(&self.name));
+        self.findings
+            .keys()
+            .map(String::as_str)
+            .chain(excused)
+            .chain(cannot)
     }
 }
 
