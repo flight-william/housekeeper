@@ -91,3 +91,13 @@ final class PlantedTests: XCTestCase {
         XCTAssertEqual(SecItemCopyMatching(query, &result), errSecSuccess)
     }
 }
+
+final class MoveTests: XCTestCase {
+    func testMovesToAMachinePath() throws {
+        try FileManager.default.copyItem(atPath: "tmp", toPath: "/Users/someone/a")
+        try FileManager.default.moveItem(atPath: "tmp", toPath: "/Users/someone/b")
+        let from = URL(fileURLWithPath: "tmp")
+        try FileManager.default.copyItem(at: from, to: URL(fileURLWithPath: "/home/someone/c"))
+        try FileManager.default.moveItem(at: from, to: URL(fileURLWithPath: "~/d"))
+    }
+}
