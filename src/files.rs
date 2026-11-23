@@ -13,11 +13,67 @@ pub fn repo_root(cwd: &Path) -> Result<PathBuf, CannotCheck> {
     Ok(PathBuf::from(out.stdout.trim()))
 }
 
-/// The repository's identity, the same in each of its worktrees: its root commit
-/// (`git rev-list --max-parents=0 HEAD`; the oldest when there are several, by
-/// commit time, then hash), or `None` before the first commit.
-pub fn root_commit(dir: &Path) -> Option<String> {
-    let out = git(dir, &["log", "--max-parents=0", "--format=%ct %H", "HEAD"]).ok()?;
+/// The branches whose root commit names a repository, the first that exists: the
+/// remote's default branch, then a local main, then a local master. Each is a
+/// `git rev-parse --glob` pattern matching that one ref: a pattern with no glob
+/// character would be read as a folder of refs (`refs/heads/main/*`).
+const DEFAULT_BRANCHES: [&str; 3] = [
+    "--glob=refs/remotes/origin/HEA[D]",
+    "--glob=refs/heads/mai[n]",
+    "--glob=refs/heads/maste[r]",
+];
+
+/// Who a repository is, the same in each of its worktrees whatever their HEAD; each
+/// field is known or `None` on its own.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Identity {
+    /// The root commit of its default branch (the first of `DEFAULT_BRANCHES`; the
+    /// oldest root by commit time, then hash, when it has several). `None` when no
+    /// default branch exists, or in a shallow repository, whose oldest commit is
+    /// where its history was cut, not its root.
+    pub root_commit: Option<String>,
+    /// Its main checkout: the folder holding the `.git` folder every worktree shares
+    /// (`git rev-parse --git-common-dir`'s parent). `None` when that folder is not
+    /// named `.git` (a bare repository).
+    pub main_checkout: Option<PathBuf>,
+}
+
+/// The identity of the repository holding `dir`, in two git calls: one `rev-parse`
+/// for whether it is shallow, its shared `.git` folder and its default branch, then
+/// the walk of that branch for its roots. Any git failure leaves a field `None`.
+pub fn identity(dir: &Path) -> Identity {
+    let mut args = vec![
+        "rev-parse",
+        "--is-shallow-repository",
+        "--git-common-dir",
+        "--symbolic-full-name",
+    ];
+    args.extend(DEFAULT_BRANCHES);
+    let Ok(out) = git(dir, &args) else {
+        return Identity::default();
+    };
+    let mut lines = out.stdout.lines().map(str::trim);
+    let shallow = lines.next() != Some("false");
+    let main_checkout = lines.next().and_then(|common| main_of(dir, common));
+    let branch = lines.next().filter(|b| !shallow && !b.is_empty());
+    Identity {
+        root_commit: branch.and_then(|b| oldest_root(dir, b)),
+        main_checkout,
+    }
+}
+
+/// The parent of the shared `.git` folder `common` (relative to `dir` or absolute).
+fn main_of(dir: &Path, common: &str) -> Option<PathBuf> {
+    let common = dir.join(common).canonicalize().ok()?;
+    if common.file_name()? != ".git" {
+        return None;
+    }
+    common.parent().map(Path::to_path_buf)
+}
+
+/// The oldest root commit of `branch`, by commit time, then hash.
+fn oldest_root(dir: &Path, branch: &str) -> Option<String> {
+    let out = git(dir, &["log", "--max-parents=0", "--format=%ct %H", branch]).ok()?;
     out.stdout
         .lines()
         .filter_map(|l| {
@@ -26,18 +82,6 @@ pub fn root_commit(dir: &Path) -> Option<String> {
         })
         .min()
         .map(|(_, hash)| hash)
-}
-
-/// The repository's main checkout, the folder holding the `.git` folder every
-/// worktree shares (`git rev-parse --git-common-dir`'s parent), or `None` when that
-/// folder is not named `.git` (a bare repository).
-pub fn main_checkout(dir: &Path) -> Option<PathBuf> {
-    let out = git(dir, &["rev-parse", "--git-common-dir"]).ok()?;
-    let common = dir.join(out.stdout.trim()).canonicalize().ok()?;
-    if common.file_name()? != ".git" {
-        return None;
-    }
-    common.parent().map(Path::to_path_buf)
 }
 
 /// What a stage checks: its files, and at push the range and whether it is bounded

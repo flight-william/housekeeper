@@ -117,8 +117,10 @@ findings mostly excused, or failing again on the same places), and a tool that t
 the time.
 
 `--repo` picks one repository's runs, from all its folders: its main checkout and every
-worktree. Since 0.3.1 each record names the repository by its root commit (the oldest, if it
-has several) and its main checkout, beside the folder the run was in. `--repo <path>` (it
+worktree. Since 0.3.1 each record names the repository by the root commit of its default
+branch (`origin/HEAD`, else `main`, else `master`; the oldest, if it has several), whatever
+branch the worktree is on, and by its main checkout, beside the folder the run was in. A
+shallow clone records no root commit. `--repo <path>` (it
 holds a `/` or starts with `.`) takes the root commit of the repository at that path and
 counts every record with that root commit, from whichever folder; a record without one,
 written before 0.3.1, counts when its folder is the path's top folder. `--repo <name>`

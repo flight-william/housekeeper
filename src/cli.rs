@@ -233,8 +233,7 @@ pub(crate) fn write_record(
             .ok()
             .map(|o| o.stdout.trim().to_string())
             .filter(|h| !h.is_empty()),
-        root_commit: crate::files::root_commit(root),
-        main_checkout: crate::files::main_checkout(root),
+        identity: crate::files::identity(root),
         user: std::env::var("USER").unwrap_or_default(),
     };
     let mut line = record::line(&info, report);

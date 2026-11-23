@@ -43,6 +43,8 @@ fn root_of(repo: &Path) -> String {
 /// A repo with one commit and a worktree of it: (main checkout, worktree).
 fn repo_with_worktree(name: &str) -> (PathBuf, PathBuf) {
     let main = common::repo(name);
+    // main: the default branch whose root names the repository.
+    common::git(&main, &["checkout", "-q", "-b", "main"]);
     std::fs::write(main.join("a.txt"), "a\n").unwrap();
     common::git(&main, &["add", "a.txt"]);
     common::git(&main, &["commit", "-q", "-m", "a"]);

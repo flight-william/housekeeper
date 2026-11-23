@@ -100,15 +100,19 @@ fn repo_key(cwd: &Path, repo: &str) -> Repo {
         .map_or(repo.trim_end_matches('/').to_string(), |p| {
             p.display().to_string()
         });
-    let is_dir = path.is_dir();
-    let name = is_dir
-        .then(|| files::main_checkout(&path))
-        .flatten()
+    let identity = if path.is_dir() {
+        files::identity(&path)
+    } else {
+        files::Identity::default()
+    };
+    let name = identity
+        .main_checkout
+        .as_ref()
         .and_then(|main| main.file_name().map(|n| n.to_string_lossy().into_owned()))
         .unwrap_or_else(|| last_part(&folder).to_string());
     Repo::Path {
         name,
-        root_commit: is_dir.then(|| files::root_commit(&path)).flatten(),
+        root_commit: identity.root_commit,
         folder,
     }
 }

@@ -45,21 +45,33 @@ A weekly look is `house review --from` the day a week ago.
 ### Which runs `--repo` counts
 
 `--repo` matches a repository, not a folder. Agents work in many git worktrees of one
-repository, each its own folder, and every run records the folder it ran in. So since
-0.3.1 each record also names the repository: `root_commit`, its root commit (`git rev-list
---max-parents=0 HEAD`, the oldest by commit time when there are several), the same in every
-worktree; and `main_checkout`, the folder holding the `.git` folder its worktrees share
-(`git rev-parse --git-common-dir`'s parent). Both are `null` when unknown: no commit yet, or
-a bare repository.
+repository, each its own folder and on its own branch, and every run records the folder it
+ran in. So since 0.3.1 each record also names the repository, in two fields that are known
+or `null` each on its own:
+
+- `root_commit`: the root commit of the repository's default branch, the first of
+  `refs/remotes/origin/HEAD`, `refs/heads/main` and `refs/heads/master` that exists (`git
+  rev-list --max-parents=0 <branch>`, the oldest by commit time when there are several). It
+  does not depend on the worktree's own HEAD, so a worktree on an unrelated or orphan branch
+  records the same root as the main checkout. It is `null` when no commit or none of those
+  branches exists, and in a shallow clone (`git rev-parse --is-shallow-repository`), whose
+  oldest commit is where its history was cut, not its root.
+- `main_checkout`: the folder holding the `.git` folder its worktrees share (`git rev-parse
+  --git-common-dir`'s parent). It is known in a repository with no commit yet, and `null`
+  when that folder is not named `.git`, as in a bare repository.
 
 | `--repo` | A record counts when |
 |---|---|
-| a path (it holds a `/` or starts with `.`) | its `root_commit` is the root commit of the repository at that path, from whichever folder it ran in, a worktree since removed included. A record with no `root_commit` (before 0.3.1), or a path with none (not a repository, or no commit yet), counts when its folder is the path's top folder, as before. |
+| a path (it holds a `/` or starts with `.`) | its `root_commit` is the root commit of the repository at that path, from whichever folder it ran in, a worktree since removed included. A record with no `root_commit` (before 0.3.1, or `null`), or a path with none (not a repository, no default branch, or a shallow clone), counts when its folder is the path's top folder, as before. |
 | a name | its folder's last part is the name, or its `main_checkout`'s last part is. `--repo shop` counts runs in `/work/shop` and in `/work/trees/feature-a` when that worktree's main checkout is `/work/shop`. A record from before 0.3.1 counts by its folder's last part only. |
 
 A path is the exact match: two unrelated repositories never share a root commit, while two
-folders may share a name. A record written before 0.3.1 in a worktree other than the path's
-own folder is not counted by a path; its folder's name still finds it.
+folders may share a name. A record with a `null` root is found by a path only from its own
+folder: one written before 0.3.1, or in a shallow clone, in a worktree other than the
+path's own folder is not counted; its folder's name still finds it. The root is read again
+on every run, so when the default branch's oldest root changes (an older, unrelated history
+merged into it, or another branch made the default), the runs before that keep the old root
+and a path no longer counts them.
 
 ---
 
