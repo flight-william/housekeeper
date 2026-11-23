@@ -192,3 +192,17 @@ fn a_suite_that_exits_but_leaves_a_grandchild_holding_its_output_stops_it() {
         "the grandchild holding the output outlived the limit"
     );
 }
+
+/// A suite stopped at its limit keeps its last output lines in the record, so the
+/// record says what it was waiting on.
+#[test]
+fn a_suite_stopped_at_its_limit_keeps_its_output_tail() {
+    let root = common::fresh("timeout-tail");
+    let script = "echo building; echo waiting on the signing dialog >&2; sleep 30";
+    let suite = vec!["sh".to_string(), "-c".to_string(), script.to_string()];
+    let runs = house::tests_step::run(&root, &[suite], Duration::from_secs(1));
+    let failed = runs[0].failed.as_ref().expect("the stopped suite's output");
+    assert_eq!(failed.command, format!("sh -c {script}"));
+    assert_eq!(failed.stdout_tail, ["building"]);
+    assert_eq!(failed.stderr_tail, ["waiting on the signing dialog"]);
+}

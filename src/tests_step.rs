@@ -77,6 +77,12 @@ fn run_one(root: &Path, argv: &[String], limit: Duration) -> TestRun {
             tool_rule: "house tests timeout".into(),
             measure: None,
         });
+        // What it had written by then: the record tells what it was waiting on.
+        test.failed = ran.stopped_output.map(|out| FailedOutput {
+            command: shown,
+            stdout_tail: tail(&out.stdout),
+            stderr_tail: tail(&out.stderr),
+        });
         return test;
     }
     match ran.result {

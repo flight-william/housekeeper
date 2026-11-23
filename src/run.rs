@@ -32,6 +32,8 @@ pub struct Ran {
     /// The command was still running (or holding its output open) at the guard, and
     /// was stopped; `result` is then the "did not finish" cannot-check.
     pub timed_out: bool,
+    /// What a stopped command had written by then, its exit -1: what it waited on.
+    pub stopped_output: Option<Output>,
 }
 
 /// Run `cmd` in `root`. A program not on PATH gives "not installed" with the brew line.
@@ -65,15 +67,23 @@ fn timed(
     env: &[(&str, &str)],
 ) -> Ran {
     let start = Instant::now();
-    let (result, timed_out) = match run_inner(cmd, root, brew_formula, guard, group, env) {
-        Ok(out) => (Ok(out), false),
-        Err(Stop::Failed(c)) => (Err(c), false),
-        Err(Stop::Hung(c)) => (Err(c), true),
+    let (result, stopped_output) = match run_inner(cmd, root, brew_formula, guard, group, env) {
+        Ok(out) => (Ok(out), None),
+        Err(Stop::Failed(c)) => (Err(c), None),
+        Err(Stop::Hung(c, [stdout, stderr])) => {
+            let partial = Output {
+                exit: -1,
+                stdout,
+                stderr,
+            };
+            (Err(c), Some(partial))
+        }
     };
     Ran {
         seconds: start.elapsed().as_secs_f64(),
         result,
-        timed_out,
+        timed_out: stopped_output.is_some(),
+        stopped_output,
     }
 }
 
@@ -102,11 +112,16 @@ pub fn first_line(text: &str) -> String {
         .to_string()
 }
 
-/// Why `run_inner` gave no output: the command could not be run, or it hung.
+/// Why `run_inner` gave no output: the command could not be run, or it hung (with
+/// the stdout and stderr it had written before it was stopped).
 enum Stop {
     Failed(CannotCheck),
-    Hung(CannotCheck),
+    Hung(CannotCheck, [String; 2]),
 }
+
+/// How long the output of a stopped command may take to arrive: its pipes close as
+/// its processes die, unless one outside its group still holds them.
+const STOPPED_READ: Duration = Duration::from_secs(1);
 
 fn run_inner(
     cmd: &Command,
@@ -149,19 +164,29 @@ fn run_inner(
     let (sent, streams) = mpsc::channel();
     reader(child.stdout.take(), 0, sent.clone());
     reader(child.stderr.take(), 1, sent);
-    let hung = || {
-        Stop::Hung(CannotCheck {
-            what: format!("{} did not finish in {} s", cmd.program, guard.as_secs()),
-            fix: "run it by hand to see why it hangs".into(),
-        })
+    let mut text = [None, None];
+    // Stop the command, then keep what it wrote, as far as it arrives in time.
+    let hung = |child: &mut Child, text: &mut [Option<String>; 2]| {
+        stop(child, group);
+        while text.iter().any(Option::is_none) {
+            let Ok((which, read)) = streams.recv_timeout(STOPPED_READ) else {
+                break;
+            };
+            text[which] = Some(read);
+        }
+        let what = format!("{} did not finish in {} s", cmd.program, guard.as_secs());
+        let fix = "run it by hand to see why it hangs".into();
+        Stop::Hung(
+            CannotCheck { what, fix },
+            text.clone().map(Option::unwrap_or_default),
+        )
     };
     let deadline = Instant::now() + guard;
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) if Instant::now() >= deadline => {
-                stop(&mut child, group);
-                return Err(hung());
+                return Err(hung(&mut child, &mut text));
             }
             Ok(None) => thread::sleep(Duration::from_millis(10)),
             Err(e) => {
@@ -174,16 +199,14 @@ fn run_inner(
     };
     // The guard also covers reading the output: a process the tool started may
     // hold stdout or stderr open after the tool itself has exited.
-    let mut text = [String::new(), String::new()];
-    for _ in 0..2 {
+    while text.iter().any(Option::is_none) {
         let left = deadline.saturating_duration_since(Instant::now());
         let Ok((which, read)) = streams.recv_timeout(left) else {
-            stop(&mut child, group);
-            return Err(hung());
+            return Err(hung(&mut child, &mut text));
         };
-        text[which] = read;
+        text[which] = Some(read);
     }
-    let [stdout, stderr] = text;
+    let [stdout, stderr] = text.map(Option::unwrap_or_default);
     Ok(Output {
         // A child killed by a signal has no code; -1 marks it.
         exit: status.code().unwrap_or(-1),
