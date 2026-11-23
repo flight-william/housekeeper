@@ -63,3 +63,14 @@ final class CleanTests: XCTestCase {
         )
     }
 }
+
+final class XCTestWaitFormsWithALimitTests: XCTestCase {
+    func testWaitsWithALimitInXCTestsOwnForms() async {
+        let done = expectation(description: "done")
+        await self.fulfillment(of: [done], timeout: 5)
+        await XCTWaiter().fulfillment(of: [done], timeout: 5, enforceOrder: true)
+        wait(for: [done], timeout: 5, enforceOrder: true)
+        waitForExpectations(timeout: 5)
+        _ = semaphore.wait(wallTimeout: wallDeadline)
+    }
+}

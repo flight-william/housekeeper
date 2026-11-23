@@ -60,6 +60,8 @@ python-test-unbounded-wait python/tests/test_planted.py:115
 python-test-unbounded-wait python/tests/test_planted.py:116
 python-test-unbounded-wait python/tests/test_planted.py:117
 python-test-sleep python/tests/test_planted.py:121
+python-test-unbounded-wait python/tests/test_planted.py:126
+python-test-unbounded-wait python/tests/test_planted.py:127
 rust-test-wall-clock rust/src/clock_test.rs:3
 rust-test-mod-sleep rust/src/inline_planted.rs:8
 rust-test-mod-sleep rust/src/inline_planted.rs:9
@@ -229,4 +231,13 @@ swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:110
 swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:111
 swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:112
 swift-test-sleep swift/AppTests/PlantedTests.swift:117
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:125
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:126
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:127
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:128
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:129
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:130
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:131
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:132
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:133
 swift-test-wall-clock swift/Tests/Support.swift:4

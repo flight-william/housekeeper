@@ -120,3 +120,9 @@ def test_waits_with_no_limit():
 def test_sleeps_then_waits():
     time.sleep(1)
     done.wait(timeout=5)
+
+
+async def test_waits_inside_a_bound_that_is_none():
+    await asyncio.wait_for(done.wait(), timeout=None)
+    async with asyncio.timeout(None):
+        await done.wait()

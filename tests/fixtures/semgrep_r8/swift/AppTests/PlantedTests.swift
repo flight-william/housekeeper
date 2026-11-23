@@ -118,3 +118,18 @@ final class UnboundedWaitTests: XCTestCase {
         wait(for: [done], timeout: 1)
     }
 }
+
+final class XCTestWaitFormsTests: XCTestCase {
+    func testWaitsWithNoLimitInXCTestsOwnForms() async {
+        let done = expectation(description: "done")
+        await self.fulfillment(of: [done])
+        await XCTWaiter().fulfillment(of: [done])
+        await XCTWaiter.fulfillment(of: [done], timeout: .infinity)
+        wait(for: [done], timeout: .infinity, enforceOrder: true)
+        waitForExpectations(timeout: .infinity)
+        wait(for: [done], timeout: TimeInterval.infinity)
+        wait(for: [done], timeout: Double.infinity)
+        wait(for: [done], timeout: .greatestFiniteMagnitude)
+        _ = semaphore.wait(wallTimeout: .distantFuture)
+    }
+}

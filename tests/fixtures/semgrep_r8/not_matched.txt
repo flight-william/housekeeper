@@ -44,3 +44,10 @@ rust-test-mod-keychain rust/src/inline_clean.rs: let mut cmd = Command::new("env
 rust-test-mod-network rust/src/inline_clean.rs: let _b = TcpStream::connect(addr);
 rust-test-mod-machine-path rust/src/inline_clean.rs: let _m = "files live under /Users/ on a Mac";
 rust-test-mod-machine-path rust/src/inline_clean.rs: assert_eq!(shorten("/Users/tester/Desktop/Shop"), "~/Desktop/Shop");
+python-test-unbounded-wait python/tests/test_clean.py: await asyncio.wait_for(done.wait(), timeout=5)
+python-test-unbounded-wait python/tests/test_clean.py: await done.wait()
+python-test-unbounded-wait python/tests/test_planted.py: await done.wait()
+swift-test-unbounded-wait swift/AppTests/CleanTests.swift: await XCTWaiter().fulfillment(of: [done], timeout: 5, enforceOrder: true)
+swift-test-unbounded-wait swift/AppTests/CleanTests.swift: wait(for: [done], timeout: 5, enforceOrder: true)
+swift-test-unbounded-wait swift/AppTests/CleanTests.swift: waitForExpectations(timeout: 5)
+swift-test-unbounded-wait swift/AppTests/CleanTests.swift: _ = semaphore.wait(wallTimeout: wallDeadline)

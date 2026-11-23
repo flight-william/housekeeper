@@ -38,12 +38,15 @@ rules:
       - pattern: asyncio.sleep(...)
 
   # As swift-test-unbounded-wait: a wait with a timeout is not reported, one with none is.
+  # asyncio.Event.wait() takes no timeout: inside asyncio.wait_for(...) or an
+  # `async with asyncio.timeout(...)` block it is bounded there, and a None bound is
+  # reported where it is written.
   - id: python-test-unbounded-wait
     languages: [python]
     severity: WARNING
     message: test waits with no time limit, so a hang never ends
     metadata:
-      fix: give the wait a timeout, such as done.wait(timeout=5) or reader.join(5), so a hang fails fast
+      fix: give the wait a timeout, such as done.wait(timeout=5), reader.join(5) or asyncio.wait_for(event.wait(), timeout=5), so a hang fails fast
     paths:
       include:
         - "**/test_*.py"
@@ -51,7 +54,17 @@ rules:
         - "**/tests/**/*.py"
         - "**/test/**/*.py"
     pattern-either:
-      - pattern: $E.wait()
+      - patterns:
+          - pattern: $E.wait()
+          - pattern-not-inside: asyncio.wait_for(...)
+          - pattern-not-inside: |
+              async with asyncio.timeout(...):
+                ...
+          - pattern-not-inside: |
+              async with asyncio.timeout_at(...):
+                ...
+      - pattern: asyncio.timeout(None)
+      - pattern: asyncio.timeout_at(None)
       - pattern: $E.wait(None)
       - pattern: $E.wait(timeout=None)
       - pattern: $T.join()
@@ -287,12 +300,30 @@ rules:
       - pattern: $S.wait()
       - pattern: "$S.wait(timeout: .distantFuture)"
       - pattern: "$S.wait(timeout: DispatchTime.distantFuture)"
-      - pattern: "wait(for: $E, timeout: .infinity)"
-      - pattern: "$W.wait(for: $E, timeout: .infinity)"
+      - pattern: "$S.wait(wallTimeout: .distantFuture)"
+      - pattern: "$S.wait(wallTimeout: DispatchWallTime.distantFuture)"
       - pattern: "fulfillment(of: $E)"
+      - pattern: "$W.fulfillment(of: $E)"
       - pattern: "fulfillment(of: $E, enforceOrder: $O)"
-      - pattern: "fulfillment(of: $E, timeout: .infinity)"
-      - pattern: "fulfillment(of: $E, timeout: .infinity, enforceOrder: $O)"
+      - pattern: "$W.fulfillment(of: $E, enforceOrder: $O)"
+      # A timeout of no limit, however it is spelled.
+      - patterns:
+          - pattern-either:
+              - pattern: "wait(for: $E, timeout: $T)"
+              - pattern: "$W.wait(for: $E, timeout: $T)"
+              - pattern: "wait(for: $E, timeout: $T, enforceOrder: $O)"
+              - pattern: "$W.wait(for: $E, timeout: $T, enforceOrder: $O)"
+              - pattern: "fulfillment(of: $E, timeout: $T)"
+              - pattern: "$W.fulfillment(of: $E, timeout: $T)"
+              - pattern: "fulfillment(of: $E, timeout: $T, enforceOrder: $O)"
+              - pattern: "$W.fulfillment(of: $E, timeout: $T, enforceOrder: $O)"
+              - pattern: "waitForExpectations(timeout: $T)"
+              - pattern: "$W.waitForExpectations(timeout: $T)"
+              - pattern: "waitForExpectations(timeout: $T, handler: $H)"
+              - pattern: "$W.waitForExpectations(timeout: $T, handler: $H)"
+          - metavariable-regex:
+              metavariable: $T
+              regex: '^(TimeInterval|Double|CGFloat)?\.(infinity|greatestFiniteMagnitude)$'
 
   - id: swift-test-wall-clock
     languages: [swift]
