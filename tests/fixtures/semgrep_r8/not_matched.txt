@@ -1,5 +1,8 @@
 # Per rule, a line that must give no finding: rule path: the whole line, trimmed.
 python-test-sleep python/src/app.py: time.sleep(1)
+python-test-unbounded-wait python/tests/test_clean.py: assert done.wait(timeout=5)
+python-test-unbounded-wait python/tests/test_clean.py: reader.join(5)
+python-test-unbounded-wait python/tests/test_planted.py: done.wait(timeout=5)
 python-test-unseeded-random python/tests/test_clean.py: assert random.randint(1, 6)
 python-test-wall-clock python/tests/test_clean.py: assert time.gmtime(0).tm_year == 1970
 python-test-locale python/tests/test_clean.py: assert time.strftime("%Y", time.gmtime(0)) == "1970"
@@ -8,7 +11,10 @@ python-test-keychain python/tests/test_clean.py: subprocess.run(["git", "status"
 python-test-network python/tests/test_clean.py: socket.socket()
 python-test-rerun python/tests/test_clean.py: @pytest.mark.slow
 swift-test-sleep swift/App/Clock.swift: Thread.sleep(forTimeInterval: 0)
-swift-test-wait-timeout swift/AppTests/CleanTests.swift: let value = await compute()
+swift-test-unbounded-wait swift/AppTests/CleanTests.swift: let value = await compute()
+swift-test-unbounded-wait swift/AppTests/CleanTests.swift: wait(for: [done], timeout: 5)
+swift-test-unbounded-wait swift/AppTests/CleanTests.swift: await fulfillment(of: [done], timeout: 5)
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift: wait(for: [done], timeout: 1)
 swift-test-wall-clock swift/AppTests/CleanTests.swift: let date = Date(timeIntervalSince1970: 0)
 swift-test-unseeded-random swift/AppTests/CleanTests.swift: let roll = Int.random(in: 0..<6, using: &generator)
 swift-test-locale swift/AppTests/CleanTests.swift: let locale = Locale(identifier: "en_US_POSIX")

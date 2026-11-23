@@ -106,3 +106,17 @@ def test_moves_to_a_machine_path():
     os.replace("tmp", "/home/someone/b")
     shutil.copy("tmp", dst="/Users/someone/c")
     pathlib.Path("tmp").rename("/Users/someone/d")
+
+
+def test_waits_with_no_limit():
+    done.wait()
+    done.wait(timeout=None)
+    reader.join()
+    reader.join(None)
+    asyncio.wait_for(task, None)
+    asyncio.wait_for(task, timeout=None)
+
+
+def test_sleeps_then_waits():
+    time.sleep(1)
+    done.wait(timeout=5)

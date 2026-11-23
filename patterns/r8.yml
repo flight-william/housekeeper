@@ -1,4 +1,4 @@
-# House R8: tests are deterministic. A test must not sleep, wait on a timeout,
+# House R8: tests are deterministic. A test must not sleep, wait with no time limit,
 # read the clock, draw unseeded randomness, touch the network, read the machine's
 # locale or time zone, read the home folder, the keychain or a machine path, or
 # rerun itself until it passes. Each rule's metadata.fix is the fix line house
@@ -36,6 +36,29 @@ rules:
     pattern-either:
       - pattern: time.sleep(...)
       - pattern: asyncio.sleep(...)
+
+  # As swift-test-unbounded-wait: a wait with a timeout is not reported, one with none is.
+  - id: python-test-unbounded-wait
+    languages: [python]
+    severity: WARNING
+    message: test waits with no time limit, so a hang never ends
+    metadata:
+      fix: give the wait a timeout, such as done.wait(timeout=5) or reader.join(5), so a hang fails fast
+    paths:
+      include:
+        - "**/test_*.py"
+        - "**/*_test.py"
+        - "**/tests/**/*.py"
+        - "**/test/**/*.py"
+    pattern-either:
+      - pattern: $E.wait()
+      - pattern: $E.wait(None)
+      - pattern: $E.wait(timeout=None)
+      - pattern: $T.join()
+      - pattern: $T.join(None)
+      - pattern: $T.join(timeout=None)
+      - pattern: asyncio.wait_for($X, None)
+      - pattern: asyncio.wait_for($X, timeout=None)
 
   - id: python-test-unseeded-random
     languages: [python]
@@ -247,20 +270,29 @@ rules:
       - pattern: Task.sleep(...)
       - pattern: $Q.asyncAfter(...)
 
-  - id: swift-test-wait-timeout
+  # A wait with a time limit on an expectation is not reported: the limit only bounds a
+  # failure, and a test that passes never waits it out. A wait with no limit is: a hang
+  # never ends. A real delay beside it is a sleep (swift-test-sleep).
+  - id: swift-test-unbounded-wait
     languages: [swift]
     severity: WARNING
-    message: test waits on a timeout, so it is slow and timing-dependent
+    message: test waits with no time limit, so a hang never ends
     metadata:
-      fix: await the async work directly, or drive it with a fake clock, instead of waiting on a timeout
+      fix: "wait on the expectation with a timeout, such as wait(for: [done], timeout: 5), so a hang fails fast"
     paths:
       include:
         - "**/*Tests.swift"
         - "**/*Tests/**/*.swift"
     pattern-either:
-      - pattern: "wait(for: $E, timeout: $T)"
-      - pattern: "$W.wait(for: $E, timeout: $T)"
-      - pattern: "fulfillment(of: $E, timeout: $T)"
+      - pattern: $S.wait()
+      - pattern: "$S.wait(timeout: .distantFuture)"
+      - pattern: "$S.wait(timeout: DispatchTime.distantFuture)"
+      - pattern: "wait(for: $E, timeout: .infinity)"
+      - pattern: "$W.wait(for: $E, timeout: .infinity)"
+      - pattern: "fulfillment(of: $E)"
+      - pattern: "fulfillment(of: $E, enforceOrder: $O)"
+      - pattern: "fulfillment(of: $E, timeout: .infinity)"
+      - pattern: "fulfillment(of: $E, timeout: .infinity, enforceOrder: $O)"
 
   - id: swift-test-wall-clock
     languages: [swift]

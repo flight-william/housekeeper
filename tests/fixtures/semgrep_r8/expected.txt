@@ -53,6 +53,13 @@ python-test-machine-path python/tests/test_planted.py:105
 python-test-machine-path python/tests/test_planted.py:106
 python-test-machine-path python/tests/test_planted.py:107
 python-test-machine-path python/tests/test_planted.py:108
+python-test-unbounded-wait python/tests/test_planted.py:112
+python-test-unbounded-wait python/tests/test_planted.py:113
+python-test-unbounded-wait python/tests/test_planted.py:114
+python-test-unbounded-wait python/tests/test_planted.py:115
+python-test-unbounded-wait python/tests/test_planted.py:116
+python-test-unbounded-wait python/tests/test_planted.py:117
+python-test-sleep python/tests/test_planted.py:121
 rust-test-wall-clock rust/src/clock_test.rs:3
 rust-test-mod-sleep rust/src/inline_planted.rs:8
 rust-test-mod-sleep rust/src/inline_planted.rs:9
@@ -164,9 +171,9 @@ swift-test-sleep swift/AppTests/PlantedTests.swift:9
 swift-test-sleep swift/AppTests/PlantedTests.swift:10
 swift-test-sleep swift/AppTests/PlantedTests.swift:11
 swift-test-sleep swift/AppTests/PlantedTests.swift:12
-swift-test-wait-timeout swift/AppTests/PlantedTests.swift:17
-swift-test-wait-timeout swift/AppTests/PlantedTests.swift:18
-swift-test-wait-timeout swift/AppTests/PlantedTests.swift:19
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:17
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:18
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:19
 swift-test-wall-clock swift/AppTests/PlantedTests.swift:23
 swift-test-wall-clock swift/AppTests/PlantedTests.swift:24
 swift-test-wall-clock swift/AppTests/PlantedTests.swift:25
@@ -216,4 +223,10 @@ swift-test-machine-path swift/AppTests/PlantedTests.swift:97
 swift-test-machine-path swift/AppTests/PlantedTests.swift:98
 swift-test-machine-path swift/AppTests/PlantedTests.swift:100
 swift-test-machine-path swift/AppTests/PlantedTests.swift:101
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:108
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:109
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:110
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:111
+swift-test-unbounded-wait swift/AppTests/PlantedTests.swift:112
+swift-test-sleep swift/AppTests/PlantedTests.swift:117
 swift-test-wall-clock swift/Tests/Support.swift:4
