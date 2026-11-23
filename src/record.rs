@@ -129,7 +129,7 @@ pub fn rfc3339(t: SystemTime) -> String {
 /// Days since 1970-01-01 to (year, month, day) in the proleptic Gregorian calendar:
 /// shift the epoch to 0000-03-01 so the leap day ends the year, split into 400-year
 /// eras of 146 097 days, then read the year, month and day from the day of the era.
-fn civil(days: i64) -> (i64, i64, i64) {
+pub(crate) fn civil(days: i64) -> (i64, i64, i64) {
     let z = days + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097);

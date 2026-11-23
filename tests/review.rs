@@ -7,6 +7,7 @@ mod common;
 mod review_support;
 
 use review_support::{NOVEMBER, folder_with, review, review_in, section};
+use std::process::Command;
 
 #[test]
 fn the_header_names_the_period_and_the_runs_per_stage() {
@@ -293,4 +294,53 @@ fn a_total_never_prints_negative_zero() {
     assert!(text.contains(", 0.0 s total, 0.0 s median\n"), "{text}");
     let (_, json) = review_in(&log, &log, &[&NOVEMBER[..], &["--json"]].concat());
     assert!(!json.contains("-0.0"), "{json}");
+}
+
+#[test]
+fn a_start_with_an_offset_is_filed_under_its_utc_day() {
+    // house writes each start in UTC (Z); another offset counts by its UTC day.
+    let at = |start: &str| OLD_RUN.replace("2026-11-02T09:00:00Z", start);
+    let lines = [
+        at("2026-11-22T20:00:00-10:00"), // 2026-11-23 in UTC
+        at("2026-11-01T00:00:01+14:00"), // 2026-10-31 in UTC
+        at("2026-11-15T12:00:00Z"),
+        at("2026-11-15T12:00:00.250+05:30"),
+        at("2026-11-15T25:00:00Z"), // no such time: not a house record
+    ];
+    let log = folder_with(
+        "review-offsets",
+        &lines.iter().map(String::as_str).collect::<Vec<_>>(),
+    );
+    let (_, text) = review_in(&log, &log, &["--from", "2026-11-01", "--to", "2026-11-22"]);
+    assert!(text.contains(", 2 runs: 2 commit\n"), "{text}");
+    assert!(
+        text.contains("\n1 line skipped: not house run records\n"),
+        "{text}"
+    );
+    let (_, text) = review_in(&log, &log, &["--from", "2026-10-31", "--to", "2026-10-31"]);
+    assert!(text.contains(", 1 run: 1 commit\n"), "{text}");
+}
+
+#[test]
+fn without_to_the_last_day_is_today_in_utc_whatever_the_time_zone() {
+    // Honolulu is 10 hours behind UTC and Kiritimati 14 ahead: at any moment one of
+    // them is on another calendar day than UTC.
+    let log = common::fresh("review-utc-today");
+    for tz in ["Pacific/Honolulu", "Pacific/Kiritimati"] {
+        let utc = || {
+            let out = Command::new("date").args(["-u", "+%F"]).output().unwrap();
+            String::from_utf8(out.stdout).unwrap().trim().to_string()
+        };
+        let before = utc();
+        let out = Command::new(env!("CARGO_BIN_EXE_house"))
+            .args(["review", "--json"])
+            .env("HOUSE_LOG_DIR", &log)
+            .env("TZ", tz)
+            .output()
+            .unwrap();
+        let after = utc();
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        let to = v["to"].as_str().unwrap_or_default().to_string();
+        assert!(to == before || to == after, "{tz}: to {to}, UTC {before}");
+    }
 }

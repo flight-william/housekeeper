@@ -33,7 +33,9 @@ house review [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--repo <path or name>] [--js
 ```
 
 It reads the run records (`$HOUSE_LOG_DIR`, else `~/Library/Logs/house/runs`) and prints one
-report for the runs that started in the period. `--to` is today when not given. `--repo`
+report for the runs that started in the period. The days are UTC days: house writes each
+run's start in UTC, a start written with another offset counts under its UTC day, and `--to`
+is today in UTC when not given. `--repo`
 takes a repo's path or its folder name, for a record folder shared by several repos.
 `--json` prints the same report as one JSON object. The exit is 0, or 2 when the record
 folder cannot be read.

@@ -3,11 +3,12 @@
 //! here reads the clock; the cli gives the period.
 //!
 //! The record folder also holds lines other programs wrote. A line is house's own
-//! record when it is valid UTF-8 and a JSON object with a `start` that begins with a
-//! real date, a `stage` and a `tools` list of named tools; any other line, a blank
-//! or broken one included, is skipped and counted.
+//! record when it is valid UTF-8 and a JSON object with a `start` time (`start`
+//! reads it as its UTC day), a `stage` and a `tools` list of named tools; any other
+//! line, a blank or broken one included, is skipped and counted.
 
 mod read;
+mod start;
 mod suggest;
 mod text;
 
@@ -213,7 +214,7 @@ pub struct Review {
 /// A house record line and its start day, or `None` for any other line.
 fn parse(line: &str) -> Option<(Run, Date)> {
     let run: Run = serde_json::from_str(line).ok()?;
-    let day = Date::parse(run.start.get(..10)?)?;
+    let day = start::utc_day(&run.start)?;
     Some((run, day))
 }
 
