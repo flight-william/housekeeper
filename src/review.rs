@@ -3,9 +3,9 @@
 //! here reads the clock; the cli gives the period.
 //!
 //! The record folder also holds lines other programs wrote. A line is house's own
-//! record when it is a JSON object with a `start` that begins with a real date, a
-//! `stage` and a `tools` list of named tools; any other line, a broken one included,
-//! is skipped and counted.
+//! record when it is valid UTF-8 and a JSON object with a `start` that begins with a
+//! real date, a `stage` and a `tools` list of named tools; any other line, a blank
+//! or broken one included, is skipped and counted.
 
 mod read;
 mod suggest;
@@ -250,18 +250,17 @@ impl Review {
         keys > MAX_KEYS
     }
 
-    /// One line of a record file: a covered run is added, a line that is not a house
-    /// record is counted. A blank line is neither.
+    /// One line of a record file: a covered run is added, and any line that is not a
+    /// house record is counted: a blank one, one that is not UTF-8, one too long.
     fn add_line(&mut self, line: read::Line) {
         let read::Line::Bytes(bytes) = line else {
             self.skipped_lines += 1;
             return;
         };
-        let text = String::from_utf8_lossy(bytes);
-        let line = text.as_ref();
-        if line.trim().is_empty() {
+        let Ok(line) = std::str::from_utf8(bytes) else {
+            self.skipped_lines += 1;
             return;
-        }
+        };
         let Some((run, day)) = parse(line) else {
             self.skipped_lines += 1;
             return;

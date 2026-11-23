@@ -169,3 +169,40 @@ fn more_distinct_places_than_the_limit_stop_the_review_with_a_clear_error() {
         "{text}"
     );
 }
+
+#[test]
+fn a_line_that_is_not_utf8_is_skipped_never_repaired_into_a_record() {
+    let log = common::fresh("review-not-utf8");
+    let mut bytes = RUN.replace("/work/shop", "/work/\u{1}shop").into_bytes();
+    let at = bytes.iter().position(|b| *b == 1).unwrap();
+    bytes[at] = 0xff;
+    bytes.push(b'\n');
+    bytes.extend_from_slice(format!("{RUN}\n").as_bytes());
+    std::fs::write(log.join("2026-11.jsonl"), bytes).unwrap();
+    let Some((code, text)) = review_guarded(&log, &["--json"]) else {
+        panic!("house review did not finish");
+    };
+    assert_eq!(code, 0, "{text}");
+    let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(
+        (v["runs"].clone(), v["skipped_lines"].clone()),
+        (1.into(), 1.into()),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_blank_line_is_not_a_record_and_is_counted_like_any_other() {
+    let log = common::fresh("review-blank");
+    std::fs::write(
+        log.join("2026-11.jsonl"),
+        format!("\n \t\nnot json\n{RUN}\n"),
+    )
+    .unwrap();
+    let Some((code, text)) = review_guarded(&log, &["--json"]) else {
+        panic!("house review did not finish");
+    };
+    assert_eq!(code, 0, "{text}");
+    let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(v["skipped_lines"], 3, "{text}");
+}

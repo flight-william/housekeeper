@@ -70,7 +70,7 @@ suggestions (to weigh, not orders):
 | Part | What it shows |
 |---|---|
 | **Header** | The first and last day of the runs covered, the number of runs, and the runs per stage: commit, commit-msg, push and all. |
-| **lines skipped** | `N lines skipped: not house run records`. The record folder can hold lines another program wrote, or a broken one; they are skipped and counted. A line longer than 1 MiB is skipped too, without being held in memory. The line is absent when none were skipped. |
+| **lines skipped** | `N lines skipped: not house run records`. The record folder can hold lines another program wrote, or a broken one; they are skipped and counted. So is a blank line, a line that is not valid UTF-8, and a line longer than 1 MiB, which is never held in memory. The line is absent when none were skipped. |
 | **record files skipped** | `N record files skipped: not regular files`. Only a regular file named `<YYYY-MM>.jsonl` is read. A folder, a FIFO or a symbolic link with such a name is skipped and counted, never followed or waited on. A regular file that cannot be read stops the review (exit 2). The line is absent when none were skipped. |
 | **per rule** | For each rule: the findings left to fix, the excused findings and the cannot-checks. A cannot-check is counted under the rule of the tool that could not run. |
 | **excused before 0.3.0** | `N excused in records that do not say which rule (before house 0.3.0)`. A record written before 0.3.0 keeps only the run's excused total, so those excuses cannot be tied to a rule or a tool. They are counted apart. |
