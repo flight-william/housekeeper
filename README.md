@@ -9,7 +9,8 @@
 - **The rules themselves improve:** the run records show which rules catch real problems.
 - **People's work moves up a level:** to what is needed, what "done" means, and the design.
 
-More: [docs/why.md](docs/why.md)
+More: [why house](docs/why.md) · [adopt it in an existing project](docs/adopting.md) ·
+[read the weekly review](docs/review.md)
 
 house runs the tools that check a repo's rules at commit and at push, replies to agents in
 one format, and records every run. It never judges code itself: each rule maps to the tools
