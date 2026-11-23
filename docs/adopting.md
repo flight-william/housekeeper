@@ -188,7 +188,9 @@ All three must hold before the old checks are gone for good.
 - **A test suite waits on something no one will answer.** A signing dialog, a locked
   screen, a network call. Each `[tests]` command is stopped at `timeout_seconds` (600 when
   unset) and reported as an R7 finding naming the command and the limit; set a limit that
-  fits the suite, and make the suite fail fast where it can.
+  fits the suite, and make the suite fail fast where it can. The command's whole process
+  group is stopped, so a helper it started (a signing tool waiting on that dialog) goes
+  with it.
 - **The base has no rules.** Step 2 before step 1: the runner finds no `.house.toml` on the
   base and cannot check. Adopt the rules in their own commit first.
 

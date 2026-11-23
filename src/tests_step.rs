@@ -1,9 +1,10 @@
 //! The test step: the stage's `[tests]` commands (`.house.toml`), each a program and
 //! its arguments, run from the repo root with no shell, after the adapters, each
-//! stopped at its time limit (`[tests] timeout_seconds`). A non-zero exit is one R7
-//! finding for the repo; the last lines of the command's output go to the run record,
-//! never to the reply. A command stopped at the limit is one R7 finding too, naming
-//! the command and the limit: a suite that waits on a dialog fails, it does not hang.
+//! stopped at its time limit (`[tests] timeout_seconds`) with every process it started
+//! (`run::run_group`). A non-zero exit is one R7 finding for the repo; the last lines
+//! of the command's output go to the run record, never to the reply. A command stopped
+//! at the limit is one R7 finding too, naming the command and the limit: a suite that
+//! waits on a dialog fails, it does not hang.
 
 use crate::adapter::{CannotCheck, Command};
 use crate::config;
@@ -61,7 +62,7 @@ fn run_one(root: &Path, argv: &[String], limit: Duration) -> TestRun {
         program: program.clone(),
         args: args.to_vec(),
     };
-    let ran = run::run(&cmd, root, program, limit);
+    let ran = run::run_group(&cmd, root, program, limit);
     test.tool.seconds = ran.seconds;
     if ran.timed_out {
         test.tool.findings.push(Finding {

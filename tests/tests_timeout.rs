@@ -101,3 +101,82 @@ fn a_limit_below_one_second_cannot_be_checked() {
     assert!(err.what.contains("timeout_seconds"), "{}", err.what);
     assert!(config::parse("[tests]\ntimeout_seconds = -5\n").is_err());
 }
+
+/// Whether process `pid` is alive. house waits for a stopped suite's whole group to
+/// be gone before it reports, so one look is enough.
+fn alive(pid: &str) -> bool {
+    std::process::Command::new("kill")
+        .args(["-0", pid])
+        .stderr(std::process::Stdio::null())
+        .status()
+        .unwrap()
+        .success()
+}
+
+/// Run `script` as a suite under a 2 s limit; the grandchild it starts writes its pid
+/// to `grandchild.pid`. Gives the timeout findings and whether the grandchild lives.
+fn grandchild_after_limit(name: &str, script: &str) -> (Vec<String>, bool) {
+    let toml = format!(
+        "[tools]\ncommit = []\n[tests]\ntimeout_seconds = 2\ncommit = [[\"sh\", \"-c\", {script:?}]]\n"
+    );
+    let root = repo_with(name, &toml);
+    let whats = check(&root)
+        .findings()
+        .iter()
+        .map(|f| f.what.clone())
+        .collect();
+    let pid = std::fs::read_to_string(root.join("grandchild.pid")).unwrap();
+    let pid = pid.trim().to_string();
+    let lives = alive(&pid);
+    if lives {
+        let killed = std::process::Command::new("kill")
+            .args(["-9", &pid])
+            .status();
+        assert!(
+            killed.unwrap().success(),
+            "the grandchild {pid} could not be killed"
+        );
+    }
+    (whats, lives)
+}
+
+#[test]
+fn a_suite_stopped_at_its_limit_leaves_no_grandchild_alive() {
+    // A helper the suite started and waits on, as a hung code-signing helper.
+    let script = "sleep 30 & echo $! > grandchild.pid; wait";
+    let (whats, lives) = grandchild_after_limit("timeout-group", script);
+    assert_eq!(
+        whats,
+        [format!(
+            "test command did not finish in 2 s: sh -c {script}"
+        )]
+    );
+    assert!(!lives, "the suite's grandchild outlived the time limit");
+}
+
+#[test]
+fn a_grandchild_that_ignores_sigterm_is_killed_after_the_grace() {
+    let script = "trap '' TERM; sleep 30 & echo $! > grandchild.pid; wait";
+    let (whats, lives) = grandchild_after_limit("timeout-group-term", script);
+    assert_eq!(whats.len(), 1, "{whats:?}");
+    assert!(
+        !lives,
+        "a grandchild that ignores SIGTERM outlived the limit"
+    );
+}
+
+#[test]
+fn a_suite_that_exits_but_leaves_a_grandchild_holding_its_output_stops_it() {
+    let script = "sleep 30 & echo $! > grandchild.pid";
+    let (whats, lives) = grandchild_after_limit("timeout-group-left", script);
+    assert_eq!(
+        whats,
+        [format!(
+            "test command did not finish in 2 s: sh -c {script}"
+        )]
+    );
+    assert!(
+        !lives,
+        "the grandchild holding the output outlived the limit"
+    );
+}

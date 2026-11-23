@@ -1,16 +1,25 @@
 //! Runs one command for an adapter: in the repo root, no shell, GIT_* stripped
 //! from the child's environment, stdout and stderr captured, under the hang guard.
+//!
+//! A `[tests]` suite runs with `run_group`: in a process group of its own, so that at
+//! its limit the whole group is stopped, SIGTERM then SIGKILL after `GRACE`, and no
+//! process it started (a hung code-signing helper) lives on. Being its own group, a
+//! suite does not get the terminal's Ctrl-C; it stops when house stops reading it.
 
 use crate::adapter::{CannotCheck, Command, Output};
 use std::io::{ErrorKind, Read};
+use std::os::unix::process::CommandExt;
 use std::path::Path;
-use std::process::Stdio;
+use std::process::{Child, Stdio};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 /// The hang guard: one hour, then the child is killed.
 pub const HANG_GUARD: Duration = Duration::from_secs(3600);
+
+/// How long a stopped suite's process group has, after SIGTERM, before SIGKILL.
+pub const GRACE: Duration = Duration::from_secs(2);
 
 /// One command's result and how long it took.
 #[derive(Debug)]
@@ -24,8 +33,18 @@ pub struct Ran {
 
 /// Run `cmd` in `root`. A program not on PATH gives "not installed" with the brew line.
 pub fn run(cmd: &Command, root: &Path, brew_formula: &str, guard: Duration) -> Ran {
+    timed(cmd, root, brew_formula, guard, false)
+}
+
+/// `run`, with the command in a process group of its own; at the guard the whole
+/// group is stopped, not the command alone.
+pub fn run_group(cmd: &Command, root: &Path, brew_formula: &str, guard: Duration) -> Ran {
+    timed(cmd, root, brew_formula, guard, true)
+}
+
+fn timed(cmd: &Command, root: &Path, brew_formula: &str, guard: Duration, group: bool) -> Ran {
     let start = Instant::now();
-    let (result, timed_out) = match run_inner(cmd, root, brew_formula, guard) {
+    let (result, timed_out) = match run_inner(cmd, root, brew_formula, guard, group) {
         Ok(out) => (Ok(out), false),
         Err(Stop::Failed(c)) => (Err(c), false),
         Err(Stop::Hung(c)) => (Err(c), true),
@@ -73,6 +92,7 @@ fn run_inner(
     root: &Path,
     brew_formula: &str,
     guard: Duration,
+    group: bool,
 ) -> Result<Output, Stop> {
     let mut command = std::process::Command::new(&cmd.program);
     command
@@ -85,6 +105,9 @@ fn run_inner(
         if key.to_string_lossy().starts_with("GIT_") {
             command.env_remove(key);
         }
+    }
+    if group {
+        command.process_group(0);
     }
     let mut child = command.spawn().map_err(|e| {
         Stop::Failed(match e.kind() {
@@ -112,8 +135,7 @@ fn run_inner(
         match child.try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
+                stop(&mut child, group);
                 return Err(hung());
             }
             Ok(None) => thread::sleep(Duration::from_millis(10)),
@@ -130,7 +152,10 @@ fn run_inner(
     let mut text = [String::new(), String::new()];
     for _ in 0..2 {
         let left = deadline.saturating_duration_since(Instant::now());
-        let (which, read) = streams.recv_timeout(left).map_err(|_| hung())?;
+        let Ok((which, read)) = streams.recv_timeout(left) else {
+            stop(&mut child, group);
+            return Err(hung());
+        };
         text[which] = read;
     }
     let [stdout, stderr] = text;
@@ -140,6 +165,44 @@ fn run_inner(
         stdout,
         stderr,
     })
+}
+
+/// Stop `child` at the guard: the child alone, or with `group` its whole process
+/// group, SIGTERM first and SIGKILL to whatever is left after `GRACE`, and then up to
+/// `GRACE` more until no process of the group is left.
+fn stop(child: &mut Child, group: bool) {
+    if !group {
+        let _ = child.kill();
+        let _ = child.wait();
+        return;
+    }
+    let id = format!("-{}", child.id());
+    signal(&id, "TERM");
+    // The leader is reaped as it exits, so the group lives while any other does.
+    let gone = |child: &mut Child| child.try_wait().is_err() || !signal(&id, "0");
+    let until = Instant::now() + GRACE;
+    while Instant::now() < until && !gone(child) {
+        thread::sleep(Duration::from_millis(20));
+    }
+    signal(&id, "KILL");
+    // The leader alone, should `kill` itself not have run.
+    let _ = child.kill();
+    let _ = child.wait();
+    let until = Instant::now() + GRACE;
+    while Instant::now() < until && !gone(child) {
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// `kill -<signal> -- <target>`; true when it reached a process (`0` sends none).
+fn signal(target: &str, signal: &str) -> bool {
+    std::process::Command::new("kill")
+        .args([&format!("-{signal}"), "--", target])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
 }
 
 /// Read `pipe` to its end on a thread, then send (`which`, the text).
