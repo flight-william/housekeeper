@@ -82,6 +82,13 @@ pub trait Adapter {
     /// The Homebrew formula that installs `program`.
     fn brew_formula(&self) -> &'static str;
 
+    /// Whether it runs when `.house.toml` lists no tools for the stage, and is named in
+    /// `house init`'s starter list. `false` for a tool a repo chooses instead of
+    /// another (SwiftFormat beside Apple's swift format): it then runs only by name.
+    fn runs_by_default(&self) -> bool {
+        true
+    }
+
     /// The command to run, or `None` when nothing in `ctx.files` concerns this tool
     /// (e.g. no `.py` file staged for ruff): then the tool is skipped, not an error.
     fn command(&self, ctx: &Context) -> Option<Command>;

@@ -14,8 +14,8 @@ More: [why house](docs/why.md) · [adopt it in an existing project](docs/adoptin
 
 house runs the tools that check a repo's rules at commit and at push, replies to agents in
 one format, and records every run. It never judges code itself: each rule maps to the tools
-that check it (ruff, cargo fmt, clippy and cargo-deny, SwiftLint and swift format, ShellCheck,
-gitleaks, Semgrep, its own size counter, commit-message and approval checks).
+that check it (ruff, cargo fmt, clippy and cargo-deny, SwiftLint, swift format or SwiftFormat,
+ShellCheck, gitleaks, Semgrep, its own size counter, commit-message and approval checks).
 
 ## The rules (✓ checked by 0.2.0)
 
@@ -68,6 +68,12 @@ the files itself, by its `included:` and `excluded:`, and only its findings on t
 stage checks count. Without one, the stage's Swift files are named to it. ShellCheck follows
 the files a script sources, looked up from the script's own folder, so `. ./lib.sh` is not
 SC1091 when `lib.sh` sits beside the script.
+
+Swift code is formatted by Apple's swift format (`swift-format`) unless the repo names
+SwiftFormat instead: `swiftformat` runs only when `[tools]` lists it, as in
+`commit = ["swiftlint", "swiftformat"]`, never by default nor in `house init`'s starter list,
+since two formatters disagree on one file. It runs `swiftformat --lint` on the stage's Swift
+files and reads the repo's own `.swiftformat`, its `--exclude` included.
 
 Every `Cargo.toml` a stage sends is also read by house itself, whatever `[tools]` lists: a
 lint set to `allow` (or `expect`) in a `[lints]` or `[workspace.lints]` table silences it for

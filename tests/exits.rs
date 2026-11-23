@@ -18,7 +18,7 @@ fn ctx() -> Context {
 /// Output each tool gives when it ran and found nothing.
 fn clean_output(tool: &str) -> &'static str {
     match tool {
-        "ruff" | "ruff-format" | "swiftlint" | "gitleaks" => "[]",
+        "ruff" | "ruff-format" | "swiftlint" | "gitleaks" | "swiftformat" => "[]",
         "shellcheck" => r#"{"comments":[]}"#,
         "semgrep" => r#"{"results":[],"errors":[]}"#,
         "cargo-fmt" | "clippy" | "swift-format" | "r3" => "",
@@ -30,8 +30,8 @@ fn clean_output(tool: &str) -> &'static str {
 /// The exit each tool gives when it found problems; `None` when it has none.
 fn found_exit(tool: &str) -> Option<i32> {
     match tool {
-        "ruff" | "ruff-format" | "cargo-fmt" | "swift-format" | "shellcheck" | "gitleaks"
-        | "semgrep" | "cargo-deny" => Some(1),
+        "ruff" | "ruff-format" | "cargo-fmt" | "swift-format" | "swiftformat" | "shellcheck"
+        | "gitleaks" | "semgrep" | "cargo-deny" => Some(1),
         "swiftlint" => Some(2),
         "clippy" => Some(101),
         "r3" => None,

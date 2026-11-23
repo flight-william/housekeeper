@@ -7,11 +7,10 @@
 //! keeps the findings on the files the stage checks; without one, the files are
 //! named.
 
-use super::Exits;
+use super::{Exits, relative};
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
 use crate::finding::{Finding, Place};
 use serde::Deserialize;
-use std::path::Path;
 
 pub struct SwiftLint;
 
@@ -44,15 +43,6 @@ fn house_rule(rule_id: &str) -> &'static str {
         "cyclomatic_complexity" | "nesting" | "function_parameter_count" => "R4",
         _ => "R2",
     }
-}
-
-/// `file` relative to `root`; SwiftLint prints absolute paths, and /tmp may be /private/tmp.
-fn relative(root: &Path, file: &str) -> String {
-    let unprivate = |p: &str| p.strip_prefix("/private").unwrap_or(p).to_string();
-    let root = unprivate(&root.to_string_lossy());
-    let file = unprivate(file);
-    let prefix = format!("{}/", root.trim_end_matches('/'));
-    file.strip_prefix(&prefix).unwrap_or(&file).to_string()
 }
 
 impl Adapter for SwiftLint {
