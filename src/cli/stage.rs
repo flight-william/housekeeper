@@ -8,7 +8,7 @@ use crate::rules::Rules;
 use crate::tests_step::{self, FailedOutput, TestRun};
 use crate::{approval, config, files, lints, run};
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Run the stage's adapters, then its test commands, in `root` and collect the report.
 pub fn check(root: &Path, stage: Stage, all: Vec<Box<dyn Adapter>>) -> Report {
@@ -70,11 +70,19 @@ pub(super) fn check_from(
     let tools = &mut checked.report.tools;
     let (chosen, exclude, tests, config_cannot) = match &rules.config {
         Ok(cfg) => {
-            let tests = config::tests_for(cfg, stage).to_vec();
+            let tests = (
+                config::tests_for(cfg, stage).to_vec(),
+                config::test_limit(cfg),
+            );
             let (chosen, unknown) = config::select(cfg, stage, all);
             (chosen, cfg.paths.exclude.clone(), tests, unknown)
         }
-        Err(c) => (all, Vec::new(), Vec::new(), vec![c.clone()]),
+        Err(c) => (
+            all,
+            Vec::new(),
+            (Vec::new(), config::TEST_LIMIT),
+            vec![c.clone()],
+        ),
     };
     for c in config_cannot {
         tools.push(cannot_run("house", c));
@@ -103,7 +111,7 @@ pub(super) fn check_from(
             tools.extend(chosen.iter().map(|a| run_one(a.as_ref(), &ctx)));
             tools.extend(lints::run(&ctx));
             tools.extend(settings_case(&scope_changed, rules));
-            for test in run_tests(&ctx, &tests, tests_due) {
+            for test in run_tests(&ctx, &tests.0, tests.1, tests_due) {
                 tools.push(test.tool);
                 checked.failed_tests.extend(test.failed);
             }
@@ -155,13 +163,14 @@ fn every_file(root: &Path, exclude: &[String]) -> Result<files::Scope, CannotChe
 
 /// The test step after the adapters: skipped unless `due` (`Scope::run_tests`): at push
 /// when the push changes any path, at commit and `--all` when there is a file to check.
-fn run_tests(ctx: &Context, tests: &[Vec<String>], due: bool) -> Vec<TestRun> {
+/// Each command may run for `limit` (`[tests] timeout_seconds`).
+fn run_tests(ctx: &Context, tests: &[Vec<String>], limit: Duration, due: bool) -> Vec<TestRun> {
     if tests.is_empty() {
         Vec::new()
     } else if !due {
         vec![tests_step::skipped()]
     } else {
-        tests_step::run(&ctx.root, tests, run::HANG_GUARD)
+        tests_step::run(&ctx.root, tests, limit)
     }
 }
 

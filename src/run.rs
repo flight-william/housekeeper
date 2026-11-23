@@ -17,15 +17,23 @@ pub const HANG_GUARD: Duration = Duration::from_secs(3600);
 pub struct Ran {
     pub seconds: f64,
     pub result: Result<Output, CannotCheck>,
+    /// The command was still running (or holding its output open) at the guard, and
+    /// was stopped; `result` is then the "did not finish" cannot-check.
+    pub timed_out: bool,
 }
 
 /// Run `cmd` in `root`. A program not on PATH gives "not installed" with the brew line.
 pub fn run(cmd: &Command, root: &Path, brew_formula: &str, guard: Duration) -> Ran {
     let start = Instant::now();
-    let result = run_inner(cmd, root, brew_formula, guard);
+    let (result, timed_out) = match run_inner(cmd, root, brew_formula, guard) {
+        Ok(out) => (Ok(out), false),
+        Err(Stop::Failed(c)) => (Err(c), false),
+        Err(Stop::Hung(c)) => (Err(c), true),
+    };
     Ran {
         seconds: start.elapsed().as_secs_f64(),
         result,
+        timed_out,
     }
 }
 
@@ -54,12 +62,18 @@ pub fn first_line(text: &str) -> String {
         .to_string()
 }
 
+/// Why `run_inner` gave no output: the command could not be run, or it hung.
+enum Stop {
+    Failed(CannotCheck),
+    Hung(CannotCheck),
+}
+
 fn run_inner(
     cmd: &Command,
     root: &Path,
     brew_formula: &str,
     guard: Duration,
-) -> Result<Output, CannotCheck> {
+) -> Result<Output, Stop> {
     let mut command = std::process::Command::new(&cmd.program);
     command
         .args(&cmd.args)
@@ -72,22 +86,26 @@ fn run_inner(
             command.env_remove(key);
         }
     }
-    let mut child = command.spawn().map_err(|e| match e.kind() {
-        ErrorKind::NotFound => CannotCheck {
-            what: format!("{} is not installed", cmd.program),
-            fix: format!("brew install {brew_formula}"),
-        },
-        _ => CannotCheck {
-            what: format!("{} could not start: {e}", cmd.program),
-            fix: "run it by hand to see why".into(),
-        },
+    let mut child = command.spawn().map_err(|e| {
+        Stop::Failed(match e.kind() {
+            ErrorKind::NotFound => CannotCheck {
+                what: format!("{} is not installed", cmd.program),
+                fix: format!("brew install {brew_formula}"),
+            },
+            _ => CannotCheck {
+                what: format!("{} could not start: {e}", cmd.program),
+                fix: "run it by hand to see why".into(),
+            },
+        })
     })?;
     let (sent, streams) = mpsc::channel();
     reader(child.stdout.take(), 0, sent.clone());
     reader(child.stderr.take(), 1, sent);
-    let hung = || CannotCheck {
-        what: format!("{} did not finish in {} s", cmd.program, guard.as_secs()),
-        fix: "run it by hand to see why it hangs".into(),
+    let hung = || {
+        Stop::Hung(CannotCheck {
+            what: format!("{} did not finish in {} s", cmd.program, guard.as_secs()),
+            fix: "run it by hand to see why it hangs".into(),
+        })
     };
     let deadline = Instant::now() + guard;
     let status = loop {
@@ -100,10 +118,10 @@ fn run_inner(
             }
             Ok(None) => thread::sleep(Duration::from_millis(10)),
             Err(e) => {
-                return Err(CannotCheck {
+                return Err(Stop::Failed(CannotCheck {
                     what: format!("{} could not be waited on: {e}", cmd.program),
                     fix: "run it by hand to see why".into(),
-                });
+                }));
             }
         }
     };
