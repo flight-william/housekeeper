@@ -146,8 +146,17 @@ fn command(sub: &[&str], ctx: &Context) -> Option<Command> {
     })
 }
 
-/// ruff's JSON list on stdout; anything unreadable is cannot-check.
+/// ruff's warning, on stderr, when every file it was given is excluded by the repo's
+/// ruff config (ruff 0.17.6). `--force-exclude` makes that a clean run.
+const NO_FILES: &str = "warning: No Python files found under the given path(s)";
+
+/// ruff's JSON list on stdout; anything unreadable is cannot-check. One exception:
+/// exit 0, nothing on stdout and ruff's own no-files warning is an empty list (the
+/// formatter prints nothing then; `ruff check` prints `[]`).
 fn read(out: &Output) -> Result<Vec<Diagnostic>, CannotCheck> {
+    if out.exit == 0 && out.stdout.trim().is_empty() && out.stderr.lines().any(|l| l == NO_FILES) {
+        return Ok(Vec::new());
+    }
     serde_json::from_str::<Vec<Diagnostic>>(&out.stdout).map_err(|_| CannotCheck {
         what: format!(
             "ruff exited {} without output house can read: {}",
