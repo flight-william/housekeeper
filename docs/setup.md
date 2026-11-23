@@ -29,7 +29,9 @@ with the install line.
 
 Each size has one owner, so one long file is one finding. A file's length (R3, 400 lines) is
 house's own counter for every language, Swift included: SwiftLint's `file_length` is not
-reported, whatever `.swiftlint.yml` sets it to. Function and type length in Swift are
+reported, whatever `.swiftlint.yml` sets it to, as long as r3 runs. A `[tools]` list that
+names `swiftlint` and not `r3` keeps SwiftLint's `file_length` instead; list `r3` to have
+one limit for every language. Function and type length in Swift are
 SwiftLint's (`function_body_length`, `type_body_length`), in Rust clippy's, in Python
 house's counter.
 

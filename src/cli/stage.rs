@@ -108,8 +108,17 @@ pub(super) fn check_from(
                 files: scope.files,
                 push_range: scope.push_range,
             };
-            for mut tool in chosen.iter().map(|a| run_one(a.as_ref(), &ctx)) {
-                tool.findings.retain(|f| !on_excluded(f, &exclude));
+            let names: Vec<&str> = chosen.iter().map(|a| a.name()).collect();
+            for adapter in &chosen {
+                let mut tool = run_one(adapter.as_ref(), &ctx);
+                let owned_elsewhere = |f: &Finding| {
+                    adapter
+                        .yields_to()
+                        .iter()
+                        .any(|(rule, owner)| f.tool_rule == *rule && names.contains(owner))
+                };
+                tool.findings
+                    .retain(|f| !on_excluded(f, &exclude) && !owned_elsewhere(f));
                 tools.push(tool);
             }
             tools.extend(lints::run(&ctx));

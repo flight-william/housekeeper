@@ -1,8 +1,11 @@
 //! SwiftLint: R2 lint, R3 length, R4 complexity.
 //!
-//! A file's length is r3's (house's 400 lines, the same for every language), so
-//! SwiftLint's `file_length` is dropped: one long file is one finding, with a measure,
-//! whatever limit the repo's SwiftLint settings give. Function and type length stay.
+//! A file's length is r3's (house's 400 lines, the same for every language) when r3
+//! runs for the stage, so SwiftLint's `file_length` is then dropped (`yields_to`): one
+//! long file is one finding, with a measure, whatever limit the repo's SwiftLint
+//! settings give. When `[tools]` names swiftlint without r3, `file_length` is kept,
+//! so a Swift file's length always has exactly one owner. Function and type length
+//! stay SwiftLint's.
 //!
 //! SwiftLint applies a config's `included:` only when it picks the files itself:
 //! files named on its command line are all linted (0.65.1), so the repo's own
@@ -33,8 +36,8 @@ struct Violation {
     rule_id: String,
 }
 
-/// The SwiftLint rule whose finding r3 owns: a file's length.
-const FILE_LENGTH: &str = "file_length";
+/// SwiftLint's finding on a file's length, which r3 owns when it runs.
+const FILE_LENGTH: &str = "swiftlint file_length";
 
 /// The config SwiftLint reads from the folder it runs in.
 const CONFIG: &str = ".swiftlint.yml";
@@ -46,7 +49,7 @@ const NO_LINTABLE: &str = "Error: No lintable files found at paths: ";
 /// The house rule for a SwiftLint rule id; unknown ones are R2.
 fn house_rule(rule_id: &str) -> &'static str {
     match rule_id {
-        "function_body_length" | "type_body_length" => "R3",
+        "file_length" | "function_body_length" | "type_body_length" => "R3",
         "cyclomatic_complexity" | "nesting" | "function_parameter_count" => "R4",
         _ => "R2",
     }
@@ -63,6 +66,10 @@ impl Adapter for SwiftLint {
 
     fn brew_formula(&self) -> &'static str {
         "swiftlint"
+    }
+
+    fn yields_to(&self) -> &'static [(&'static str, &'static str)] {
+        &[(FILE_LENGTH, "r3")]
     }
 
     fn command(&self, ctx: &Context) -> Option<Command> {
@@ -130,7 +137,6 @@ impl Adapter for SwiftLint {
             .zip(findings)
             .filter(|(on, _)| on.is_some())
             .map(|(_, f)| f)
-            .filter(|f| f.tool_rule != format!("swiftlint {FILE_LENGTH}"))
             .collect())
     }
 }
@@ -176,13 +182,14 @@ mod tests {
             rules,
             [
                 ("R4", "swiftlint cyclomatic_complexity"),
+                ("R3", "swiftlint file_length"),
                 ("R3", "swiftlint function_body_length"),
             ]
         );
         assert_eq!(found[0].place, Place::File("Many.swift".to_string()));
         assert_eq!(found[0].line, Some(5));
-        assert_eq!(found[1].fix, "fix the SwiftLint rule function_body_length");
-        assert!(!found[1].what.ends_with('.'));
+        assert_eq!(found[2].fix, "fix the SwiftLint rule function_body_length");
+        assert!(!found[2].what.ends_with('.'));
     }
 
     #[test]

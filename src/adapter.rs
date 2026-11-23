@@ -89,6 +89,13 @@ pub trait Adapter {
         true
     }
 
+    /// Findings this tool gives up to another, as (tool rule, adapter name): a finding
+    /// with that tool rule is dropped when that adapter runs for the stage too, as
+    /// its owner, and kept when it does not, so the rule is never left unchecked.
+    fn yields_to(&self) -> &'static [(&'static str, &'static str)] {
+        &[]
+    }
+
     /// Variables set in the command's environment, after house strips the GIT_* ones
     /// it inherited.
     fn env(&self) -> &'static [(&'static str, &'static str)] {
