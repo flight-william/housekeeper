@@ -84,8 +84,9 @@ SC1091 when `lib.sh` sits beside the script.
 
 Swift code is formatted by Apple's swift format (`swift-format`) unless the repo names
 SwiftFormat instead: `swiftformat` runs only when `[tools]` lists it, as in
-`commit = ["swiftlint", "swiftformat"]`, never by default nor in `house init`'s starter list,
-since two formatters disagree on one file. It runs `swiftformat --lint` on the stage's Swift
+`commit = ["swiftlint", "swiftformat"]`, never by default, since two formatters disagree on
+one file. `house init` names it, instead of swift format, only in a repo with a `.swiftformat`
+at its root, and then writes no `.swift-format`. It runs `swiftformat --lint` on the stage's Swift
 files and reads the repo's own `.swiftformat`, its `--exclude` included.
 
 Every `Cargo.toml` a stage sends is also read by house itself, whatever `[tools]` lists: a

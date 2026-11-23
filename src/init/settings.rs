@@ -12,6 +12,14 @@ use std::path::Path;
 
 pub const SWIFT_FORMAT: &str = ".swift-format";
 
+/// SwiftFormat's settings: a repo with them at its root formats with SwiftFormat.
+pub const SWIFTFORMAT: &str = ".swiftformat";
+
+/// Whether the repo formats with SwiftFormat, not Apple's swift format.
+pub fn uses_swiftformat(root: &Path) -> bool {
+    root.join(SWIFTFORMAT).is_file()
+}
+
 /// One file's indentation step.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Indent {
@@ -27,6 +35,11 @@ pub fn swift_format(root: &Path) -> Result<Option<String>, CannotCheck> {
         .collect();
     if swift.is_empty() {
         return Ok(None);
+    }
+    if uses_swiftformat(root) {
+        return Ok(Some(format!(
+            "house init: no {SWIFT_FORMAT} written: the repo formats with SwiftFormat ({SWIFTFORMAT})"
+        )));
     }
     let path = root.join(SWIFT_FORMAT);
     if path.exists() {

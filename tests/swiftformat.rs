@@ -127,6 +127,21 @@ fn init_does_not_name_it_for_a_swift_repo() {
     assert!(!cfg.contains("\"swiftformat\""), "{cfg}");
 }
 
+/// A repo that already formats with SwiftFormat: init names swiftformat, not swift
+/// format, and writes no `.swift-format`, since two formatters disagree on one file.
+#[test]
+fn init_names_it_for_a_repo_with_a_swiftformat_file() {
+    let root = common::repo("swiftformat-init-own");
+    std::fs::write(root.join("A.swift"), "let a = 1\n").unwrap();
+    std::fs::write(root.join(".swiftformat"), "--indent 2\n").unwrap();
+    common::git(&root, &["add", "-A"]);
+    let said = init::init(&root, adapters::all()).unwrap();
+    let cfg = std::fs::read_to_string(root.join(".house.toml")).unwrap();
+    assert!(cfg.contains("\"swiftformat\""), "{cfg}");
+    assert!(!cfg.contains("\"swift-format\""), "{cfg}");
+    assert!(!root.join(".swift-format").exists(), "{said:?}");
+}
+
 fn write(root: &Path, path: &str, text: &str) {
     let path = root.join(path);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();

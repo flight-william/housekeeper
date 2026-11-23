@@ -160,9 +160,17 @@ fn starter_config(root: &Path, all: Vec<Box<dyn Adapter>>) -> Result<String, Can
         files,
         push_range: None,
     };
+    // A repo that formats with SwiftFormat names it instead of swift format: two
+    // formatters must not meet on one file.
+    let swiftformat = settings::uses_swiftformat(root);
+    let starter = |a: &dyn Adapter| match a.name() {
+        "swiftformat" => swiftformat,
+        "swift-format" => !swiftformat,
+        _ => a.runs_by_default(),
+    };
     let names: Vec<String> = all
         .iter()
-        .filter(|a| a.runs_by_default() && a.command(&ctx).is_some())
+        .filter(|a| starter(a.as_ref()) && a.command(&ctx).is_some())
         .map(|a| format!("\"{}\"", a.name()))
         .collect();
     let text = format!(
