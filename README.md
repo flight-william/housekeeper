@@ -48,7 +48,9 @@ and the git hooks. Commit them. Files listed under `[paths] exclude` in `.house.
 `commit = [["cargo", "test"]]` and `push = [...]` (push falls back to commit) list test
 commands, each a program and its arguments with no shell, run from the repo root after the
 tools; a failing one is an R7 finding, and the last 20 lines of its output go to the run
-record. At push the tests run whenever the push changes anything, a deletion alone
+record. Each command may run for `timeout_seconds` (in `[tests]`, 600 when unset); one still
+running then is stopped, and that is an R7 finding naming the command and the limit, so a
+suite that waits on a dialog no one can click fails instead of holding the push. At push the tests run whenever the push changes anything, a deletion alone
 included, though no file is left for the tools; a push with no change skips them. An
 unknown table or key in `.house.toml` is a "cannot check" naming it.
 

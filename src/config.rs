@@ -22,6 +22,7 @@
 //! [tests]                           # the test step (`tests_step`), after the tools
 //! commit = [["cargo", "test", "--offline"]]   # each a program and its arguments, no shell
 //! push = [["cargo", "test"]]        # optional; falls back to `commit`
+//! timeout_seconds = 600             # optional; each command's time limit, 600 when unset
 //! ```
 //!
 //! Every table and key is known: any other is a cannot-check naming it. A house older
@@ -34,6 +35,7 @@
 use crate::adapter::{Adapter, CannotCheck, Stage};
 use serde::Deserialize;
 use std::path::Path;
+use std::time::Duration;
 
 pub const FILE: &str = ".house.toml";
 
@@ -100,6 +102,19 @@ fn version(text: &str) -> Option<(u64, u64, u64)> {
 pub struct Tests {
     pub commit: Option<Vec<Vec<String>>>,
     pub push: Option<Vec<Vec<String>>>,
+    /// Each command's time limit in seconds (`TEST_LIMIT` when unset), 1 or more.
+    pub timeout_seconds: Option<u64>,
+}
+
+/// A test command's time limit when `[tests] timeout_seconds` is unset.
+pub const TEST_LIMIT: Duration = Duration::from_secs(600);
+
+/// How long each test command may run before it is stopped and reported.
+pub fn test_limit(config: &Config) -> Duration {
+    config
+        .tests
+        .timeout_seconds
+        .map_or(TEST_LIMIT, Duration::from_secs)
 }
 
 /// The test commands to run at `stage`; push falls back to `commit`, as `[tools]` does.
@@ -172,6 +187,11 @@ pub fn parse(text: &str) -> Result<Config, CannotCheck> {
     })?;
     if let Some(minimum) = &config.house.minimum {
         minimum_met(minimum, env!("CARGO_PKG_VERSION"))?;
+    }
+    if config.tests.timeout_seconds == Some(0) {
+        return Err(bad(format!(
+            "{FILE} [tests] timeout_seconds is 0: give the seconds each test command may run, 1 or more"
+        )));
     }
     let (commit, push) = (&config.tests.commit, &config.tests.push);
     for (stage, list) in [("commit", commit), ("push", push)] {

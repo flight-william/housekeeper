@@ -32,6 +32,16 @@ final class CleanTests: XCTestCase {
         XCTAssertNotNil([folder, message, tool] as [Any])
     }
 
+    // An expectation's timeout only bounds a failure: a test that passes never waits it out.
+    func testWaitsOnAnExpectationWithATimeout() async {
+        let done = expectation(description: "done")
+        work.run { done.fulfill() }
+        wait(for: [done], timeout: 5)
+        self.wait(for: [done], timeout: 5)
+        await fulfillment(of: [done], timeout: 5)
+        _ = semaphore.wait(timeout: deadline)
+    }
+
     func testAwaitsWithoutTimeout() async {
         let value = await compute()
         XCTAssertEqual(value, 1)

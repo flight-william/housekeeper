@@ -27,6 +27,12 @@ with the install line.
 | Python | `brew install ruff` (coverage.py in the project's venv) |
 | shell | `brew install shellcheck` |
 
+Each size has one owner, so one long file is one finding. A file's length (R3, 400 lines) is
+house's own counter for every language, Swift included: SwiftLint's `file_length` is not
+reported, whatever `.swiftlint.yml` sets it to. Function and type length in Swift are
+SwiftLint's (`function_body_length`, `type_body_length`), in Rust clippy's, in Python
+house's counter.
+
 ## Start a repo
 
 ```sh
@@ -34,7 +40,8 @@ cd your-repo
 house init
 ```
 
-`house init` writes `.house.toml`, the protected-file list and the git hooks. Commit them.
+`house init` writes `.house.toml`, the protected-file list and the git hooks, and, for a repo
+with Swift files and no `.swift-format`, one with the indentation those files use. Commit them.
 
 ## What the reply means
 

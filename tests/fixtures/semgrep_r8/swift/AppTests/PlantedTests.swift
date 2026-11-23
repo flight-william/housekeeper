@@ -14,9 +14,9 @@ final class PlantedTests: XCTestCase {
 
     func testWait() async {
         let done = expectation(description: "done")
-        wait(for: [done], timeout: 1)
-        self.wait(for: [done], timeout: 1)
-        await fulfillment(of: [done], timeout: 1)
+        semaphore.wait()
+        wait(for: [done], timeout: .infinity)
+        await fulfillment(of: [done])
     }
 
     func testClock() {
@@ -99,5 +99,22 @@ final class MoveTests: XCTestCase {
         let from = URL(fileURLWithPath: "tmp")
         try FileManager.default.copyItem(at: from, to: URL(fileURLWithPath: "/home/someone/c"))
         try FileManager.default.moveItem(at: from, to: URL(fileURLWithPath: "~/d"))
+    }
+}
+
+final class UnboundedWaitTests: XCTestCase {
+    func testWaitsWithNoLimit() async {
+        let done = expectation(description: "done")
+        group.wait()
+        self.wait(for: [done], timeout: .infinity)
+        await fulfillment(of: [done], timeout: .infinity)
+        _ = semaphore.wait(timeout: .distantFuture)
+        await fulfillment(of: [done], enforceOrder: true)
+    }
+
+    func testSleepsThenWaits() {
+        let done = expectation(description: "done")
+        Thread.sleep(forTimeInterval: 1)
+        wait(for: [done], timeout: 1)
     }
 }

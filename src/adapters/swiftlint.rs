@@ -1,4 +1,8 @@
 //! SwiftLint: R2 lint, R3 length, R4 complexity.
+//!
+//! A file's length is r3's (house's 400 lines, the same for every language), so
+//! SwiftLint's `file_length` is dropped: one long file is one finding, with a measure,
+//! whatever limit the repo's SwiftLint settings give. Function and type length stay.
 
 use super::Exits;
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
@@ -23,10 +27,13 @@ struct Violation {
     rule_id: String,
 }
 
+/// The SwiftLint rule whose finding r3 owns: a file's length.
+const FILE_LENGTH: &str = "file_length";
+
 /// The house rule for a SwiftLint rule id; unknown ones are R2.
 fn house_rule(rule_id: &str) -> &'static str {
     match rule_id {
-        "file_length" | "function_body_length" | "type_body_length" => "R3",
+        "function_body_length" | "type_body_length" => "R3",
         "cyclomatic_complexity" | "nesting" | "function_parameter_count" => "R4",
         _ => "R2",
     }
@@ -98,7 +105,9 @@ impl Adapter for SwiftLint {
                 measure: None,
             })
             .collect();
-        EXITS.judge("swiftlint", out, findings)
+        let mut findings = EXITS.judge("swiftlint", out, findings)?;
+        findings.retain(|f| f.tool_rule != format!("swiftlint {FILE_LENGTH}"));
+        Ok(findings)
     }
 }
 
@@ -143,14 +152,13 @@ mod tests {
             rules,
             [
                 ("R4", "swiftlint cyclomatic_complexity"),
-                ("R3", "swiftlint file_length"),
                 ("R3", "swiftlint function_body_length"),
             ]
         );
         assert_eq!(found[0].place, Place::File("Many.swift".to_string()));
         assert_eq!(found[0].line, Some(5));
-        assert_eq!(found[2].fix, "fix the SwiftLint rule function_body_length");
-        assert!(!found[2].what.ends_with('.'));
+        assert_eq!(found[1].fix, "fix the SwiftLint rule function_body_length");
+        assert!(!found[1].what.ends_with('.'));
     }
 
     #[test]

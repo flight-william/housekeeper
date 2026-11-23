@@ -93,3 +93,12 @@ class StandInTest(unittest.TestCase):
 def test_shortens_a_made_up_home_path():
     assert shorten("/Users/tester/Desktop/Shop") == "~/Desktop/Shop"
     print("/home/someone/project")
+
+
+# A wait with a timeout only bounds a failure: a test that passes never waits it out.
+def test_waits_on_an_event_with_a_timeout():
+    assert done.wait(timeout=5)
+    reader.join(5)
+    reader.join(timeout=5)
+    asyncio.wait_for(task, 5)
+    assert ", ".join(["a", "b"]) == "a, b"
