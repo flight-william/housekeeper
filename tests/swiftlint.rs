@@ -50,7 +50,7 @@ fn with_the_repos_config_the_stage_files_are_named_and_force_excluded() {
         .unwrap();
     assert_eq!(
         cmd.args.join(" "),
-        "lint --reporter json --quiet --force-exclude Sources/A.swift Generated/G.swift"
+        "lint --reporter json --quiet --force-exclude -- Sources/A.swift Generated/G.swift"
     );
 }
 
@@ -62,7 +62,7 @@ fn without_a_config_the_files_are_named() {
         .unwrap();
     assert_eq!(
         cmd.args.join(" "),
-        "lint --reporter json --quiet --force-exclude Sources/A.swift"
+        "lint --reporter json --quiet --force-exclude -- Sources/A.swift"
     );
     assert!(SwiftLint.command(&ctx(&root, &["a.py"])).is_none());
 }

@@ -15,7 +15,7 @@
 //! house reads no YAML, so a staged file outside `included:` is linted: a stated
 //! limit.
 
-use super::{Exits, relative, stage_file};
+use super::{Exits, relative, stage_file, then_files};
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
 use crate::finding::{Finding, Place};
 use serde::Deserialize;
@@ -80,14 +80,10 @@ impl Adapter for SwiftLint {
         if files.is_empty() {
             return None;
         }
-        let mut args: Vec<String> = ["lint", "--reporter", "json", "--quiet", "--force-exclude"]
-            .iter()
-            .map(|a| a.to_string())
-            .collect();
-        args.extend(files);
+        let options = ["lint", "--reporter", "json", "--quiet", "--force-exclude"];
         Some(Command {
             program: "swiftlint".to_string(),
-            args,
+            args: then_files(&options, files),
         })
     }
 
@@ -221,7 +217,7 @@ mod tests {
         assert_eq!(cmd.program, "swiftlint");
         assert_eq!(
             cmd.args.join(" "),
-            "lint --reporter json --quiet --force-exclude Sources/B.swift"
+            "lint --reporter json --quiet --force-exclude -- Sources/B.swift"
         );
     }
 }

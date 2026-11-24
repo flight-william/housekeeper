@@ -96,6 +96,7 @@ impl Adapter for Semgrep {
         .map(|s| (*s).to_string())
         .collect();
         args.extend(config_args());
+        args.push("--".to_string());
         args.extend(files);
         Some(Command {
             program: "semgrep".to_string(),

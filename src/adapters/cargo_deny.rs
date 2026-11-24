@@ -7,8 +7,8 @@
 //! network. With no advisory database cached the run cannot check, and says to run
 //! `cargo deny fetch` once.
 
-use super::Exits;
 use super::cargo_fmt::manifests;
+use super::{Exits, path_value};
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
 use crate::finding::{Finding, Place};
 use serde_json::Value;
@@ -50,8 +50,8 @@ impl Adapter for CargoDeny {
                 let mut args: Vec<String> = ["--offline", "--locked", "--format", "json"]
                     .map(String::from)
                     .to_vec();
-                args.extend(["--manifest-path".into(), manifest]);
-                args.extend(["--config".into(), config, "check".into()]);
+                args.extend(["--manifest-path".into(), path_value(manifest)]);
+                args.extend(["--config".into(), path_value(config), "check".into()]);
                 Command {
                     program: "cargo-deny".into(),
                     args,

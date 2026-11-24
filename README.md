@@ -115,7 +115,11 @@ Each tool gets the files it reads, chosen by extension (`.sh` and `.bash` are sh
 for ShellCheck, r3 and Semgrep). A file with no known extension is
 chosen by its first line: `#!/usr/bin/env python3` goes to ruff, ruff format, r3 and Semgrep,
 and `#!/bin/sh` or `#!/usr/bin/env bash` to ShellCheck, r3 and Semgrep. A zsh script, which
-ShellCheck cannot read, goes to none of them, nor does a binary file.
+ShellCheck cannot read, goes to none of them, nor does a binary file. The files follow `--`
+on each tool's command line, and a Cargo manifest or `deny.toml` path that starts with `-`
+gets `./` before it, so a file named `-x.swift` or `--output=Sources/A.swift` is checked as a
+file and never read as one of the tool's options (such as SwiftLint's or Semgrep's
+`--output`, which would write over a tracked file).
 
 SwiftLint gets the stage's Swift files by name, with `--force-exclude`, so a file in the
 repo's `.swiftlint.yml` `excluded:` is left out, and a stage whose Swift files are all
@@ -227,6 +231,22 @@ A fork can edit the workflow and skip house, so the runner needs a guard outside
 workflow: `runner/job-started.sh` refuses any job from a repository that is not private.
 Install it with `ACTIONS_RUNNER_HOOK_JOB_STARTED=<path to runner/job-started.sh>` in the
 runner folder's `.env`, then restart the runner service.
+
+## Known limits
+
+For a later release:
+
+- Every file a tool checks goes on one command line, so a stage whose file names pass the
+  system's argument limit (1 MB on macOS; likeliest at push, after a mass rename or a vendor
+  import) is a cannot-check, "Argument list too long", for that tool. 0.4.0 ran SwiftLint
+  with no paths in a repo with a `.swiftlint.yml`, so there it was not.
+- A staged Swift file outside `.swiftlint.yml`'s `included:` is linted, as described under
+  Start a repo; list its folder under `excluded:` to keep it out.
+- That SwiftLint does not lint a file the stage did not touch is shown by its command line
+  only: house drops findings on other files, so a real run could not tell the two apart.
+- A test that runs a real tool (SwiftLint, SwiftFormat, ShellCheck, Semgrep, cargo-deny and
+  the others) passes with a note when that tool is not installed, so on a machine without
+  it the test proves nothing, and the count of passing tests does not show that.
 
 ## Licence
 

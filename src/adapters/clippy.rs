@@ -1,8 +1,8 @@
 //! R2, R3, R4 for Rust: clippy's JSON messages, one finding per lint.
 //! The thresholds (60 lines, 6 arguments) live in the project's `clippy.toml`.
 
-use super::Exits;
 use super::cargo_fmt::{listed, manifests, relative};
+use super::{Exits, path_value};
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
 use crate::finding::{Finding, Measure, Place};
 use serde_json::Value;
@@ -55,7 +55,7 @@ impl Adapter for Clippy {
     /// `cargo clippy --manifest-path <m> <ARGS after "clippy">`, one per Rust workspace.
     fn commands(&self, ctx: &Context) -> Vec<Command> {
         let to_command = |m: String| {
-            let mut args = vec![ARGS[0].to_string(), "--manifest-path".into(), m];
+            let mut args = vec![ARGS[0].to_string(), "--manifest-path".into(), path_value(m)];
             args.extend(ARGS[1..].iter().map(|a| a.to_string()));
             Command {
                 program: "cargo".into(),

@@ -1,7 +1,7 @@
 //! Apple's `swift format lint --strict`: R1 formatting.
 //! It ships with Xcode, not Homebrew.
 
-use super::Exits;
+use super::{Exits, then_files};
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
 use crate::finding::{Finding, Place};
 use std::path::Path;
@@ -63,14 +63,9 @@ impl Adapter for SwiftFormat {
         if files.is_empty() {
             return None;
         }
-        let mut args: Vec<String> = ["format", "lint", "--strict"]
-            .iter()
-            .map(|a| a.to_string())
-            .collect();
-        args.extend(files);
         Some(Command {
             program: "swift".to_string(),
-            args,
+            args: then_files(&["format", "lint", "--strict"], files),
         })
     }
 
@@ -166,7 +161,7 @@ mod tests {
         assert!(SwiftFormat.command(&ctx(&["a.py"])).is_none());
         let cmd = SwiftFormat.command(&ctx(&["a.py", "B.swift"])).unwrap();
         assert_eq!(cmd.program, "swift");
-        assert_eq!(cmd.args.join(" "), "format lint --strict B.swift");
+        assert_eq!(cmd.args.join(" "), "format lint --strict -- B.swift");
         assert_eq!(SwiftFormat.brew_formula(), "xcode (xcode-select --install)");
     }
 }
