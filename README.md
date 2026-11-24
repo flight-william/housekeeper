@@ -26,6 +26,23 @@ R10 Fast, at every stage · R11 State machine first · R12 Good API design · R1
 design · R14 Comments say why · R15 One vocabulary · R16 Standard folder layout ·
 R17 ✓ Commit messages are records: `area: what changed`, then Why:, Proof:, Undo:
 
+## Languages
+
+| Rule | Python | Rust | Swift | Shell |
+|---|---|---|---|---|
+| R1 Formatted | ruff format | cargo fmt | swift format or SwiftFormat | – |
+| R2 Lint, warnings as errors | ruff | clippy, cargo-deny | SwiftLint | ShellCheck |
+| R2 No secret | gitleaks | gitleaks | gitleaks | gitleaks |
+| R3 Small | size counter; ruff PLR0915 if the repo's ruff settings select it | clippy too_many_lines, size counter | SwiftLint, size counter | size counter |
+| R4 Simple | ruff C901 if the repo's ruff settings select it | clippy too_many_arguments; cognitive_complexity –, not enabled | SwiftLint | – |
+| R7 Tested | [tests] commands, any language | ← | ← | ← |
+| R8 Deterministic tests | Semgrep, 10 rules | Semgrep, 16 rules (8 for tests/, 8 for test modules) | Semgrep, 9 rules (partial parse of #expect/#require) | – |
+| R9 Nothing silenced | Semgrep, 6 rules | Semgrep + Cargo.toml lints, 4 rules | Semgrep, 6 rules | Semgrep, 1 rule |
+| R9 Protected files need the owner's approval | any language | ← | ← | ← |
+| R17 Commit messages | any language | ← | ← | ← |
+
+Other languages get only the language-free checks: R2 secrets, R7 tests, R9 approvals, R17.
+
 ## Install
 
 ```sh
