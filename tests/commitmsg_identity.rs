@@ -442,3 +442,38 @@ fn the_final_trailer_block_may_hold_other_trailers_and_continuations() {
     let ids: Vec<String> = seen(&text, &claude()).into_iter().map(|h| h.0).collect();
     assert!(!ids.contains(&"R17/agent".to_string()), "{ids:?}");
 }
+
+// One rule for every agent: a marker row names its agent, and that agent's session
+// owes that agent's line. A second, made-up row stands in for an agent not yet listed.
+#[test]
+fn every_marker_row_owes_its_own_agents_line() {
+    let markers: &[(&str, &str, &'static str)] = &[
+        ("CLAUDECODE", "1", "claude"),
+        ("TEST_AGENT_SESSION", "yes", "codex"),
+    ];
+    let env = |name: &str| (name == "TEST_AGENT_SESSION").then(|| "yes".to_string());
+    assert_eq!(session_agent(markers, env), Some("codex"));
+    let codex = Context {
+        session: Some("codex"),
+        ..ctx()
+    };
+    let line = "Co-Authored-By: Codex (gpt-6.1-sol) <noreply@openai.com>";
+    let text = format!("parser: keep the last line{BODY}\n{line}\n");
+    assert_eq!(seen(&text, &codex), vec![]);
+    let text = format!("parser: keep the last line{BODY}\n{OPUS}\n");
+    assert_eq!(seen(&text, &codex), one("R17/agent", 0, "Co-Authored-By:"));
+    let antigravity = Context {
+        session: Some("antigravity"),
+        models: vec!["gemini-3.8-flash-low".into()],
+        ..ctx()
+    };
+    let line = "Co-Authored-By: Antigravity (gemini-3.8-flash-low) <noreply@google.com>";
+    let text = format!("parser: keep the last line{BODY}\n{line}\n");
+    assert_eq!(seen(&text, &antigravity), vec![]);
+    let line = "Co-Authored-By: Gemini (gemini-3.8-flash-low) <noreply@google.com>";
+    let text = format!("parser: keep the last line{BODY}\n{line}\n");
+    assert_eq!(
+        seen(&text, &antigravity),
+        one("R17/agent", 0, "Co-Authored-By:")
+    );
+}
