@@ -20,3 +20,8 @@ pub mod rules;
 pub mod run;
 pub mod runner;
 pub mod tests_step;
+
+/// Fresh temp folders for the unit tests: the one helper the integration tests use.
+#[cfg(test)]
+#[path = "../tests/common/temp.rs"]
+mod temp;

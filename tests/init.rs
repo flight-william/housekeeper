@@ -72,6 +72,10 @@ fn codeowners_is_written_with_every_protected_path_for_the_owner() {
         assert!(text.lines().any(|l| l == format!("{pat} @alice")), "{p}");
     }
     assert!(said.iter().any(|l| l.contains("wrote .github/CODEOWNERS")));
+    assert!(
+        text.lines().any(|l| l == "**/.swiftformat @alice"),
+        "{text}"
+    );
 }
 
 #[test]

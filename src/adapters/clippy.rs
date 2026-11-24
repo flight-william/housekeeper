@@ -382,7 +382,7 @@ mod tests {
 
     #[test]
     fn one_clippy_command_per_workspace() {
-        let root = std::env::temp_dir().join(format!("house-nested-clippy-{}", std::process::id()));
+        let root = crate::temp::fresh("nested-clippy");
         std::fs::create_dir_all(root.join("a/src")).unwrap();
         std::fs::create_dir_all(root.join("b/src")).unwrap();
         std::fs::write(root.join("a/Cargo.toml"), "").unwrap();

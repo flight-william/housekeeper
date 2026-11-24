@@ -1,10 +1,23 @@
 //! SwiftLint: R2 lint, R3 length, R4 complexity.
+//!
+//! A file's length is r3's (house's 400 lines, the same for every language) when r3
+//! runs for the stage, so SwiftLint's `file_length` is then dropped (`yields_to`): one
+//! long file is one finding, with a measure, whatever limit the repo's SwiftLint
+//! settings give. When `[tools]` names swiftlint without r3, `file_length` is kept,
+//! so a Swift file's length always has exactly one owner. Function and type length
+//! stay SwiftLint's.
+//!
+//! SwiftLint applies a config's `included:` only when it picks the files itself:
+//! files named on its command line are all linted (0.65.1), so the repo's own
+//! scope (probes, scripts left out) would be skipped. With a `.swiftlint.yml` at
+//! the root, SwiftLint is run with no paths, as the project runs it, and house
+//! keeps the findings on the files the stage checks; without one, the files are
+//! named.
 
-use super::Exits;
+use super::{Exits, relative, stage_file};
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
 use crate::finding::{Finding, Place};
 use serde::Deserialize;
-use std::path::Path;
 
 pub struct SwiftLint;
 
@@ -23,6 +36,16 @@ struct Violation {
     rule_id: String,
 }
 
+/// SwiftLint's finding on a file's length, which r3 owns when it runs.
+const FILE_LENGTH: &str = "swiftlint file_length";
+
+/// The config SwiftLint reads from the folder it runs in.
+const CONFIG: &str = ".swiftlint.yml";
+
+/// SwiftLint's error, exit 1, when its scope holds no Swift file (every one left
+/// out by the config): it checked nothing by the project's own choice.
+const NO_LINTABLE: &str = "Error: No lintable files found at paths: ";
+
 /// The house rule for a SwiftLint rule id; unknown ones are R2.
 fn house_rule(rule_id: &str) -> &'static str {
     match rule_id {
@@ -30,15 +53,6 @@ fn house_rule(rule_id: &str) -> &'static str {
         "cyclomatic_complexity" | "nesting" | "function_parameter_count" => "R4",
         _ => "R2",
     }
-}
-
-/// `file` relative to `root`; SwiftLint prints absolute paths, and /tmp may be /private/tmp.
-fn relative(root: &Path, file: &str) -> String {
-    let unprivate = |p: &str| p.strip_prefix("/private").unwrap_or(p).to_string();
-    let root = unprivate(&root.to_string_lossy());
-    let file = unprivate(file);
-    let prefix = format!("{}/", root.trim_end_matches('/'));
-    file.strip_prefix(&prefix).unwrap_or(&file).to_string()
 }
 
 impl Adapter for SwiftLint {
@@ -52,6 +66,10 @@ impl Adapter for SwiftLint {
 
     fn brew_formula(&self) -> &'static str {
         "swiftlint"
+    }
+
+    fn yields_to(&self) -> &'static [(&'static str, &'static str)] {
+        &[(FILE_LENGTH, "r3")]
     }
 
     fn command(&self, ctx: &Context) -> Option<Command> {
@@ -68,7 +86,9 @@ impl Adapter for SwiftLint {
             .iter()
             .map(|a| a.to_string())
             .collect();
-        args.extend(files);
+        if !ctx.root.join(CONFIG).is_file() {
+            args.extend(files);
+        }
         Some(Command {
             program: "swiftlint".to_string(),
             args,
@@ -76,6 +96,12 @@ impl Adapter for SwiftLint {
     }
 
     fn parse(&self, ctx: &Context, out: &Output) -> Result<Vec<Finding>, CannotCheck> {
+        let nothing_in_scope = out.exit == 1
+            && out.stdout.trim().is_empty()
+            && out.stderr.lines().any(|l| l.starts_with(NO_LINTABLE));
+        if nothing_in_scope {
+            return Ok(Vec::new());
+        }
         let violations: Vec<Violation> = serde_json::from_str(&out.stdout).map_err(|_| {
             let why = out.stderr.lines().next().unwrap_or("no output");
             CannotCheck {
@@ -86,19 +112,32 @@ impl Adapter for SwiftLint {
                 fix: "run swiftlint lint and read its error".to_string(),
             }
         })?;
-        let findings = violations
+        // Each finding with the stage file it is on, if any.
+        let (on, findings): (Vec<Option<String>>, Vec<Finding>) = violations
             .into_iter()
-            .map(|v| Finding {
-                rule: house_rule(&v.rule_id).to_string(),
-                place: Place::File(relative(&ctx.root, &v.file)),
-                line: v.line,
-                what: v.reason.trim_end_matches('.').to_string(),
-                fix: format!("fix the SwiftLint rule {}", v.rule_id),
-                tool_rule: format!("swiftlint {}", v.rule_id),
-                measure: None,
+            .map(|v| {
+                let on = stage_file(&ctx.root, &ctx.files, &v.file);
+                let file = on.clone().unwrap_or_else(|| relative(&ctx.root, &v.file));
+                let finding = Finding {
+                    rule: house_rule(&v.rule_id).to_string(),
+                    place: Place::File(file),
+                    line: v.line,
+                    what: v.reason.trim_end_matches('.').to_string(),
+                    fix: format!("fix the SwiftLint rule {}", v.rule_id),
+                    tool_rule: format!("swiftlint {}", v.rule_id),
+                    measure: None,
+                };
+                (on, finding)
             })
-            .collect();
-        EXITS.judge("swiftlint", out, findings)
+            .unzip();
+        // Judged on every finding: exit 2 may come from a file outside the stage's.
+        let findings = EXITS.judge("swiftlint", out, findings)?;
+        Ok(on
+            .into_iter()
+            .zip(findings)
+            .filter(|(on, _)| on.is_some())
+            .map(|(_, f)| f)
+            .collect())
     }
 }
 

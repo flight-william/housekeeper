@@ -46,6 +46,18 @@ fn commit_msg_clean_message_exits_zero_and_records_stage_commit_msg() {
     assert_eq!(lines[0]["tools"][0]["name"], "commit-msg");
 }
 
+// An agent session owes the agent's Co-Authored-By line and nothing else: no session
+// line, whose link is noise once the session is gone.
+#[test]
+fn commit_msg_in_an_agent_session_needs_no_session_line() {
+    let repo = commit_repo("cm-no-session");
+    let log = common::fresh("cm-no-session-log");
+    let agent = "Co-Authored-By: Claude (claude-opus-5-5) <noreply@anthropic.com>";
+    message(&repo, &format!("{GOOD}\n{agent}\n"));
+    let (code, text) = house(&repo, &log, &["commit-msg", "MSG"], &[("CLAUDECODE", "1")]);
+    assert_eq!(code, 0, "{text}");
+}
+
 #[test]
 fn commit_msg_vague_agent_message_gives_r17_lines_and_exit_one() {
     let repo = commit_repo("cm-bad");
@@ -53,18 +65,19 @@ fn commit_msg_vague_agent_message_gives_r17_lines_and_exit_one() {
     message(&repo, "parser: wip\n");
     let (code, text) = house(&repo, &log, &["commit-msg", "MSG"], &[("CLAUDECODE", "1")]);
     assert_eq!(code, 1, "{text}");
-    assert!(text.starts_with("house commit-msg: 6 to fix ("), "{text}");
+    assert!(text.starts_with("house commit-msg: 5 to fix ("), "{text}");
     assert!(
         text.contains("R17 repo:1: subject says only wip, fix or update: wip. fix: say what changed, in words a reader of the log understands without the diff. [house r17.vague]\n"),
         "{text}"
     );
     assert!(
-        text.contains("R17 repo: agent commit without a valid Co-Authored-By or Claude-Session line: Claude-Session:."),
+        text.contains("R17 repo: agent commit without a valid Co-Authored-By line naming the agent: Co-Authored-By:. fix: add `Co-Authored-By: <Name> (<model id>) <noreply@…>` with a model id listed in .house.toml. [house r17.agent]\n"),
         "{text}"
     );
+    assert!(!text.contains("Claude-Session"), "{text}");
     let line = &records(&log)[0];
     assert_eq!(line["stage"], "commit-msg");
-    assert_eq!(line["findings"].as_array().unwrap().len(), 6);
+    assert_eq!(line["findings"].as_array().unwrap().len(), 5);
 }
 
 #[test]

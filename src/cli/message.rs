@@ -62,7 +62,7 @@ pub fn judge_message(root: &Path, file: &Path) -> Result<Vec<Finding>, CannotChe
         .map(|c| c.path)
         .collect();
     let kept = commitmsg::kept(&text, &facts)?;
-    findings.extend(approval::check(&changed, &protected, &kept));
+    findings.extend(approval::check_in(root, &changed, &protected, &kept));
     Ok(findings)
 }
 
@@ -97,7 +97,9 @@ pub fn commit_facts(root: &Path) -> Result<commitmsg::Commit, CannotCheck> {
         author_email,
         comment_char: git_value(&["config", "--get", "core.commentChar"]),
         merge_head,
-        claudecode: std::env::var("CLAUDECODE").ok(),
+        session: commitmsg::session_agent(commitmsg::AGENT_MARKERS, |name| {
+            std::env::var(name).ok()
+        }),
         models: cfg.commit.models,
     })
 }

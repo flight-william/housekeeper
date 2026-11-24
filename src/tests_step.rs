@@ -1,7 +1,10 @@
 //! The test step: the stage's `[tests]` commands (`.house.toml`), each a program and
-//! its arguments, run from the repo root with no shell under the hang guard, after
-//! the adapters. A non-zero exit is one R7 finding for the repo; the last lines of
-//! the command's output go to the run record, never to the reply.
+//! its arguments, run from the repo root with no shell, after the adapters, each
+//! stopped at its time limit (`[tests] timeout_seconds`) with every process it started
+//! (`run::run_group`). A non-zero exit is one R7 finding for the repo; the last lines
+//! of the command's output go to the run record, never to the reply. A command stopped
+//! at the limit is one R7 finding too, naming the command and the limit: a suite that
+//! waits on a dialog fails, it does not hang.
 
 use crate::adapter::{CannotCheck, Command};
 use crate::config;
@@ -33,9 +36,9 @@ pub struct FailedOutput {
     pub stderr_tail: Vec<String>,
 }
 
-/// Run each of `commands` in `root`, in order, each killed after `guard`.
-pub fn run(root: &Path, commands: &[Vec<String>], guard: Duration) -> Vec<TestRun> {
-    commands.iter().map(|c| run_one(root, c, guard)).collect()
+/// Run each of `commands` in `root`, in order, each stopped after `limit`.
+pub fn run(root: &Path, commands: &[Vec<String>], limit: Duration) -> Vec<TestRun> {
+    commands.iter().map(|c| run_one(root, c, limit)).collect()
 }
 
 /// One skipped run, for a stage with no file to check.
@@ -45,7 +48,7 @@ pub fn skipped() -> TestRun {
     TestRun { tool, failed: None }
 }
 
-fn run_one(root: &Path, argv: &[String], guard: Duration) -> TestRun {
+fn run_one(root: &Path, argv: &[String], limit: Duration) -> TestRun {
     let shown = argv.join(" ");
     let mut test = TestRun {
         tool: tool_run(),
@@ -59,8 +62,29 @@ fn run_one(root: &Path, argv: &[String], guard: Duration) -> TestRun {
         program: program.clone(),
         args: args.to_vec(),
     };
-    let ran = run::run(&cmd, root, program, guard);
+    let ran = run::run_group(&cmd, root, program, limit);
     test.tool.seconds = ran.seconds;
+    if ran.timed_out {
+        test.tool.findings.push(Finding {
+            rule: "R7".into(),
+            place: Place::Repo,
+            line: None,
+            what: format!("test command did not finish in {}: {shown}", seconds(limit)),
+            fix: format!(
+                "make it fail fast instead of waiting (on a dialog, a lock, the network), or raise [tests] timeout_seconds in {}",
+                config::FILE
+            ),
+            tool_rule: "house tests timeout".into(),
+            measure: None,
+        });
+        // What it had written by then: the record tells what it was waiting on.
+        test.failed = ran.stopped_output.map(|out| FailedOutput {
+            command: shown,
+            stdout_tail: tail(&out.stdout),
+            stderr_tail: tail(&out.stderr),
+        });
+        return test;
+    }
     match ran.result {
         Err(c) => test.tool.cannot = Some(fix_config(c.what)),
         Ok(out) => {
@@ -105,6 +129,15 @@ fn tool_run() -> ToolRun {
         findings: Vec::new(),
         cannot: None,
         unread: Vec::new(),
+    }
+}
+
+/// `600 s`, or `0.2 s` for a limit under a second's precision.
+fn seconds(limit: Duration) -> String {
+    if limit.subsec_millis() == 0 {
+        format!("{} s", limit.as_secs())
+    } else {
+        format!("{:.1} s", limit.as_secs_f64())
     }
 }
 

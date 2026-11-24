@@ -175,3 +175,50 @@ fn exit_2_is_cannot_check_unless_the_formatter_met_syntax_errors() {
         ["R1 ugly.py:1: File would be reformatted. fix: run ruff format ugly.py. [ruff format]"]
     );
 }
+
+/// A commit whose only Python file the repo's ruff config excludes: ruff checks
+/// nothing by the project's own choice, exits 0 and warns "No Python files found"
+/// (check_excluded and format_excluded, captured from ruff 0.17.6 with
+/// `extend-exclude`). `ruff check` still prints `[]`; the formatter prints nothing.
+#[test]
+fn files_the_ruff_config_excludes_give_no_findings() {
+    let c = ctx(&["skip.py"]);
+    assert_eq!(Ruff.parse(&c, &fixture("check_excluded", 0)), Ok(vec![]));
+    assert_eq!(
+        RuffFormat.parse(&c, &fixture("format_excluded", 0)),
+        Ok(vec![])
+    );
+    let empty = Output {
+        exit: 0,
+        stdout: String::new(),
+        stderr: fixture("format_excluded", 0).stderr,
+    };
+    assert_eq!(Ruff.parse(&c, &empty), Ok(vec![]));
+}
+
+/// Exit 0 with nothing on stdout is still cannot-check unless ruff says, in its own
+/// words, that it found no Python files.
+#[test]
+fn empty_output_without_the_no_files_warning_is_cannot_check() {
+    let c = ctx(&["a.py"]);
+    for stderr in [
+        "",
+        "warning: something else\n",
+        "warning: No Python files found\n",
+        "note: No Python files found under the given path(s)\n",
+    ] {
+        let out = Output {
+            exit: 0,
+            stdout: String::new(),
+            stderr: stderr.into(),
+        };
+        assert!(Ruff.parse(&c, &out).is_err(), "{stderr:?}");
+        assert!(RuffFormat.parse(&c, &out).is_err(), "{stderr:?}");
+    }
+    let warned_but_failed = Output {
+        exit: 2,
+        stdout: String::new(),
+        stderr: fixture("format_excluded", 0).stderr,
+    };
+    assert!(RuffFormat.parse(&c, &warned_but_failed).is_err());
+}

@@ -2,13 +2,13 @@
 //! the test step.
 
 use crate::adapter::{Adapter, CannotCheck, Context, Stage};
-use crate::finding::Finding;
+use crate::finding::{Finding, Place};
 use crate::reply::{Report, ToolRun};
 use crate::rules::Rules;
 use crate::tests_step::{self, FailedOutput, TestRun};
 use crate::{approval, config, files, lints, run};
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Run the stage's adapters, then its test commands, in `root` and collect the report.
 pub fn check(root: &Path, stage: Stage, all: Vec<Box<dyn Adapter>>) -> Report {
@@ -70,11 +70,19 @@ pub(super) fn check_from(
     let tools = &mut checked.report.tools;
     let (chosen, exclude, tests, config_cannot) = match &rules.config {
         Ok(cfg) => {
-            let tests = config::tests_for(cfg, stage).to_vec();
+            let tests = (
+                config::tests_for(cfg, stage).to_vec(),
+                config::test_limit(cfg),
+            );
             let (chosen, unknown) = config::select(cfg, stage, all);
             (chosen, cfg.paths.exclude.clone(), tests, unknown)
         }
-        Err(c) => (all, Vec::new(), Vec::new(), vec![c.clone()]),
+        Err(c) => (
+            all,
+            Vec::new(),
+            (Vec::new(), config::TEST_LIMIT),
+            vec![c.clone()],
+        ),
     };
     for c in config_cannot {
         tools.push(cannot_run("house", c));
@@ -100,10 +108,22 @@ pub(super) fn check_from(
                 files: scope.files,
                 push_range: scope.push_range,
             };
-            tools.extend(chosen.iter().map(|a| run_one(a.as_ref(), &ctx)));
+            let names: Vec<&str> = chosen.iter().map(|a| a.name()).collect();
+            for adapter in &chosen {
+                let mut tool = run_one(adapter.as_ref(), &ctx);
+                let owned_elsewhere = |f: &Finding| {
+                    adapter
+                        .yields_to()
+                        .iter()
+                        .any(|(rule, owner)| f.tool_rule == *rule && names.contains(owner))
+                };
+                tool.findings
+                    .retain(|f| !on_excluded(f, &exclude) && !owned_elsewhere(f));
+                tools.push(tool);
+            }
             tools.extend(lints::run(&ctx));
-            tools.extend(settings_case(&scope_changed, rules));
-            for test in run_tests(&ctx, &tests, tests_due) {
+            tools.extend(settings_case(&ctx.root, &scope_changed, rules));
+            for test in run_tests(&ctx, &tests.0, tests.1, tests_due) {
                 tools.push(test.tool);
                 checked.failed_tests.extend(test.failed);
             }
@@ -116,12 +136,12 @@ pub(super) fn check_from(
 
 /// The wrong-case settings names among `changed`, against the built-in protected
 /// list and the rules' `[protected] extra`; `None` when there are none.
-fn settings_case(changed: &[String], rules: &Rules) -> Option<ToolRun> {
+fn settings_case(root: &Path, changed: &[String], rules: &Rules) -> Option<ToolRun> {
     let mut protected: Vec<String> = approval::PROTECTED.iter().map(|g| g.to_string()).collect();
     if let Ok(config) = &rules.config {
         protected.extend(config.protected.extra.iter().cloned());
     }
-    let findings = approval::wrong_case(changed, &protected);
+    let findings = approval::wrong_case_in(root, changed, &protected);
     (!findings.is_empty()).then(|| ToolRun {
         name: "settings-case".into(),
         seconds: 0.0,
@@ -155,14 +175,24 @@ fn every_file(root: &Path, exclude: &[String]) -> Result<files::Scope, CannotChe
 
 /// The test step after the adapters: skipped unless `due` (`Scope::run_tests`): at push
 /// when the push changes any path, at commit and `--all` when there is a file to check.
-fn run_tests(ctx: &Context, tests: &[Vec<String>], due: bool) -> Vec<TestRun> {
+/// Each command may run for `limit` (`[tests] timeout_seconds`).
+fn run_tests(ctx: &Context, tests: &[Vec<String>], limit: Duration, due: bool) -> Vec<TestRun> {
     if tests.is_empty() {
         Vec::new()
     } else if !due {
         vec![tests_step::skipped()]
     } else {
-        tests_step::run(&ctx.root, tests, run::HANG_GUARD)
+        tests_step::run(&ctx.root, tests, limit)
     }
+}
+
+/// A finding on a path `[paths] exclude` names. A tool that reads more than the
+/// files it is handed (gitleaks reads the git history) reports one, and it is dropped.
+fn on_excluded(f: &Finding, exclude: &[String]) -> bool {
+    let Place::File(file) = &f.place else {
+        return false;
+    };
+    files::without_excluded(vec![file.clone()], exclude).is_empty()
 }
 
 /// Two findings are one when rule, place, line and tool rule match.
@@ -190,8 +220,15 @@ fn run_one(adapter: &dyn Adapter, ctx: &Context) -> ToolRun {
         tool.skipped = true;
         return tool;
     }
+    let env = adapter.env(ctx);
     for cmd in &commands {
-        let ran = run::run(cmd, &ctx.root, adapter.brew_formula(), run::HANG_GUARD);
+        let ran = run::run_env(
+            cmd,
+            &ctx.root,
+            adapter.brew_formula(),
+            run::HANG_GUARD,
+            &env,
+        );
         tool.seconds += ran.seconds;
         let parsed = ran.result.and_then(|out| {
             if tool.exit.is_none_or(|e| e == 0) {

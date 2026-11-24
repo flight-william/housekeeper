@@ -269,7 +269,7 @@ mod tests {
 
     /// A temp repo: an empty root, a workspace in tools/inner, a crate in other/b.
     fn nested_repo(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("house-nested-{name}-{}", std::process::id()));
+        let root = crate::temp::fresh(&format!("nested-{name}"));
         for dir in ["tools/inner/crates/a/src", "other/b/src", "loose"] {
             std::fs::create_dir_all(root.join(dir)).unwrap();
         }
@@ -317,7 +317,7 @@ mod tests {
     /// and a crate under a manifest with no `[workspace]`, keep their own.
     #[test]
     fn members_run_from_their_workspace_root() {
-        let root = std::env::temp_dir().join(format!("house-ws-root-{}", std::process::id()));
+        let root = crate::temp::fresh("ws-root");
         for dir in [
             "ws/crates/a/src",
             "ws/crates/b/src",

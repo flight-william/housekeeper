@@ -202,12 +202,20 @@ fn the_record_keeps_the_last_20_lines_of_a_failing_commands_output() {
     assert_eq!(failed["stderr_tail"], serde_json::json!(["oops"]));
 }
 
+// This test replaced `a_test_command_that_hangs_is_killed_by_the_guard_and_cannot_check`:
+// a test command stopped at its limit was a cannot-check under the one-hour guard. It
+// is now an R7 finding naming the command and the limit (`[tests] timeout_seconds`).
 #[test]
-fn a_test_command_that_hangs_is_killed_by_the_guard_and_cannot_check() {
+fn a_test_command_that_hangs_is_stopped_at_its_limit_and_is_a_finding() {
     let root = common::fresh("tests-hang");
     let hang = vec![vec!["sleep".to_string(), "5".to_string()]];
     let runs = house::tests_step::run(&root, &hang, std::time::Duration::from_millis(200));
-    let c = runs[0].tool.cannot.as_ref().expect("cannot check");
-    assert_eq!(c.what, "sleep did not finish in 0 s");
-    assert!(runs[0].tool.findings.is_empty());
+    assert!(runs[0].tool.cannot.is_none());
+    let whats: Vec<&str> = runs[0]
+        .tool
+        .findings
+        .iter()
+        .map(|f| f.what.as_str())
+        .collect();
+    assert_eq!(whats, ["test command did not finish in 0.2 s: sleep 5"]);
 }

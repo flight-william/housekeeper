@@ -40,6 +40,9 @@ impl Context {
     }
 }
 
+/// The extensions that make a file a shell script, whatever its first line says.
+pub const SHELL_EXTENSIONS: [&str; 2] = [".sh", ".bash"];
+
 /// A language a file's first line can name: `#!/usr/bin/env python3`, `#!/bin/sh`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Language {
@@ -81,6 +84,26 @@ pub trait Adapter {
 
     /// The Homebrew formula that installs `program`.
     fn brew_formula(&self) -> &'static str;
+
+    /// Whether it runs when `.house.toml` lists no tools for the stage, and is named in
+    /// `house init`'s starter list. `false` for a tool a repo chooses instead of
+    /// another (SwiftFormat beside Apple's swift format): it then runs only by name.
+    fn runs_by_default(&self) -> bool {
+        true
+    }
+
+    /// Findings this tool gives up to another, as (tool rule, adapter name): a finding
+    /// with that tool rule is dropped when that adapter runs for the stage too, as
+    /// its owner, and kept when it does not, so the rule is never left unchecked.
+    fn yields_to(&self) -> &'static [(&'static str, &'static str)] {
+        &[]
+    }
+
+    /// Variables set in the command's environment, after house strips the GIT_* ones
+    /// it inherited.
+    fn env(&self, _ctx: &Context) -> Vec<(String, String)> {
+        Vec::new()
+    }
 
     /// The command to run, or `None` when nothing in `ctx.files` concerns this tool
     /// (e.g. no `.py` file staged for ruff): then the tool is skipped, not an error.

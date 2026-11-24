@@ -1,11 +1,14 @@
-//! `house init`: a report-only pre-commit hook (only when none exists) and a
-//! starter `.house.toml` naming the tools the repo's files need.
+//! `house init`: a report-only pre-commit hook (only when none exists), a starter
+//! `.house.toml` naming the tools the repo's files need, and the tool settings that
+//! fit the code it finds (`settings`).
 
 use crate::adapter::{Adapter, CannotCheck, Context, Stage};
 use crate::config;
 use crate::files::{languages, repo_root, tracked};
 use crate::run::git;
 use std::path::{Path, PathBuf};
+
+mod settings;
 
 /// The files only the owner may change: the approval check's list itself
 /// (one definition), written into CODEOWNERS.
@@ -64,6 +67,7 @@ pub fn init_with_owner(
     let root = repo_root(cwd)?;
     let mut said = hooks(&root)?;
     said.push(starter_config(&root, all)?);
+    said.extend(settings::swift_format(&root)?);
     said.push(codeowners(&root, owner)?);
     Ok(said)
 }
@@ -156,9 +160,17 @@ fn starter_config(root: &Path, all: Vec<Box<dyn Adapter>>) -> Result<String, Can
         files,
         push_range: None,
     };
+    // A repo that formats with SwiftFormat names it instead of swift format: two
+    // formatters must not meet on one file.
+    let swiftformat = settings::uses_swiftformat(root);
+    let starter = |a: &dyn Adapter| match a.name() {
+        "swiftformat" => swiftformat,
+        "swift-format" => !swiftformat,
+        _ => a.runs_by_default(),
+    };
     let names: Vec<String> = all
         .iter()
-        .filter(|a| a.command(&ctx).is_some())
+        .filter(|a| starter(a.as_ref()) && a.command(&ctx).is_some())
         .map(|a| format!("\"{}\"", a.name()))
         .collect();
     let text = format!(

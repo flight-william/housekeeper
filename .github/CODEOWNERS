@@ -13,6 +13,7 @@
 **/.rustfmt.toml @flight-william
 **/.swiftlint.yml @flight-william
 **/.swift-format @flight-william
+**/.swiftformat @flight-william
 **/.coveragerc @flight-william
 **/setup.cfg @flight-william
 **/.semgrepignore @flight-william

@@ -3,6 +3,8 @@
 use crate::adapter::{Adapter, CannotCheck, Output};
 use crate::finding::Finding;
 use crate::run::first_line;
+use std::os::unix::fs::MetadataExt;
+use std::path::Path;
 
 pub mod cargo_deny;
 pub mod cargo_fmt;
@@ -13,9 +15,11 @@ pub mod ruff;
 pub mod semgrep;
 pub mod shellcheck;
 pub mod swift_format;
+pub mod swiftformat;
 pub mod swiftlint;
 
-/// Every adapter house knows, in reply order. Each skips itself when no file concerns it.
+/// Every adapter house knows, in reply order. Each skips itself when no file concerns it;
+/// one that does not run by default (`Adapter::runs_by_default`) runs only when named.
 pub fn all() -> Vec<Box<dyn Adapter>> {
     vec![
         Box::new(ruff::Ruff),
@@ -25,11 +29,42 @@ pub fn all() -> Vec<Box<dyn Adapter>> {
         Box::new(cargo_deny::CargoDeny),
         Box::new(swiftlint::SwiftLint),
         Box::new(swift_format::SwiftFormat),
+        Box::new(swiftformat::Swiftformat),
         Box::new(shellcheck::Shellcheck),
         Box::new(gitleaks::Gitleaks),
         Box::new(semgrep::Semgrep),
         Box::new(r3::R3),
     ]
+}
+
+/// `file` relative to `root`. SwiftLint and SwiftFormat print absolute paths, and
+/// may print /tmp for a root git names /private/tmp.
+pub(crate) fn relative(root: &Path, file: &str) -> String {
+    let unprivate = |p: &str| p.strip_prefix("/private").unwrap_or(p).to_string();
+    let root = unprivate(&root.to_string_lossy());
+    let file = unprivate(file);
+    let prefix = format!("{}/", root.trim_end_matches('/'));
+    file.strip_prefix(&prefix).unwrap_or(&file).to_string()
+}
+
+/// The stage file a tool's `path` names, in git's spelling, or `None` when it names
+/// none of `files`. Matched by text first, then by the file itself (device and inode):
+/// SwiftLint and SwiftFormat print decomposed Unicode (`e` and U+0301) where git and
+/// the disk hold `é`, so the text of an accented path never matches.
+pub(crate) fn stage_file(root: &Path, files: &[String], path: &str) -> Option<String> {
+    let text = relative(root, path);
+    if files.contains(&text) {
+        return Some(text);
+    }
+    let id = |p: &Path| {
+        let m = std::fs::metadata(p).ok()?;
+        Some((m.dev(), m.ino()))
+    };
+    let wanted = id(&root.join(path))?;
+    files
+        .iter()
+        .find(|f| id(&root.join(f)) == Some(wanted))
+        .cloned()
 }
 
 /// A tool's documented exit codes; each adapter keeps its table in its own file.

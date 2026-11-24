@@ -5,10 +5,12 @@ use crate::adapter::CannotCheck;
 use crate::config;
 use crate::excuses::Date;
 use crate::finding::{Finding, Place};
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
-/// Files only the owner may change, compared case-insensitively (case-insensitive
-/// filesystems can resolve `.Ruff.toml` and `.ruff.toml` to the same file). The tools' settings count by name in any folder,
+/// Files only the owner may change, compared ignoring case, the Unicode way, and as the
+/// filesystem resolves a name (case-insensitive filesystems can resolve `.Ruff.toml`,
+/// `.ſwiftformat` and `.ruff.toml` to the same file). The tools' settings count by name in any folder,
 /// since each tool reads the nearest one. The one definition: `house init` writes
 /// these, with `.house.toml`'s `[protected] extra`, into CODEOWNERS through
 /// `init::PROTECTED`, a re-export of this static.
@@ -27,6 +29,7 @@ pub static PROTECTED: &[&str] = &[
     "**/.rustfmt.toml",
     "**/.swiftlint.yml",
     "**/.swift-format",
+    "**/.swiftformat",
     "**/.coveragerc",
     "**/setup.cfg",
     "**/.semgrepignore",
@@ -105,19 +108,97 @@ pub fn glob_matches(glob: &str, path: &str) -> bool {
     segments_match(&pat, &segs)
 }
 
+/// A name folded as macOS folds it: Unicode case with the full mapping, so the long s
+/// (U+017F) and the Kelvin sign (U+212A) fold to `s` and `k`, as `S` and `K` do.
+fn fold(text: &str) -> String {
+    text.to_uppercase().to_lowercase()
+}
+
+/// A file's identity on disk (device, inode), its own entry, links not followed.
+fn identity(path: &Path) -> Option<(u64, u64)> {
+    let meta = std::fs::symlink_metadata(path).ok()?;
+    Some((meta.dev(), meta.ino()))
+}
+
+/// `path` with each segment the filesystem resolves to a literal name of `protected`
+/// spelled as the glob spells it. Only a segment with a non-ASCII character is asked:
+/// ASCII case is `fold`'s, and macOS reads `Re\u{301}glages` as `Réglages`, or a
+/// spelling folds miss, as the file it opens. A path not on disk stays as it is.
+fn resolved(root: Option<&Path>, path: &str, protected: &[String]) -> String {
+    let Some(root) = root.filter(|_| !path.is_ascii()) else {
+        return path.to_string();
+    };
+    let names: Vec<&str> = protected
+        .iter()
+        .flat_map(|g| g.split('/'))
+        .filter(|seg| !seg.contains('*'))
+        .collect();
+    let segs: Vec<&str> = path.split('/').collect();
+    let spelled: Vec<&str> = segs
+        .iter()
+        .enumerate()
+        .map(|(i, seg)| {
+            let dir = root.join(segs[..i].join("/"));
+            let same = |name: &&str| {
+                *name != *seg && identity(&dir.join(name)) == identity(&dir.join(seg))
+            };
+            if seg.is_ascii() || identity(&dir.join(seg)).is_none() {
+                return *seg;
+            }
+            names.iter().copied().find(same).unwrap_or(seg)
+        })
+        .collect();
+    spelled.join("/")
+}
+
+/// The first glob of `protected` that `path` is, ignoring case (`fold`) and, with
+/// `root`, spelling the filesystem resolves; with whether case alone made it match.
+fn protected_as<'a>(
+    root: Option<&Path>,
+    path: &str,
+    protected: &'a [String],
+) -> Option<(&'a String, bool)> {
+    let folded = fold(path);
+    let disk = fold(&resolved(root, path, protected));
+    protected.iter().find_map(|g| {
+        let glob = fold(g);
+        if glob_matches(&glob, &folded) {
+            Some((g, true))
+        } else {
+            glob_matches(&glob, &disk).then_some((g, false))
+        }
+    })
+}
+
 /// One R9 finding per changed protected path, unless the message has the approval
-/// line. Paths and globs are compared case-insensitively.
+/// line. Paths and globs are compared ignoring case, the Unicode way (`fold`).
 pub fn check(changed: &[String], protected: &[String], message: &str) -> Vec<Finding> {
+    judge(None, changed, protected, message)
+}
+
+/// `check`, with each path also judged as the filesystem under `root` resolves it: a
+/// spelling that opens a protected file is that file.
+pub fn check_in(
+    root: &Path,
+    changed: &[String],
+    protected: &[String],
+    message: &str,
+) -> Vec<Finding> {
+    judge(Some(root), changed, protected, message)
+}
+
+fn judge(
+    root: Option<&Path>,
+    changed: &[String],
+    protected: &[String],
+    message: &str,
+) -> Vec<Finding> {
     if approved(message) {
         return Vec::new();
     }
-    let protected: Vec<String> = protected.iter().map(|g| g.to_lowercase()).collect();
     changed
         .iter()
-        .filter(|path| {
-            let path = path.to_lowercase();
-            protected.iter().any(|g| glob_matches(g, &path))
-        })
+        .filter(|path| protected_as(root, path, protected).is_some())
         .map(|path| Finding {
             rule: "R9".to_string(),
             place: Place::File(path.clone()),
@@ -130,32 +211,45 @@ pub fn check(changed: &[String], protected: &[String], message: &str) -> Vec<Fin
         .collect()
 }
 
-/// One R9 finding per path of `changed` that matches a glob of `protected` only when
-/// case is ignored, whatever the commit message says. A case-insensitive filesystem
-/// lets `.SEMGREPIGNORE` act as `.semgrepignore`, while GitHub CODEOWNERS matches
-/// paths case-sensitively, so the owner is never asked to review it.
+/// One R9 finding per path of `changed` that is a glob of `protected` only when case
+/// is ignored (`fold`), whatever the commit message says. A case-insensitive
+/// filesystem lets `.SEMGREPIGNORE` or `.ſemgrepignore` act as `.semgrepignore`, while
+/// GitHub CODEOWNERS matches paths case-sensitively, so the owner is never asked to
+/// review it.
 pub fn wrong_case(changed: &[String], protected: &[String]) -> Vec<Finding> {
+    misnamed(None, changed, protected)
+}
+
+/// `wrong_case`, and each path the filesystem under `root` resolves to a protected
+/// file under another spelling.
+pub fn wrong_case_in(root: &Path, changed: &[String], protected: &[String]) -> Vec<Finding> {
+    misnamed(Some(root), changed, protected)
+}
+
+fn misnamed(root: Option<&Path>, changed: &[String], protected: &[String]) -> Vec<Finding> {
     changed
         .iter()
         .filter_map(|path| {
-            let lower = path.to_lowercase();
-            let glob = protected
-                .iter()
-                .find(|g| glob_matches(&g.to_lowercase(), &lower))?;
+            let (glob, by_case) = protected_as(root, path, protected)?;
             if protected.iter().any(|g| glob_matches(g, path)) {
                 return None;
             }
-            let name = canonical(glob, path);
+            let name = canonical(glob, &resolved(root, path, protected));
             let how = if glob == &glob.to_lowercase() {
                 "canonical lowercase name"
             } else {
                 "canonical name"
             };
+            let what = if by_case {
+                "settings file name in the wrong case"
+            } else {
+                "settings file name in another spelling"
+            };
             Some(Finding {
                 rule: "R9".to_string(),
                 place: Place::File(path.clone()),
                 line: None,
-                what: format!("settings file name in the wrong case: {path}"),
+                what: format!("{what}: {path}"),
                 fix: format!("use the {how} {name}"),
                 tool_rule: "settings-case".to_string(),
                 measure: None,
@@ -173,7 +267,7 @@ fn canonical(glob: &str, path: &str) -> String {
         .map(|seg| {
             literals
                 .iter()
-                .find(|l| l.eq_ignore_ascii_case(seg))
+                .find(|l| fold(l) == fold(seg))
                 .map_or(seg, |l| *l)
         })
         .collect::<Vec<_>>()
@@ -181,6 +275,6 @@ fn canonical(glob: &str, path: &str) -> String {
     if glob_matches(glob, &spelled) {
         spelled
     } else {
-        path.to_lowercase()
+        fold(path)
     }
 }

@@ -14,8 +14,8 @@ More: [why house](docs/why.md) · [adopt it in an existing project](docs/adoptin
 
 house runs the tools that check a repo's rules at commit and at push, replies to agents in
 one format, and records every run. It never judges code itself: each rule maps to the tools
-that check it (ruff, cargo fmt, clippy and cargo-deny, SwiftLint and swift format, ShellCheck,
-gitleaks, Semgrep, its own size counter, commit-message and approval checks).
+that check it (ruff, cargo fmt, clippy and cargo-deny, SwiftLint, swift format or SwiftFormat,
+ShellCheck, gitleaks, Semgrep, its own size counter, commit-message and approval checks).
 
 ## The rules (✓ checked by 0.2.0)
 
@@ -25,6 +25,45 @@ R7 ✓ Tested · R8 ✓ Deterministic tests · R9 ✓ Nothing silenced; fix the 
 R10 Fast, at every stage · R11 State machine first · R12 Good API design · R13 Modular
 design · R14 Comments say why · R15 One vocabulary · R16 Standard folder layout ·
 R17 ✓ Commit messages are records: `area: what changed`, then Why:, Proof:, Undo:
+
+## Languages
+
+| Rule | Python | Rust | Swift | Shell |
+|---|---|---|---|---|
+| R1 Formatted | ruff format | cargo fmt | swift format or SwiftFormat | – |
+| R2 Lint, warnings as errors | ruff | clippy, cargo-deny | SwiftLint | ShellCheck |
+| R2 No secret | gitleaks | gitleaks | gitleaks | gitleaks |
+| R3 Small | size counter; ruff PLR0915 if the repo's ruff settings select it | clippy too_many_lines, size counter | SwiftLint, size counter | size counter |
+| R4 Simple | ruff C901 if the repo's ruff settings select it | clippy too_many_arguments; cognitive_complexity –, not enabled | SwiftLint | – |
+| R7 Tested | [tests] commands, any language | ← | ← | ← |
+| R8 Deterministic tests | Semgrep, 10 rules | Semgrep, 16 rules (8 for tests/, 8 for test modules) | Semgrep, 9 rules (partial parse of #expect/#require) | – |
+| R9 Nothing silenced | Semgrep, 6 rules | Semgrep + Cargo.toml lints, 4 rules | Semgrep, 6 rules | Semgrep, 1 rule |
+| R9 Protected files need the owner's approval | any language | ← | ← | ← |
+| R17 Commit messages | any language | ← | ← | ← |
+
+Other languages get only the language-free checks: R2 secrets, R7 tests, R9 approvals, R17.
+
+A commit message's `Co-Authored-By:` line is optional, its key read in any case as git reads
+it (GitHub writes `Co-authored-by:`), and only in the final trailer block, the `Key: value`
+lines after the last blank line, where git and GitHub read it. An agent's names its model id, one of
+`[commit] models` in `.house.toml`: `Co-Authored-By: Claude (claude-opus-5-5)
+<noreply@anthropic.com>`. A person's has none: `Co-Authored-By: Sam Example <sam@example.com>`.
+A line naming Claude, Codex, Antigravity or Gemini without a model id is refused: the name is
+compared folded (NFKC, invisible characters gone, case folded, look-alike letters read as Latin,
+punctuation and spaces gone), so `ClaudeCode`, `Anthropic Claude`, `Ｃlaude` and a model id
+such as `claude-opus-4-1` or `Opus 5.5` given as a name are refused too. Outside an agent's
+session the rule cannot prove who typed a line: this guard stops a respelling, not a made-up
+human name. A known limit: a person whose name holds an agent's (Claude Monet, Gemini
+Ortiz, Claudette) is refused like the agent, and a nickname in brackets reads as an agent
+line; there is no allow-list. A known
+agent's line gives one of its own model ids: `claude-…` for Claude, `gpt-…` for Codex,
+`gemini-…` for Antigravity and Gemini. A commit made in an agent's session owes that agent's
+line, its name and one of its model ids, the same rule for every agent; another agent's line
+does not count. The session is known by a variable the agent sets in its shells, so far
+`CLAUDECODE=1` for Claude Code. No session link is asked for or checked. A known limit: the
+session is read from the environment the agent itself controls, at its exact value, and only
+by `house commit-msg`; push and a runner do not judge it again, and an agent with no marker
+listed (Codex, Antigravity, Gemini, until theirs is verified) owes no line.
 
 ## Install
 
@@ -44,22 +83,52 @@ house init
 
 `house init` writes `.house.toml` (the tools per stage), CODEOWNERS for the protected files
 and the git hooks. Commit them. Files listed under `[paths] exclude` in `.house.toml`
-(prefix globs, such as `tests/fixtures/`) are never handed to a tool. Under `[tests]`,
-`commit = [["cargo", "test"]]` and `push = [...]` (push falls back to commit) list test
+(prefix globs, such as `tests/fixtures/`) are never handed to a tool, and a finding a tool
+reports on one anyway is dropped: gitleaks reads the git history, not the files it is handed,
+so an excluded vendored file is not scanned for secrets either. The exclusion is judged
+at the path a secret has now: gitleaks runs with git's rename detection off, so a secret
+moved or copied out of an excluded folder (`git mv`), in a merge commit too, is reported at
+its new path. It reads no `.gitattributes`, so a file marked `-diff` or `binary`, or given a
+diff driver, is scanned as the text it holds. Under `[tests]`, `commit = [["cargo", "test"]]` and `push = [...]` (push falls back to commit) list test
 commands, each a program and its arguments with no shell, run from the repo root after the
 tools; a failing one is an R7 finding, and the last 20 lines of its output go to the run
-record. At push the tests run whenever the push changes anything, a deletion alone
-included, though no file is left for the tools; a push with no change skips them. An
-unknown table or key in `.house.toml` is a "cannot check" naming it.
+record. Each command may run for `timeout_seconds` (in `[tests]`, 600 when unset, at most
+86400). Before 0.4.0 a command could run for an hour, so a slower suite needs the key set on
+upgrade. One still running then is stopped, and that is an R7 finding naming the command and
+the limit, so a suite that waits on a dialog no one can click fails instead of holding the
+push; the last 20 lines of what it had written go to the run record, as for a failure. Each
+command runs in a process group of its own, and the whole group is stopped (SIGTERM, then
+SIGKILL two seconds later), so no process in that group lives on after it; one the suite
+moves to a session of its own (`start_new_session=True`) is out of house's reach. The same
+stop happens when house itself ends while a suite runs, by Ctrl-C, SIGTERM, SIGHUP or even
+SIGKILL, and house ends with that signal. Being in its own group, a suite cannot read the
+terminal: one that asks for a password or a passphrase waits until the limit. At push the
+tests run whenever the push changes anything, a deletion alone included, though no file is
+left for the tools; a push with no change skips them. An unknown table or key in
+`.house.toml` is a "cannot check" naming it.
 
 `[house] minimum = "0.2.3"` names the oldest house the rules run on: an older house is a
 "cannot check" naming both versions, and the same or a newer one runs. A house older than
 0.2.3 does not know `[house]`, so it refuses the file as an unknown table.
 
-Each tool gets the files it reads, chosen by extension. A file with no known extension is
+Each tool gets the files it reads, chosen by extension (`.sh` and `.bash` are shell scripts
+for ShellCheck, r3 and Semgrep). A file with no known extension is
 chosen by its first line: `#!/usr/bin/env python3` goes to ruff, ruff format, r3 and Semgrep,
 and `#!/bin/sh` or `#!/usr/bin/env bash` to ShellCheck, r3 and Semgrep. A zsh script, which
 ShellCheck cannot read, goes to none of them, nor does a binary file.
+
+SwiftLint keeps to the repo's own scope: with a `.swiftlint.yml` at the root, SwiftLint picks
+the files itself, by its `included:` and `excluded:`, and only its findings on the files the
+stage checks count. Without one, the stage's Swift files are named to it. ShellCheck follows
+the files a script sources, looked up from the script's own folder, so `. ./lib.sh` is not
+SC1091 when `lib.sh` sits beside the script.
+
+Swift code is formatted by Apple's swift format (`swift-format`) unless the repo names
+SwiftFormat instead: `swiftformat` runs only when `[tools]` lists it, as in
+`commit = ["swiftlint", "swiftformat"]`, never by default, since two formatters disagree on
+one file. `house init` names it, instead of swift format, only in a repo with a `.swiftformat`
+at its root, and then writes no `.swift-format`. It runs `swiftformat --lint` on the stage's Swift
+files and reads the repo's own `.swiftformat`, its `--exclude` included.
 
 Every `Cargo.toml` a stage sends is also read by house itself, whatever `[tools]` lists: a
 lint set to `allow` (or `expect`) in a `[lints]` or `[workspace.lints]` table silences it for
@@ -94,10 +163,12 @@ none, is adoption, not growth. Its deadlines are still capped at 56 days, and it
 protected file, so the commit still needs the owner's approval line.
 
 A changed path whose name matches a protected settings file only when case is ignored, such
-as `.SEMGREPIGNORE` or `sub/Pyproject.toml`, is an R9 finding at commit and push, whatever
-the commit message says: on a case-insensitive filesystem the tool reads it as its settings,
-while CODEOWNERS matches case-sensitively and asks no owner to review it. Use the canonical
-name.
+as `.SEMGREPIGNORE`, `sub/Pyproject.toml` or `.ſwiftformat` (a long s, which macOS reads as
+`s`), or that the filesystem opens as a protected file under another spelling, is an R9
+finding at commit and push, whatever the commit message says, and needs the owner's
+approval line: on a case-insensitive filesystem the tool reads it as its settings, while
+CODEOWNERS matches case-sensitively and asks no owner to review it. Use the canonical
+name. House reads the excuse list only when it is spelled exactly `.house-excuses.toml`.
 
 ## Review the records
 
