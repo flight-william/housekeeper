@@ -279,7 +279,7 @@ fn body(lines: &[Line<'_>], parts: Option<(&str, &str)>, found: &mut Vec<Hit>) {
 /// `R17/trailer` and `R17/agent`.
 fn trailers(lines: &[Line<'_>], commit: &Commit, found: &mut Vec<Hit>) {
     let mut owed_named = false;
-    for l in lines.iter().filter(|l| is_trailer(l.text)) {
+    for l in trailer_block(lines).iter().filter(|l| is_trailer(l.text)) {
         match co_author(l.text) {
             None => found.push(Hit::on("R17/trailer", l, l.text)),
             Some(CoAuthor::Agent(name, id)) => {
@@ -299,6 +299,31 @@ fn trailers(lines: &[Line<'_>], commit: &Commit, found: &mut Vec<Hit>) {
     if commit.session.is_some() && !owed_named {
         found.push(Hit::whole("R17/agent", "Co-Authored-By:"));
     }
+}
+
+/// The final trailer block, as git and GitHub read one: the lines after the last blank
+/// line, never the subject, when the first is `Key: value` and each other one is too or
+/// continues the line above (starts with a space or tab); empty otherwise. A co-author
+/// line anywhere else is body text, which no tool reads as a co-author.
+fn trailer_block<'a, 'b>(lines: &'b [Line<'a>]) -> &'b [Line<'a>] {
+    let start = lines
+        .iter()
+        .rposition(|l| blank(l.text))
+        .map_or(1, |i| i + 1)
+        .max(1);
+    let block = lines.get(start..).unwrap_or(&[]);
+    let first = block.first().is_some_and(|l| key_value(l.text));
+    let rest = block
+        .iter()
+        .all(|l| key_value(l.text) || l.text.starts_with([' ', '\t']));
+    if first && rest { block } else { &[] }
+}
+
+/// `Key: value`, the key letters, digits and `-`.
+fn key_value(line: &str) -> bool {
+    line.split_once(':').is_some_and(|(key, _)| {
+        !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    })
 }
 
 /// Who a valid `Co-Authored-By:` line names: an agent, with its model id, or a person.

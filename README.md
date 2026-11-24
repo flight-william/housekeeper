@@ -44,7 +44,8 @@ R17 ✓ Commit messages are records: `area: what changed`, then Why:, Proof:, Un
 Other languages get only the language-free checks: R2 secrets, R7 tests, R9 approvals, R17.
 
 A commit message's `Co-Authored-By:` line is optional, its key read in any case as git reads
-it (GitHub writes `Co-authored-by:`). An agent's names its model id, one of
+it (GitHub writes `Co-authored-by:`), and only in the final trailer block, the `Key: value`
+lines after the last blank line, where git and GitHub read it. An agent's names its model id, one of
 `[commit] models` in `.house.toml`: `Co-Authored-By: Claude (claude-opus-5-5)
 <noreply@anthropic.com>`. A person's has none: `Co-Authored-By: Sam Example <sam@example.com>`.
 A line naming Claude, Codex, Antigravity or Gemini without a model id is refused: the name is

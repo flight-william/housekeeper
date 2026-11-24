@@ -407,3 +407,38 @@ fn the_co_author_key_is_read_in_any_case() {
         one("R17/trailer", 7, "claude-opus-4-1")
     );
 }
+
+// Only the final trailer block holds co-authors, as git and GitHub read them: a block
+// of `Key: value` lines after the last blank line, the subject never part of it.
+#[test]
+fn a_co_author_line_outside_the_final_trailer_block_does_not_count() {
+    let text = "parser: keep the last line\n\nCo-Authored-By: Claude (claude-opus-5-5) <noreply@anthropic.com>\nWhy: x.\nProof: y.\nUndo: z.\n\nSigned-off-by: W <w@example.com>\n";
+    assert_eq!(
+        seen(text, &claude()),
+        one("R17/agent", 0, "Co-Authored-By:")
+    );
+    // A final paragraph of prose is no trailer block.
+    let text =
+        format!("parser: keep the last line{BODY}\n{OPUS}\nwritten with the agent's help.\n");
+    assert_eq!(
+        seen(&text, &claude()),
+        one("R17/agent", 0, "Co-Authored-By:")
+    );
+    // Body text that starts with the key is not a trailer, so not judged as one.
+    let text = format!(
+        "parser: keep the last line\n\nWhy: the parser dropped it.\nCo-Authored-By: is optional now.\nProof: p.\nUndo: u.\n\n{OPUS}\n"
+    );
+    assert_eq!(seen(&text, &ctx()), vec![]);
+}
+
+#[test]
+fn the_final_trailer_block_may_hold_other_trailers_and_continuations() {
+    let text = format!(
+        "parser: keep the last line{BODY}\nSigned-off-by: W <w@example.com>\n{OPUS}\nReviewed-by: Sam Example\n  <sam@example.com>\n"
+    );
+    assert_eq!(seen(&text, &claude()), vec![]);
+    // A message with no blank line: its lines after the subject are the block.
+    let text = format!("parser: keep the last line\nWhy: w.\n{OPUS}\n");
+    let ids: Vec<String> = seen(&text, &claude()).into_iter().map(|h| h.0).collect();
+    assert!(!ids.contains(&"R17/agent".to_string()), "{ids:?}");
+}
