@@ -337,6 +337,8 @@ enum CoAuthor<'a> {
 /// pattern `^Co-Authored-By: [A-Za-z][A-Za-z0-9 .-]* \(([a-z0-9.-]+)\) <noreply[^>\s]*@[^>\s]+>$`;
 /// without, a person's, `Name <local@domain>`, the name not an agent's (`AGENTS`).
 fn co_author(line: &str) -> Option<CoAuthor<'_>> {
+    // As git will commit it: its clean-up strips trailing whitespace.
+    let line = line.trim_end();
     // The key in any case, as git reads trailer keys and GitHub writes `Co-authored-by:`.
     let rest = line
         .get(..16)

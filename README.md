@@ -53,7 +53,9 @@ compared folded (NFKC, invisible characters gone, case folded, look-alike letter
 punctuation and spaces gone), so `ClaudeCode`, `Anthropic Claude`, `Ｃlaude` and a model id
 such as `claude-opus-4-1` or `Opus 5.5` given as a name are refused too. Outside an agent's
 session the rule cannot prove who typed a line: this guard stops a respelling, not a made-up
-human name. A known
+human name. A known limit: a person whose name holds an agent's (Claude Monet, Gemini
+Ortiz, Claudette) is refused like the agent, and a nickname in brackets reads as an agent
+line; there is no allow-list. A known
 agent's line gives one of its own model ids: `claude-…` for Claude, `gpt-…` for Codex,
 `gemini-…` for Antigravity and Gemini. A commit made in an agent's session owes that agent's
 line, its name and one of its model ids, the same rule for every agent; another agent's line

@@ -477,3 +477,29 @@ fn every_marker_row_owes_its_own_agents_line() {
         one("R17/agent", 0, "Co-Authored-By:")
     );
 }
+
+// The known limit, as the README says: a person whose name holds an agent's name is
+// refused like the agent, and a bracketed nickname reads as an agent line.
+#[test]
+fn people_named_like_an_agent_are_refused_a_known_limit() {
+    for line in [
+        "Co-Authored-By: Claude Monet <claude@example.fr>",
+        "Co-Authored-By: Gemini Ortiz <gemini@example.com>",
+        "Co-Authored-By: Samuel (Sam) Example <sam@example.com>",
+    ] {
+        let text = format!("parser: keep the last line{BODY}\n{line}\n");
+        assert_eq!(seen(&text, &ctx()), one("R17/trailer", 7, line), "{line}");
+    }
+}
+
+// The hook sees the message before git's clean-up strips trailing whitespace; the line
+// is judged as git will commit it.
+#[test]
+fn trailing_whitespace_on_a_co_author_line_is_not_a_finding() {
+    let person = "Co-Authored-By: Sam Example <sam@example.com> ";
+    let text = format!("parser: keep the last line{BODY}\n{person}\n");
+    assert_eq!(seen(&text, &ctx()), vec![]);
+    let agent = "Co-Authored-By: Claude (claude-opus-5-5) <noreply@anthropic.com>\t";
+    let text = format!("parser: keep the last line{BODY}\n{agent}\n");
+    assert_eq!(seen(&text, &claude()), vec![]);
+}
