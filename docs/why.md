@@ -7,7 +7,8 @@ way code is written **consistent, measurable and testable**, and it keeps a reco
 run, so the work gets better over time instead of drifting.
 
 **On this page:** [Key ideas](#key-ideas) · [Who it is for](#who-it-is-for) ·
-[The foundation](#the-foundation) · [How it works](#how-it-works) ·
+[Where house fits](#where-house-fits) · [The foundation](#the-foundation) ·
+[How it works](#how-it-works) · [Two ways to use it](#two-ways-to-use-it) ·
 [Does quality improve over time?](#does-quality-improve-over-time) ·
 [The people's role](#the-peoples-role)
 
@@ -37,6 +38,38 @@ run, so the work gets better over time instead of drifting.
 
 Teams gain too, but they already have code review and process. For one developer, house is the
 difference between one person's output and a team's.
+
+---
+
+## Where house fits
+
+house is a thin layer. It holds a list of best-practice rules (R1 to R17) and the wiring
+that maps each rule to the existing tools that check it. It never re-implements a checker.
+The tools can change per language and per repo; the rule stays.
+
+Running many tools per rule, at chosen stages, blocking or only reporting, is table stakes.
+Other tools do it well. MegaLinter runs many linters across many languages, in CI or on your
+machine, and can mark a linter as non-blocking. Trunk Code Quality runs third-party linters,
+formatters and security scanners from one CLI, checks only new changes by default, and can
+run from git hooks. Qlty runs linter plugins from its CLI, with pre-commit and pre-push
+hooks, and quality gates on pull requests.
+
+Those tools answer "is this code OK?". house answers that too, and also: **can I trust what
+the agents did, and did they follow the owner's rules?**
+
+| What house shares with other tools | What house adds for agent-written code |
+|---|---|
+| It runs existing linters, formatters, secret scanners and tests. | **One reply for agents,** the same for every tool: one line per finding, each with its fix. |
+| One settings file in the repo picks the tools. | **Excuses can only shrink.** An entry added, or a deadline moved later, is a finding; a deadline is at most 56 days out. |
+| It checks at commit, at push and on the pull request. | **The owner approves rule changes.** A protected file (the rules, the excuse list, tool settings, hooks, workflows) needs an approval line quoting the owner's words, and at the gate code-owner review sends it to the owner, so an agent cannot approve its own change. |
+| It checks what changed; existing problems are set aside. | **A pull request is judged by its base's rules** (`--config-from`), so it cannot weaken the rules it is judged by. |
+| Hooks can report without blocking while a repo adopts it. | **Each commit can name its agent and model.** An agent's `Co-Authored-By:` line carries its model id, from a list the repo keeps; a line naming an agent without one is refused. |
+| | **Every run is recorded,** and `house review` turns the records into a weekly report: which rules catch real problems, and which are noise. |
+
+**Planned, not shipped:** each rule set on its own: which tools check it, at which stage
+(commit, push, merge, weekly), and whether it blocks or only reports. Under that, a floor no
+repo can lower: secrets, approvals and commit-message rules always block at merge. Today the
+tools are chosen per stage, for the whole repo, in `.house.toml`'s `[tools]`.
 
 ---
 
@@ -92,6 +125,17 @@ flowchart LR
   separate runner before anything reaches the main branch. Local checks give fast feedback; the
   runner is where trust is enforced.
 - **Rule changes need the owner's approval,** and the list of excused old code can only shrink.
+
+---
+
+## Two ways to use it
+
+| Way | How | What you get |
+|---|---|---|
+| **Loose** | Install from Homebrew. An agent runs `house check --stage commit` on its staged work and fixes what house says before it commits. The hooks `house init` writes help. | Feedback, not a guarantee. Anything local can be skipped: a hook can be bypassed, and an agent can forget to run it. |
+| **Sure** | house is the required check on every pull request into main, run on a runner with the base's rules, under branch rules that allow no bypass. [The runner](adopting.md#the-runner) and [the ruleset](adopting.md#the-ruleset) say how. | Nothing reaches main that house refused. |
+
+Start loose to get feedback fast. Make it sure before you rely on it.
 
 ---
 
