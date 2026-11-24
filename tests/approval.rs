@@ -119,6 +119,19 @@ fn protected_names_count_anywhere_and_in_any_case() {
     assert!(check(&s(&["sub/notes.cfg", "src/config.rs"]), &protected(), "m").is_empty());
 }
 
+/// SwiftFormat reads `.swiftformat` from each file's folder up, so one anywhere can
+/// turn the formatter off for the files below it (`--exclude Sources`).
+#[test]
+fn swiftformat_settings_are_protected_in_any_folder() {
+    for path in [
+        ".swiftformat",
+        "Sources/.swiftformat",
+        "App/Sub/.SwiftFormat",
+    ] {
+        assert_eq!(check(&s(&[path]), &protected(), "m").len(), 1, "{path}");
+    }
+}
+
 /// The Rust tools' settings at the repo root, where cargo-deny, clippy and rustfmt
 /// read them first: `**/` matches zero folders too.
 #[test]

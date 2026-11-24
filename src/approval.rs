@@ -27,6 +27,7 @@ pub static PROTECTED: &[&str] = &[
     "**/.rustfmt.toml",
     "**/.swiftlint.yml",
     "**/.swift-format",
+    "**/.swiftformat",
     "**/.coveragerc",
     "**/setup.cfg",
     "**/.semgrepignore",
