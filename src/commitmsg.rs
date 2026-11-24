@@ -312,7 +312,12 @@ enum CoAuthor<'a> {
 /// pattern `^Co-Authored-By: [A-Za-z][A-Za-z0-9 .-]* \(([a-z0-9.-]+)\) <noreply[^>\s]*@[^>\s]+>$`;
 /// without, a person's, `Name <local@domain>`, the name not an agent's (`AGENTS`).
 fn co_author(line: &str) -> Option<CoAuthor<'_>> {
-    let rest = line.strip_prefix("Co-Authored-By: ")?.strip_suffix('>')?;
+    // The key in any case, as git reads trailer keys and GitHub writes `Co-authored-by:`.
+    let rest = line
+        .get(..16)
+        .filter(|key| key.eq_ignore_ascii_case("co-authored-by: "))
+        .and_then(|_| line.get(16..))?
+        .strip_suffix('>')?;
     let (head, email) = rest.rsplit_once(" <")?;
     if email
         .chars()
@@ -352,8 +357,7 @@ fn person(name: &str, email: &str) -> bool {
     name_ok && email_ok
 }
 
-/// A `Co-Authored-By:` line, its key in any case as git reads trailer keys, so a
-/// `Co-authored-by:` line is judged (and fails the pattern) rather than ignored.
+/// A `Co-Authored-By:` line, its key in any case as git reads trailer keys.
 fn is_trailer(line: &str) -> bool {
     line.get(..15)
         .is_some_and(|key| key.eq_ignore_ascii_case("co-authored-by:"))

@@ -30,7 +30,6 @@ fn a_trailer_whose_shape_is_wrong_is_r17_trailer_on_its_line() {
         "Co-Authored-By: Claude (claude-opus-5-5) <william@example.com>",
         "Co-Authored-By: Claude (Claude-Opus-5-5) <noreply@anthropic.com>",
         "Co-Authored-By: (claude-opus-5-5) <noreply@anthropic.com>",
-        "Co-authored-by: Claude (claude-opus-5-5) <noreply@anthropic.com>",
         "Co-Authored-By: Claude (claude-opus-5-5) <noreply@anthropic.com> extra",
     ] {
         let text = format!("parser: keep the last line{BODY}\n{line}\n");
@@ -385,4 +384,26 @@ fn people_names_with_digits_or_marks_still_pass() {
         let text = format!("parser: keep the last line{BODY}\n{line}\n");
         assert_eq!(seen(&text, &ctx()), vec![], "{name}");
     }
+}
+
+// git reads trailer keys in any case, and GitHub writes `Co-authored-by:`.
+#[test]
+fn the_co_author_key_is_read_in_any_case() {
+    let person = "Co-authored-by: Sam Example <sam@example.com>";
+    let text = format!("parser: keep the last line{BODY}\n{person}\n");
+    assert_eq!(seen(&text, &ctx()), vec![]);
+    for agent in [
+        "Co-authored-by: Claude (claude-opus-5-5) <noreply@anthropic.com>",
+        "co-authored-by: Claude (claude-opus-5-5) <noreply@anthropic.com>",
+        "CO-AUTHORED-BY: Claude (claude-opus-5-5) <noreply@anthropic.com>",
+    ] {
+        let text = format!("parser: keep the last line{BODY}\n{agent}\n");
+        assert_eq!(seen(&text, &claude()), vec![], "{agent}");
+    }
+    let unlisted = "Co-authored-by: Claude (claude-opus-4-1) <noreply@anthropic.com>";
+    let text = format!("parser: keep the last line{BODY}\n{unlisted}\n");
+    assert_eq!(
+        seen(&text, &ctx()),
+        one("R17/trailer", 7, "claude-opus-4-1")
+    );
 }
