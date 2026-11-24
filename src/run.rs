@@ -47,7 +47,7 @@ pub fn run_env(
     root: &Path,
     brew_formula: &str,
     guard: Duration,
-    env: &[(&str, &str)],
+    env: &[(String, String)],
 ) -> Ran {
     timed(cmd, root, brew_formula, guard, false, env)
 }
@@ -64,7 +64,7 @@ fn timed(
     brew_formula: &str,
     guard: Duration,
     group: bool,
-    env: &[(&str, &str)],
+    env: &[(String, String)],
 ) -> Ran {
     let start = Instant::now();
     let (result, stopped_output) = match run_inner(cmd, root, brew_formula, guard, group, env) {
@@ -129,7 +129,7 @@ fn run_inner(
     brew_formula: &str,
     guard: Duration,
     group: bool,
-    env: &[(&str, &str)],
+    env: &[(String, String)],
 ) -> Result<Output, Stop> {
     let mut command = std::process::Command::new(&cmd.program);
     command
@@ -143,7 +143,7 @@ fn run_inner(
             command.env_remove(key);
         }
     }
-    command.envs(env.iter().copied());
+    command.envs(env.iter().map(|(key, value)| (key, value)));
     if group {
         command.process_group(0);
     }

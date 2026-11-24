@@ -98,8 +98,8 @@ pub trait Adapter {
 
     /// Variables set in the command's environment, after house strips the GIT_* ones
     /// it inherited.
-    fn env(&self) -> &'static [(&'static str, &'static str)] {
-        &[]
+    fn env(&self, _ctx: &Context) -> Vec<(String, String)> {
+        Vec::new()
     }
 
     /// The command to run, or `None` when nothing in `ctx.files` concerns this tool

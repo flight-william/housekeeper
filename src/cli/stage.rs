@@ -220,13 +220,14 @@ fn run_one(adapter: &dyn Adapter, ctx: &Context) -> ToolRun {
         tool.skipped = true;
         return tool;
     }
+    let env = adapter.env(ctx);
     for cmd in &commands {
         let ran = run::run_env(
             cmd,
             &ctx.root,
             adapter.brew_formula(),
             run::HANG_GUARD,
-            adapter.env(),
+            &env,
         );
         tool.seconds += ran.seconds;
         let parsed = ran.result.and_then(|out| {

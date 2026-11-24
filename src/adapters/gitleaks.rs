@@ -6,12 +6,19 @@
 //! would be reported, and dropped, at its old path only. gitleaks runs with
 //! `diff.renames` off: a rename is a delete and an add, and the secret is reported at
 //! the path it now has, where `[paths] exclude` is judged.
+//!
+//! For a file `.gitattributes` marks `-diff` or `binary`, or gives a diff driver with
+//! a textconv, git prints "Binary files differ" or the driver's text, not the file,
+//! so a secret in it would never be read. gitleaks runs with `GIT_ATTR_SOURCE` set to
+//! the empty tree: git reads no attributes, and every file's own text is scanned.
 //! Captured with gitleaks 8.30.1.
 
 use super::Exits;
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output, Stage};
 use crate::finding::{Finding, Place};
+use crate::run;
 use serde::Deserialize;
+use std::path::Path;
 
 pub struct Gitleaks;
 
@@ -57,13 +64,31 @@ const NO_RENAMES: &[(&str, &str)] = &[
     ("GIT_CONFIG_VALUE_0", "false"),
 ];
 
+/// git's empty tree in a SHA-1 repo; a SHA-256 repo has its own, which git gives.
+const EMPTY_TREE_SHA1: &str = "4b825dc642cb6eb9a060e64bf8d69288fbee4904";
+
+/// The empty tree's id in the repo at `root`: as `GIT_ATTR_SOURCE`, the tree git reads
+/// attributes from instead of the working tree's `.gitattributes`.
+fn empty_tree(root: &Path) -> String {
+    run::git(root, &["hash-object", "-t", "tree", "/dev/null"])
+        .map(|out| out.stdout.trim().to_string())
+        .ok()
+        .filter(|id| !id.is_empty())
+        .unwrap_or_else(|| EMPTY_TREE_SHA1.to_string())
+}
+
 impl Adapter for Gitleaks {
     fn name(&self) -> &'static str {
         "gitleaks"
     }
 
-    fn env(&self) -> &'static [(&'static str, &'static str)] {
-        NO_RENAMES
+    fn env(&self, ctx: &Context) -> Vec<(String, String)> {
+        let mut env: Vec<(String, String)> = NO_RENAMES
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        env.push(("GIT_ATTR_SOURCE".into(), empty_tree(&ctx.root)));
+        env
     }
 
     fn program(&self) -> &'static str {
