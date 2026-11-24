@@ -305,7 +305,7 @@ mod tests {
 
     /// A temp repo: a workspace with deny.toml in ws/, a crate without one in other/.
     fn repo(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("house-deny-{name}-{}", std::process::id()));
+        let root = crate::temp::fresh(&format!("deny-{name}"));
         for dir in ["ws/crates/a/src", "other/src"] {
             std::fs::create_dir_all(root.join(dir)).unwrap();
         }

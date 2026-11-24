@@ -6,6 +6,9 @@
 //! adapter), else this crate's patterns/, so an older pattern file can be run
 //! against the same fixtures to see a test fail.
 
+#[path = "../common/temp.rs"]
+mod temp;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -77,12 +80,9 @@ fn copy_dir(from: &Path, to: &Path) {
 /// repo's .semgrepignore skips tests/fixtures/), checks that every result is a
 /// WARNING with a metadata.fix, and returns the hits sorted by path and line.
 pub fn scan(fixture: &Path, pattern: &Path, tag: &str) -> Vec<Hit> {
-    let work = std::env::temp_dir().join(format!("house-semgrep-{tag}-{}", std::process::id()));
+    let work = temp::fresh(&format!("semgrep-{tag}"));
     let target = work.join("target");
     let home = work.join("home");
-    if work.exists() {
-        fs::remove_dir_all(&work).expect("clear the work dir");
-    }
     copy_dir(fixture, &target);
     // Without a .semgrepignore, semgrep's built-in default skips tests/ folders.
     fs::write(target.join(".semgrepignore"), "# scan everything\n").expect("write ignore");
