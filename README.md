@@ -4,18 +4,28 @@
 
 ## Why house
 
-- **Quality is a property of the system, not of a person:** same rules, tests and record.
-- **Feedback is fixed and immediate:** one format, a fix on every line, at every stage.
-- **The rules themselves improve:** the run records show which rules catch real problems.
-- **People's work moves up a level:** to what is needed, what "done" means, and the design.
+- **A list of rules, not a new checker:** each rule below maps to tools that already exist
+  (ruff, cargo fmt, clippy and cargo-deny, SwiftLint, swift format or SwiftFormat,
+  ShellCheck, gitleaks, Semgrep, its own size counter, commit-message and approval checks).
+  house never re-implements a checker. The tools can change per language and per repo; the
+  rule stays.
+- **Running the tools is the easy part.** house also answers the harder question: can I
+  trust what the agents did, and did they follow the owner's rules?
+- **One reply for agents:** one line per finding, with its fix, whatever the tool.
+- **The rules cannot be worn down:** the excuse list can only shrink, and its deadlines never
+  move later. A change to a protected file needs an approval line quoting the owner's words.
+  A pull request is judged by its base's rules, not its own.
+- **Every run is recorded,** and `house review` turns the records into a weekly report.
 
-More: [why house](docs/why.md) · [adopt it in an existing project](docs/adopting.md) ·
+## Two ways to use it
+
+| Way | How | What you get |
+|---|---|---|
+| Loose | Install from Homebrew ([below](#install)); an agent runs `house check --stage commit` on its staged work and fixes what it says before it commits. The hooks `house init` writes help. | Feedback, not a guarantee: anything local can be skipped. |
+| Sure | house is the required check on every pull request into main, under branch rules that allow no bypass ([how](docs/adopting.md#the-runner)). | Nothing reaches main that house refused. |
+
+More: [why house, and where it fits](docs/why.md) · [adopt it in an existing project](docs/adopting.md) ·
 [read the weekly review](docs/review.md)
-
-house runs the tools that check a repo's rules at commit and at push, replies to agents in
-one format, and records every run. It never judges code itself: each rule maps to the tools
-that check it (ruff, cargo fmt, clippy and cargo-deny, SwiftLint, swift format or SwiftFormat,
-ShellCheck, gitleaks, Semgrep, its own size counter, commit-message and approval checks).
 
 ## The rules (✓ checked by 0.2.0)
 
