@@ -9,11 +9,14 @@ use crate::finding::Finding;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-/// When house runs.
+/// When house runs. `Merge` is the runner's check of a pull request: the tools see
+/// it as a push of the branch (the same ref lines, files and range), and the core adds
+/// the commit-msg hook's checks over the range.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stage {
     Commit,
     Push,
+    Merge,
 }
 
 /// What the adapter is asked to check.

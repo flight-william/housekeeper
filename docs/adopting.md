@@ -114,7 +114,7 @@ Put `.house.toml`, `.house-excuses.toml` and `.github/CODEOWNERS` in a commit of
 with nothing else in it, and merge it. This comes first for a reason: on the runner, house
 reads its rules from the **base** of a pull request, never from the pull request, so a change
 cannot judge itself. A base with no `.house.toml` is "cannot check: no rules", and
-`house check --stage push --config-from <base>` refuses. The first list of excuses is not
+`house check --stage merge --config-from <base>` refuses. The first list of excuses is not
 growth, but it is a protected file, so the commit needs the owner's approval line.
 
 ### 7. STEP 2: switch
@@ -127,8 +127,12 @@ with the rules already on the base from step 1.
 
 ## The runner
 
-CI runs `house check --stage push --config-from <base>` on a pull request, so the rules come
-from the base, and `house check --all` on the main branch.
+CI runs `house check --stage merge --config-from <base>` on a pull request, so the rules come
+from the base, and `house check --all` on the main branch. Merge runs what push runs, and the
+commit-msg checks on every commit of the pull request
+([README, On a runner](../README.md#on-a-runner)). A runner that calls `--stage push`
+switches by that one word, and checks out with `fetch-depth: 0`: merge refuses a shallow
+clone. The README has a workflow step to copy.
 
 | Repository | Runner | Why |
 |---|---|---|

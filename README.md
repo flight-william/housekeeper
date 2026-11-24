@@ -72,8 +72,9 @@ line, its name and one of its model ids, the same rule for every agent; another 
 does not count. The session is known by a variable the agent sets in its shells, so far
 `CLAUDECODE=1` for Claude Code. No session link is asked for or checked. A known limit: the
 session is read from the environment the agent itself controls, at its exact value, and only
-by `house commit-msg`; push and a runner do not judge it again, and an agent with no marker
-listed (Codex, Antigravity, Gemini, until theirs is verified) owes no line.
+by `house commit-msg`; push does not judge it again, a runner at merge judges each message's
+text but not the session it was made in, and an agent with no marker listed (Codex,
+Antigravity, Gemini, until theirs is verified) owes no line.
 
 ## Install
 
@@ -224,10 +225,84 @@ those excuses are counted apart from the rules.
 
 ## On a runner
 
+A runner checks a pull request with `house check --stage merge --config-from <base>`, the
+branch's ref line on stdin as git's pre-push hook gives it
+(`refs/heads/<branch> <head sha> refs/heads/<branch> <base sha>`). Merge runs what push runs,
+by the same `[tools]` and `[tests]` keys (`push`, else `commit`), and then the commit-msg
+hook's checks on every commit in base..head, so a commit made without the hook cannot merge
+unchecked. The commits are read and judged before any tool or test runs (they run the pull
+request's own code), and house's git calls ignore replace refs (`GIT_NO_REPLACE_OBJECTS=1`),
+so a build script cannot rewrite the messages house reads:
+
+- R17 and R9's `Cause:` line on each message as git stored it: a `#` line is text, not a
+  comment. A finding names its commit. The author is the commit's, and the expected author
+  is the base's `[commit] author` only (with `email` when it gives one), never the runner's
+  `git config`, and the committer must match it too; with no `author`, no author is
+  expected. The model ids are the base's
+  `[commit] models`. No agent session is read: the runner's environment is not the agent's,
+  so the message's text is judged and a commit owes no agent line there.
+- A merge commit whose tree is the clean merge of its two parents (`git merge-tree
+  --write-tree`, git 2.38 or newer) adds no work of its own, and its message is not judged:
+  GitHub's "Update branch" writes such a merge, `Merge branch 'main' into <branch>` with no
+  body, as whoever pressed it. A merge with changes of its own (a resolved conflict, an
+  edit) or with more than two parents is judged like any commit: its `Merge ` subject needs
+  no area, and it needs Why:, Proof: and Undo:, as the commit-msg hook asks of a merge.
+- The approval check, commit by commit as the hook does it: each commit that changes a
+  protected path, a deletion included, carries its own `Owner-approved:` line. One commit's
+  line covers no other commit, an empty commit carrying only a line approves nothing, and a
+  change put back later in the branch still needs its line. A merge's own paths are those
+  that differ from the merge git would make. The approval finding, like the settings-case
+  one, is never excused by `.house-excuses.toml`, at any stage. A changed link named as a
+  folder of a protected path (`.cargo` linked to another folder) counts as that folder, at
+  the commit-msg hook too.
+- With a squash merge, the commit that lands on main is the message GitHub writes when the
+  button is pressed, after the check ran: it is not judged. Merge or rebase to keep the
+  judged commits.
+
+Merge never passes with nothing judged. "Cannot check" (exit 2): no ref line on stdin, a
+delete line, a head equal to its base, a shallow clone (its commit walk stops at the
+boundary without a word: check out with `fetch-depth: 0`), and grafts (`info/grafts`).
+
+`--stage push --config-from <base>` still works and judges no messages. In GitHub Actions
+(`GITHUB_ACTIONS` set to anything), `--stage merge` without `--config-from` is refused
+(exit 2); on a laptop it runs by the working tree's rules, to show what the runner will say.
+
+Workflow steps to copy. The merge step comes first, right after checkout and the tools'
+install, before any step that runs the pull request's code (a build, its tests): such a
+step could move HEAD to a commit it makes. The head is the event's, never asked of the
+checkout (`pull_request` checks out GitHub's merge of the pull request into its base, which
+is `github.sha`), and HEAD must still be it. The house is a released one from Homebrew,
+never a build of the pull request, which would judge its own change. The shas come through
+`env`, never inline in the script:
+
+```yaml
+- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+  with:
+    persist-credentials: false
+    fetch-depth: 0
+- name: Install house and the tools it runs
+  run: |
+    brew tap flight-william/housekeeper https://github.com/flight-william/housekeeper
+    brew install house gitleaks semgrep
+- name: house check --stage merge
+  if: github.event_name == 'pull_request'
+  env:
+    BASE: ${{ github.event.pull_request.base.sha }}
+    HEAD_SHA: ${{ github.sha }}
+  run: |
+    test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+    printf 'refs/heads/pr %s refs/heads/pr %s\n' "$HEAD_SHA" "$BASE" \
+      | house check --stage merge --config-from "$BASE"
+# then the steps that build or test the pull request
+```
+
+The workflow file is the pull request's own copy, so a pull request can drop this step or
+change `merge` to `push`. What stops that is the ruleset: code-owner review of
+`.github/workflows/**` ([docs/adopting.md](docs/adopting.md#the-ruleset)), not house.
+
 A pull request can change `.house.toml` and `.house-excuses.toml`, so on a runner the rules
-come from the base: `house check --stage push --config-from <rev>` reads both files from
-that revision's git objects, never the working tree, and judges the pushed content with
-them. A file the revision does not hold is absent: the pull request's copy is not used in
+come from the base: `--config-from <rev>` reads both files from that revision's git objects,
+never the working tree, and judges the pushed content with them. A file the revision does not hold is absent: the pull request's copy is not used in
 its place. A revision with no `.house.toml` at all is "cannot check": `no rules at <rev>`,
 fix: adopt the rules in their own commit first, then change code. A change never judges
 itself. A revision or file that cannot be read is "cannot check" too. The pushed excuse list is still judged: growth, deadlines and expired

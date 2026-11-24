@@ -2,7 +2,8 @@
 //! for a public repository. There anyone can open a pull request from a fork, and
 //! its workflow runs that pull request's code on the runner's machine. On a
 //! self-hosted runner a payload house cannot read is refused too (fail closed).
-//! On a GitHub-hosted runner, or outside Actions, nothing changes.
+//! On a GitHub-hosted runner, or outside Actions, nothing changes. Apart from the
+//! guard, `--stage merge` in Actions needs `--config-from` (`merge_without_base`).
 
 use serde_json::Value;
 
@@ -24,6 +25,16 @@ pub fn refusal(env: &dyn Fn(&str) -> Option<String>) -> Option<String> {
             "house: cannot check: on a self-hosted runner the event payload at GITHUB_EVENT_PATH ({path:?}) {why}. fix: run house in the Actions job, which sets GITHUB_EVENT_PATH to the event's JSON"
         )),
     }
+}
+
+/// `house check --stage merge` with no `--config-from` in GitHub Actions
+/// (`GITHUB_ACTIONS` set to anything, as design §8 says): the line
+/// to print, exit 2, so a runner never judges a pull request by its own rules. On a
+/// laptop it runs, by the working tree's rules, to show what the runner will say.
+pub fn merge_without_base(env: &dyn Fn(&str) -> Option<String>) -> Option<String> {
+    env("GITHUB_ACTIONS").is_some_and(|v| !v.is_empty()).then(|| {
+        "house merge: cannot check: --stage merge in GitHub Actions needs --config-from, so the pull request is judged by its base's rules. fix: run house check --stage merge --config-from <the pull request's base commit>".to_string()
+    })
 }
 
 enum Visibility {

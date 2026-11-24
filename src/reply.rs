@@ -37,6 +37,7 @@ pub fn stage_name(stage: Stage) -> &'static str {
     match stage {
         Stage::Commit => "commit",
         Stage::Push => "push",
+        Stage::Merge => "merge",
     }
 }
 

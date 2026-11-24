@@ -70,6 +70,9 @@ impl Excuse {
     }
 
     fn matches(&self, f: &Finding) -> bool {
+        if UNEXCUSABLE.contains(&f.tool_rule.as_str()) {
+            return false;
+        }
         let symbol_ok = self.symbol.as_deref().is_none_or(|s| has_word(&f.what, s));
         let value_ok = match (self.value, &f.measure) {
             (Some(limit), Some(m)) => m.value <= limit,
@@ -78,6 +81,11 @@ impl Excuse {
         f.rule == self.rule && f.place == Place::File(self.file.clone()) && symbol_ok && value_ok
     }
 }
+
+/// Findings no entry excuses, at any stage: the owner's approval of a protected file
+/// and a protected file's name in the wrong case. An excuse is a standing waiver, and
+/// these are the owner's own check on each change (house's floor).
+pub const UNEXCUSABLE: &[&str] = &["approval", "settings-case"];
 
 /// Whether `word` occurs in `text` with no letter, digit or `_` right before or after it.
 fn has_word(text: &str, word: &str) -> bool {

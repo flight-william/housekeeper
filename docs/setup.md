@@ -45,6 +45,12 @@ house init
 `house init` writes `.house.toml`, the protected-file list and the git hooks, and, for a repo
 with Swift files and no `.swift-format`, one with the indentation those files use. Commit them.
 
+## On a runner
+
+A runner checks each pull request with `house check --stage merge --config-from <base>`: the
+push stage's tools and tests, then the commit-msg checks on every commit of the pull request,
+by the base's rules. [docs/adopting.md](adopting.md#the-runner) sets it up.
+
 ## What the reply means
 
 One line per finding:

@@ -101,6 +101,9 @@ impl Adapter for Gitleaks {
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
         env.push(("GIT_ATTR_SOURCE".into(), empty_tree(&ctx.root)));
+        // The commits git really holds: a replace ref cannot swap one for a twin
+        // without the secret (`run::GIT_ENV`).
+        env.extend(run::git_env());
         env
     }
 
@@ -115,8 +118,12 @@ impl Adapter for Gitleaks {
     fn command(&self, ctx: &Context) -> Option<Command> {
         let scope = match (ctx.stage, &ctx.push_range) {
             (Stage::Commit, _) => vec!["--staged".to_string()],
-            (Stage::Push, Some(range)) => vec![format!("--log-opts={range} {MERGES}")],
-            (Stage::Push, None) => vec![format!("--log-opts={ALL_HISTORY} {MERGES}")],
+            (Stage::Push | Stage::Merge, Some(range)) => {
+                vec![format!("--log-opts={range} {MERGES}")]
+            }
+            (Stage::Push | Stage::Merge, None) => {
+                vec![format!("--log-opts={ALL_HISTORY} {MERGES}")]
+            }
         };
         let rest = [
             "--report-format",

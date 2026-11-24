@@ -87,13 +87,28 @@ fn timed(
     }
 }
 
-/// Run git with GIT_* stripped; used for the file list, HEAD and the hooks folder.
+/// What house's own git calls set after GIT_* is stripped: replace refs are ignored, so
+/// a `git replace` (planted by a build script a tool runs, say) cannot change the
+/// commits, trees and messages house reads.
+pub const GIT_ENV: [(&str, &str); 1] = [("GIT_NO_REPLACE_OBJECTS", "1")];
+
+/// `GIT_ENV` as owned pairs, for `run_env`.
+pub fn git_env() -> Vec<(String, String)> {
+    GIT_ENV
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+}
+
+/// Run git with GIT_* stripped and `GIT_ENV` set; used for the file list, HEAD, the
+/// hooks folder and the commits.
 pub fn git(root: &Path, args: &[&str]) -> Result<Output, CannotCheck> {
     let cmd = Command {
         program: "git".into(),
         args: args.iter().map(|a| a.to_string()).collect(),
     };
-    let out = run(&cmd, root, "git", Duration::from_secs(60)).result?;
+    let guard = Duration::from_secs(60);
+    let out = run_env(&cmd, root, "git", guard, &git_env()).result?;
     if out.exit != 0 {
         return Err(CannotCheck {
             what: format!("git {} failed: {}", args.join(" "), first_line(&out.stderr)),

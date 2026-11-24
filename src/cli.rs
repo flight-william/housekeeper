@@ -1,4 +1,4 @@
-//! `house check --stage commit|push [--json]`, `house check --all [--json]`,
+//! `house check --stage commit|push|merge [--json]`, `house check --all [--json]`,
 //! `house commit-msg <file>`,
 //! `house review [--from D] [--to D] [--repo R] [--json]`,
 //! `house init [--owner @user]`, `house --version`. Arguments are parsed by hand.
@@ -6,6 +6,7 @@
 //! and for the last day `house review` covers when `--to` is not given.
 
 mod excuse;
+mod merge;
 mod message;
 mod review;
 mod stage;
@@ -26,7 +27,7 @@ use stage::{Mode, check_from};
 use std::path::Path;
 use std::time::SystemTime;
 
-pub const USAGE: &str = "usage: house check --stage commit|push [--json] | house check --stage push --config-from <rev> [--json] | house check --all [--json] | house commit-msg <message file> | house review [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--repo <path or name>] [--json] | house init [--owner @user] | house --version";
+pub const USAGE: &str = "usage: house check --stage commit|push|merge [--json] | house check --stage push|merge --config-from <rev> [--json] | house check --all [--json] | house commit-msg <message file> | house review [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--repo <path or name>] [--json] | house init [--owner @user] | house --version";
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Cmd {
@@ -96,6 +97,7 @@ fn parse_check(rest: &[&str]) -> Result<Cmd, String> {
                 stage = Some(match it.next() {
                     Some(&"commit") => Stage::Commit,
                     Some(&"push") => Stage::Push,
+                    Some(&"merge") => Stage::Merge,
                     _ => return Err(USAGE.into()),
                 })
             }
@@ -158,7 +160,15 @@ fn run_init(cwd: &Path, owner: Option<&str>) -> i32 {
 
 /// Check by the working tree's rules, or with `config_from` by that revision's.
 fn check_and_record(cwd: &Path, mode: Mode, json: bool, config_from: Option<&str>) -> i32 {
-    if let Some(line) = runner::refusal(&|key| std::env::var(key).ok()) {
+    let env = |key: &str| std::env::var(key).ok();
+    if let Some(line) = runner::refusal(&env) {
+        println!("{line}");
+        return 2;
+    }
+    if mode == Mode::Stage(Stage::Merge)
+        && config_from.is_none()
+        && let Some(line) = runner::merge_without_base(&env)
+    {
         println!("{line}");
         return 2;
     }

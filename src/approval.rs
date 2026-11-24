@@ -1,5 +1,7 @@
 //! The approval check (R9): a protected file changed needs the owner's approval line
 //! in the commit message. `check` is pure: paths and a message in, findings out.
+//! `check_in` also reads the disk: a changed link named as a folder of a protected
+//! glob (`.cargo` linked to another folder) reaches the protected files through it.
 
 use crate::adapter::CannotCheck;
 use crate::config;
@@ -170,6 +172,28 @@ fn protected_as<'a>(
     })
 }
 
+/// Whether `path`, under `root`, is a link that stands for a folder of a glob of
+/// `protected` (`reaches`), ignoring case.
+fn link_to_protected(root: Option<&Path>, path: &str, protected: &[String]) -> bool {
+    if !root.is_some_and(|r| is_link(&r.join(path))) {
+        return false;
+    }
+    let folded = fold(path);
+    protected.iter().any(|g| reaches(&fold(g), &folded))
+}
+
+fn is_link(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink())
+}
+
+/// Whether a link at `path` stands for a folder of `glob`: `path` matches the glob
+/// cut before one of its later segments, the cut ending in a named segment, not `**`.
+/// A link `.cargo` to another folder reaches `.cargo/config.toml` through it.
+fn reaches(glob: &str, path: &str) -> bool {
+    let segs: Vec<&str> = glob.split('/').collect();
+    (1..segs.len()).any(|n| segs[n - 1] != "**" && glob_matches(&segs[..n].join("/"), path))
+}
+
 /// One R9 finding per changed protected path, unless the message has the approval
 /// line. Paths and globs are compared ignoring case, the Unicode way (`fold`).
 pub fn check(changed: &[String], protected: &[String], message: &str) -> Vec<Finding> {
@@ -187,6 +211,41 @@ pub fn check_in(
     judge(Some(root), changed, protected, message)
 }
 
+/// `check_in` for a commit read from git: `links`, the changed paths the commit's
+/// trees hold as links (mode 120000), count as links whatever the disk holds now.
+pub fn check_commit(
+    root: &Path,
+    changed: &[String],
+    links: &[String],
+    protected: &[String],
+    message: &str,
+) -> Vec<Finding> {
+    let mut found = judge(Some(root), changed, protected, message);
+    if approved(message) {
+        return found;
+    }
+    for path in links.iter().filter(|p| changed.contains(p)) {
+        let folded = fold(path);
+        let reached = protected.iter().any(|g| reaches(&fold(g), &folded));
+        if reached && !found.iter().any(|f| f.place == Place::File(path.clone())) {
+            found.push(unapproved(path));
+        }
+    }
+    found
+}
+
+fn unapproved(path: &str) -> Finding {
+    Finding {
+        rule: "R9".to_string(),
+        place: Place::File(path.to_string()),
+        line: None,
+        what: "protected file changed without the owner's approval line".to_string(),
+        fix: "add Owner-approved: <date> \"<the owner's words>\" to the commit message, quoting the owner".to_string(),
+        tool_rule: "approval".to_string(),
+        measure: None,
+    }
+}
+
 fn judge(
     root: Option<&Path>,
     changed: &[String],
@@ -198,16 +257,11 @@ fn judge(
     }
     changed
         .iter()
-        .filter(|path| protected_as(root, path, protected).is_some())
-        .map(|path| Finding {
-            rule: "R9".to_string(),
-            place: Place::File(path.clone()),
-            line: None,
-            what: "protected file changed without the owner's approval line".to_string(),
-            fix: "add Owner-approved: <date> \"<the owner's words>\" to the commit message, quoting the owner".to_string(),
-            tool_rule: "approval".to_string(),
-            measure: None,
+        .filter(|path| {
+            protected_as(root, path, protected).is_some()
+                || link_to_protected(root, path, protected)
         })
+        .map(|path| unapproved(path))
         .collect()
 }
 

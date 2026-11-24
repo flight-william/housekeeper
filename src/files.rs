@@ -96,6 +96,8 @@ pub struct Scope {
     pub run_tests: bool,
     pub push_range: Option<String>,
     pub unbounded: bool,
+    /// At push and merge, the commits sent, oldest first (`Push::commits`); else none.
+    pub commits: Vec<String>,
 }
 
 /// The files to check at `stage`, relative to `root`, `/`-separated, and at push
@@ -132,34 +134,49 @@ pub fn for_stage_excluding(
                 changed,
                 push_range: None,
                 unbounded: false,
+                commits: Vec::new(),
             })
         }
-        Stage::Push => {
-            let stdin = std::io::stdin();
-            let text = if stdin.is_terminal() {
-                let head = git(root, &["rev-parse", "HEAD"])?.stdout.trim().to_string();
-                format!("HEAD {head} HEAD {}\n", "0".repeat(head.len()))
-            } else {
-                let mut text = String::new();
-                stdin
-                    .lock()
-                    .read_to_string(&mut text)
-                    .map_err(|e| CannotCheck {
-                        what: format!("push lines on stdin could not be read: {e}"),
-                        fix: "run house check --stage push from git's pre-push hook".into(),
-                    })?;
-                text
-            };
+        Stage::Push | Stage::Merge => {
+            let text = push_text(root)?;
+            if stage == Stage::Merge {
+                crate::push::merge_refusal(root, &text)?;
+            }
             let push = crate::push::pushed(root, &text)?;
+            if stage == Stage::Merge && push.commits.is_empty() {
+                return Err(CannotCheck {
+                    what: "no commit to judge: the branch's head is its base".into(),
+                    fix: "feed the pull request's head and base on the ref line".into(),
+                });
+            }
             Ok(Scope {
                 files: without_excluded(push.files, exclude),
                 changed: push.changed,
                 run_tests: push.touched,
                 push_range: push.range,
                 unbounded: push.unbounded,
+                commits: push.commits,
             })
         }
     }
+}
+
+/// The push lines: stdin, or with stdin a terminal (a run by hand) HEAD as a new branch.
+fn push_text(root: &Path) -> Result<String, CannotCheck> {
+    let stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        let head = git(root, &["rev-parse", "HEAD"])?.stdout.trim().to_string();
+        return Ok(format!("HEAD {head} HEAD {}\n", "0".repeat(head.len())));
+    }
+    let mut text = String::new();
+    stdin
+        .lock()
+        .read_to_string(&mut text)
+        .map_err(|e| CannotCheck {
+            what: format!("push lines on stdin could not be read: {e}"),
+            fix: "run house check --stage push from git's pre-push hook".into(),
+        })?;
+    Ok(text)
 }
 
 /// `files` without those under an `exclude` entry (`.house.toml` `[paths]`). An
