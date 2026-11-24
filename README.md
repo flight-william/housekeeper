@@ -65,10 +65,9 @@ and the git hooks. Commit them. Files listed under `[paths] exclude` in `.house.
 reports on one anyway is dropped: gitleaks reads the git history, not the files it is handed,
 so an excluded vendored file is not scanned for secrets either. The exclusion is judged
 at the path a secret has now: gitleaks runs with git's rename detection off, so a secret
-moved or copied out of an excluded folder (`git mv`) is reported at its new path. It reads
-no `.gitattributes`, so a file marked `-diff` or `binary`, or given a diff driver, is
-scanned as the text it holds. Under
-`[tests]`, `commit = [["cargo", "test"]]` and `push = [...]` (push falls back to commit) list test
+moved or copied out of an excluded folder (`git mv`), in a merge commit too, is reported at
+its new path. It reads no `.gitattributes`, so a file marked `-diff` or `binary`, or given a
+diff driver, is scanned as the text it holds. Under `[tests]`, `commit = [["cargo", "test"]]` and `push = [...]` (push falls back to commit) list test
 commands, each a program and its arguments with no shell, run from the repo root after the
 tools; a failing one is an R7 finding, and the last 20 lines of its output go to the run
 record. Each command may run for `timeout_seconds` (in `[tests]`, 600 when unset, at most

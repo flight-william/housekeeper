@@ -7,6 +7,11 @@
 //! `diff.renames` off: a rename is a delete and an add, and the secret is reported at
 //! the path it now has, where `[paths] exclude` is judged.
 //!
+//! At push and `--all` a merge commit is read as its diff against its first parent
+//! (`MERGES`): `git log -p` shows a merge no diff, so a secret added or moved out of an
+//! excluded folder while a merge was made would not be seen. A secret a side branch
+//! brings is then in two diffs, its commit's and the merge's, and is reported once.
+//!
 //! For a file `.gitattributes` marks `-diff` or `binary`, or gives a diff driver with
 //! a textconv, git prints "Binary files differ" or the driver's text, not the file,
 //! so a secret in it would never be read. gitleaks runs with `GIT_ATTR_SOURCE` set to
@@ -64,6 +69,14 @@ const NO_RENAMES: &[(&str, &str)] = &[
     ("GIT_CONFIG_VALUE_0", "false"),
 ];
 
+/// `git log -p` shows a merge commit no diff, so a file added or moved while a merge
+/// is made would never be read: each merge is shown as its diff against its first
+/// parent, the change the merge brought to its branch.
+const MERGES: &str = "--diff-merges=first-parent";
+
+/// gitleaks' own log options when given none, which `--log-opts` replaces.
+const ALL_HISTORY: &str = "--full-history --all";
+
 /// git's empty tree in a SHA-1 repo; a SHA-256 repo has its own, which git gives.
 const EMPTY_TREE_SHA1: &str = "4b825dc642cb6eb9a060e64bf8d69288fbee4904";
 
@@ -102,8 +115,8 @@ impl Adapter for Gitleaks {
     fn command(&self, ctx: &Context) -> Option<Command> {
         let scope = match (ctx.stage, &ctx.push_range) {
             (Stage::Commit, _) => vec!["--staged".to_string()],
-            (Stage::Push, Some(range)) => vec![format!("--log-opts={range}")],
-            (Stage::Push, None) => vec![],
+            (Stage::Push, Some(range)) => vec![format!("--log-opts={range} {MERGES}")],
+            (Stage::Push, None) => vec![format!("--log-opts={ALL_HISTORY} {MERGES}")],
         };
         let rest = [
             "--report-format",
@@ -137,8 +150,11 @@ impl Adapter for Gitleaks {
         if let Some(error) = logged_error(&out.stderr) {
             return Err(cannot(format!("gitleaks logged an error: {error}")));
         }
+        // A secret a side branch brings is in its own commit's diff and in the merge's.
+        let mut seen = std::collections::HashSet::new();
         let findings = leaks
             .into_iter()
+            .filter(|l| seen.insert((l.file.clone(), l.start_line, l.rule_id.clone())))
             .map(|l| Finding {
                 rule: "R2".into(),
                 place: Place::File(l.file),
@@ -216,23 +232,28 @@ mod tests {
             ..ctx()
         };
         let c = Gitleaks.command(&push).unwrap();
-        assert_eq!(c.args[..2], ["git", "--log-opts=abc..def"]);
+        assert_eq!(
+            c.args[..2],
+            ["git", "--log-opts=abc..def --diff-merges=first-parent"]
+        );
         assert!(!c.args.contains(&"--staged".to_string()));
     }
 
     #[test]
-    fn push_without_a_range_scans_all_history_not_the_index() {
+    fn push_without_a_range_scans_all_history_with_merges_not_the_index() {
         let push = Context {
             stage: Stage::Push,
             ..ctx()
         };
         let c = Gitleaks.command(&push).unwrap();
-        assert_eq!(c.args[0], "git");
-        assert!(
-            !c.args
-                .iter()
-                .any(|a| a == "--staged" || a.starts_with("--log-opts"))
+        assert_eq!(
+            c.args[..2],
+            [
+                "git",
+                "--log-opts=--full-history --all --diff-merges=first-parent"
+            ]
         );
+        assert!(!c.args.iter().any(|a| a == "--staged"));
     }
 
     /// gitleaks logs git's error and still exits 0 with `[]` (a bad --log-opts range).
