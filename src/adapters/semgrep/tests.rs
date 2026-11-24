@@ -73,6 +73,7 @@ fn command_passes_the_pattern_file_and_only_the_concerned_files() {
     assert_eq!(
         cmd.args[config + 4..],
         [
+            "--",
             "tests/test_a.py",
             "Tests/ATests.swift",
             "src/lib.rs",

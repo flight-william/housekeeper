@@ -1,7 +1,7 @@
 //! ruff, for Python: `ruff check` (R2 lint, R3/R4 size and complexity) and
 //! `ruff format --check` (R1). Both read ruff's JSON output (captured with ruff 0.17.6).
 
-use super::Exits;
+use super::{Exits, then_files};
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Language, Output};
 use crate::finding::{Finding, Measure, Place};
 use crate::run::first_line;
@@ -137,12 +137,10 @@ fn command(sub: &[&str], ctx: &Context) -> Option<Command> {
     if py.is_empty() {
         return None;
     }
-    let mut args: Vec<String> = sub.iter().map(|s| s.to_string()).collect();
-    args.extend(["--output-format", "json", "--force-exclude", "--"].map(String::from));
-    args.extend(py);
+    let options = [sub, &["--output-format", "json", "--force-exclude"]].concat();
     Some(Command {
         program: "ruff".into(),
-        args,
+        args: then_files(&options, py),
     })
 }
 

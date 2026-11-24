@@ -37,6 +37,29 @@ pub fn all() -> Vec<Box<dyn Adapter>> {
     ]
 }
 
+/// `options`, then `--`, then `files`: a staged file named like an option (`-x.swift`,
+/// `--output=Sources/A.swift`) reaches the tool as a file. Without `--`, SwiftLint
+/// read `--output=Sources/A.swift` as its report file, walked the whole tree and wrote
+/// over the tracked `Sources/A.swift`. Every tool given files this way takes `--`.
+pub(crate) fn then_files(options: &[&str], files: Vec<String>) -> Vec<String> {
+    let mut args: Vec<String> = options.iter().map(|o| o.to_string()).collect();
+    args.push("--".to_string());
+    args.extend(files);
+    args
+}
+
+/// A path given as an option's value, with `./` before it when it starts with `-`:
+/// cargo reads `--manifest-path -ws/Cargo.toml` as the option `-w`, and so do the
+/// cargo commands cargo fmt and cargo-deny run with the same path, so neither `--`
+/// nor `--manifest-path=` helps.
+pub(crate) fn path_value(path: String) -> String {
+    if path.starts_with('-') {
+        format!("./{path}")
+    } else {
+        path
+    }
+}
+
 /// `file` relative to `root`. SwiftLint and SwiftFormat print absolute paths, and
 /// may print /tmp for a root git names /private/tmp.
 pub(crate) fn relative(root: &Path, file: &str) -> String {

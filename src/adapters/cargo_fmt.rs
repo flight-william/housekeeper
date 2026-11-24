@@ -1,6 +1,6 @@
 //! R1 for Rust: `cargo fmt --check`, one finding per "Diff in <path>:<line>:" block.
 
-use super::Exits;
+use super::{Exits, path_value};
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
 use crate::finding::{Finding, Place};
 use std::path::Path;
@@ -140,7 +140,12 @@ impl Adapter for CargoFmt {
     fn commands(&self, ctx: &Context) -> Vec<Command> {
         let to_command = |m: String| Command {
             program: "cargo".into(),
-            args: vec!["fmt".into(), "--check".into(), "--manifest-path".into(), m],
+            args: vec![
+                "fmt".into(),
+                "--check".into(),
+                "--manifest-path".into(),
+                path_value(m),
+            ],
         };
         manifests(ctx).into_iter().map(to_command).collect()
     }

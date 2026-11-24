@@ -3,7 +3,7 @@
 //! A sourced file is followed from the script's folder; findings in it are not
 //! reported unless it is handed over too.
 
-use super::Exits;
+use super::{Exits, then_files};
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Language, Output, SHELL_EXTENSIONS};
 use crate::finding::{Finding, Place};
 use serde::Deserialize;
@@ -58,19 +58,15 @@ impl Adapter for Shellcheck {
         }
         // Follow what a script sources, from the script's own folder: otherwise a
         // source is SC1091 or not by which other files the stage happens to hold.
-        let mut args: Vec<String> = [
+        let options = [
             "-f",
             "json1",
             "--external-sources",
             "--source-path=SCRIPTDIR",
-        ]
-        .iter()
-        .map(|a| a.to_string())
-        .collect();
-        args.extend(files);
+        ];
         Some(Command {
             program: "shellcheck".into(),
-            args,
+            args: then_files(&options, files),
         })
     }
 
@@ -175,6 +171,7 @@ mod tests {
                 "json1",
                 "--external-sources",
                 "--source-path=SCRIPTDIR",
+                "--",
                 "x/b.sh",
                 "c.bash"
             ]

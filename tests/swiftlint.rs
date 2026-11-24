@@ -1,7 +1,7 @@
-//! SwiftLint keeps to the repo's own scope: with a `.swiftlint.yml` at the root,
-//! SwiftLint picks the files itself (its `included:` and `excluded:`), and house
-//! keeps the findings on the files the stage checks. Output captured from
-//! SwiftLint 0.65.1.
+//! SwiftLint keeps to the repo's own `excluded:`: the stage's Swift files are named
+//! to it with `--force-exclude`, so it never walks the tree. A named file skips
+//! `included:` (SwiftLint 0.65.1, Configuration+LintableFiles.swift), a stated
+//! limit. Output captured from SwiftLint 0.65.1.
 
 mod common;
 
@@ -38,14 +38,20 @@ fn write(root: &Path, path: &str, text: &str) {
     std::fs::write(path, text).unwrap();
 }
 
+/// With the repo's config, the stage's Swift files are named, with --force-exclude
+/// so its `excluded:` still holds; a file the stage did not touch is not linted.
 #[test]
-fn with_the_repos_config_swiftlint_picks_the_files_itself() {
+fn with_the_repos_config_the_stage_files_are_named_and_force_excluded() {
     let root = common::fresh("swiftlint-config");
-    write(&root, ".swiftlint.yml", "included:\n  - Sources\n");
+    write(&root, ".swiftlint.yml", "excluded:\n  - Generated\n");
+    write(&root, "Sources/Untouched.swift", "let old = 0;\n");
     let cmd = SwiftLint
-        .command(&ctx(&root, &["Sources/A.swift", "Probes/P.swift"]))
+        .command(&ctx(&root, &["Sources/A.swift", "Generated/G.swift"]))
         .unwrap();
-    assert_eq!(cmd.args.join(" "), "lint --reporter json --quiet");
+    assert_eq!(
+        cmd.args.join(" "),
+        "lint --reporter json --quiet --force-exclude -- Sources/A.swift Generated/G.swift"
+    );
 }
 
 #[test]
@@ -56,7 +62,7 @@ fn without_a_config_the_files_are_named() {
         .unwrap();
     assert_eq!(
         cmd.args.join(" "),
-        "lint --reporter json --quiet Sources/A.swift"
+        "lint --reporter json --quiet --force-exclude -- Sources/A.swift"
     );
     assert!(SwiftLint.command(&ctx(&root, &["a.py"])).is_none());
 }
@@ -80,10 +86,13 @@ fn only_findings_on_the_checked_files_are_kept() {
 }
 
 #[test]
-fn a_scope_with_no_swift_file_is_nothing_to_fix() {
+fn a_stage_whose_swift_files_are_all_excluded_is_nothing_to_fix() {
     let root = PathBuf::from("/repo");
     let found = SwiftLint
-        .parse(&ctx(&root, &["Probes/P.swift"]), &out(1, "", NO_LINTABLE))
+        .parse(
+            &ctx(&root, &["Generated/Made.swift"]),
+            &out(1, "", NO_LINTABLE),
+        )
         .unwrap();
     assert!(found.is_empty());
     for (exit, stderr) in [
@@ -107,24 +116,66 @@ fn installed() -> bool {
     found
 }
 
-/// The real tool: a probe file the repo's `included:` leaves out gives nothing,
-/// the same problem in a source file is a finding.
+fn places(report: &house::reply::Report) -> Vec<String> {
+    report
+        .findings()
+        .iter()
+        .map(|f| house::reply::place_text(&f.place).to_string())
+        .collect()
+}
+
+/// A repo with a `.swiftlint.yml` excluding `Generated`, the same problem in a
+/// source file and a generated one, and a tracked symlink to an ancestor folder,
+/// on which SwiftLint 0.65.1 crashes when it walks the tree.
+fn scoped_repo(name: &str) -> PathBuf {
+    let root = common::repo(name);
+    write(&root, ".swiftlint.yml", "excluded:\n  - Generated\n");
+    write(&root, "Sources/Main.swift", "let value = 1;\n");
+    write(&root, "Generated/Made.swift", "let made = 2;\n");
+    std::fs::create_dir_all(root.join("a/b")).unwrap();
+    std::os::unix::fs::symlink("../..", root.join("a/b/root")).unwrap();
+    root
+}
+
+/// The real tool: the staged source file has its finding, the staged file in
+/// `excluded:` has none, and the symlink does not crash the run.
 #[test]
-fn a_file_outside_the_repos_scope_gives_no_finding() {
+fn the_repos_excluded_scope_is_kept_and_a_symlink_to_an_ancestor_is_no_crash() {
     if !installed() {
         return;
     }
-    let root = common::repo("swiftlint-scope");
+    let root = scoped_repo("swiftlint-scope");
+    common::git(&root, &["add", "-A"]);
+    let report = cli::check(&root, Stage::Commit, vec![Box::new(SwiftLint)]);
+    assert!(report.cannots().is_empty(), "{}", report.text());
+    assert_eq!(places(&report), ["Sources/Main.swift"], "{}", report.text());
+}
+
+/// The real tool: a stage whose only Swift file is in `excluded:` checks nothing.
+#[test]
+fn a_stage_of_only_excluded_files_is_nothing_to_fix() {
+    if !installed() {
+        return;
+    }
+    let root = scoped_repo("swiftlint-only-excluded");
+    common::git(&root, &["add", "a", ".swiftlint.yml", "Generated"]);
+    let report = cli::check(&root, Stage::Commit, vec![Box::new(SwiftLint)]);
+    assert!(report.cannots().is_empty(), "{}", report.text());
+    assert!(report.findings().is_empty(), "{}", report.text());
+}
+
+/// The real tool, a stated limit: SwiftLint lints a named file whatever the
+/// config's `included:` says, so a staged probe outside it has its finding.
+#[test]
+fn a_staged_file_outside_included_is_linted_a_known_limit() {
+    if !installed() {
+        return;
+    }
+    let root = common::repo("swiftlint-included");
     write(&root, ".swiftlint.yml", "included:\n  - Sources\n");
-    write(&root, "Sources/Main.swift", "let value = 1;\n");
     write(&root, "Probes/Spike.swift", "let other = 2;\n");
     common::git(&root, &["add", "-A"]);
     let report = cli::check(&root, Stage::Commit, vec![Box::new(SwiftLint)]);
     assert!(report.cannots().is_empty(), "{}", report.text());
-    let places: Vec<String> = report
-        .findings()
-        .iter()
-        .map(|f| house::reply::place_text(&f.place).to_string())
-        .collect();
-    assert_eq!(places, ["Sources/Main.swift"], "{}", report.text());
+    assert_eq!(places(&report), ["Probes/Spike.swift"], "{}", report.text());
 }

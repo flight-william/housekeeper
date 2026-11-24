@@ -41,7 +41,7 @@ fn command_lints_the_swift_files_as_json() {
     assert_eq!(cmd.program, "swiftformat");
     assert_eq!(
         cmd.args.join(" "),
-        "--lint --reporter json --quiet Sources/A.swift B.swift"
+        "--lint --reporter json --quiet -- Sources/A.swift B.swift"
     );
     assert_eq!(Swiftformat.name(), "swiftformat");
     assert_eq!(Swiftformat.program(), "swiftformat");

@@ -7,14 +7,15 @@
 //! so a Swift file's length always has exactly one owner. Function and type length
 //! stay SwiftLint's.
 //!
-//! SwiftLint applies a config's `included:` only when it picks the files itself:
-//! files named on its command line are all linted (0.65.1), so the repo's own
-//! scope (probes, scripts left out) would be skipped. With a `.swiftlint.yml` at
-//! the root, SwiftLint is run with no paths, as the project runs it, and house
-//! keeps the findings on the files the stage checks; without one, the files are
-//! named.
+//! The stage's Swift files are named to SwiftLint, with `--force-exclude` so the
+//! repo's `.swiftlint.yml` `excluded:` still leaves its files out. SwiftLint is never
+//! run with no paths: it would walk the whole tree, linting files the stage did not
+//! touch, and 0.65.1 crashes on a symlink to an ancestor folder. A named file skips
+//! the config's `included:` (0.65.1, `Configuration+LintableFiles.swift`), and
+//! house reads no YAML, so a staged file outside `included:` is linted: a stated
+//! limit.
 
-use super::{Exits, relative, stage_file};
+use super::{Exits, relative, stage_file, then_files};
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
 use crate::finding::{Finding, Place};
 use serde::Deserialize;
@@ -39,11 +40,8 @@ struct Violation {
 /// SwiftLint's finding on a file's length, which r3 owns when it runs.
 const FILE_LENGTH: &str = "swiftlint file_length";
 
-/// The config SwiftLint reads from the folder it runs in.
-const CONFIG: &str = ".swiftlint.yml";
-
-/// SwiftLint's error, exit 1, when its scope holds no Swift file (every one left
-/// out by the config): it checked nothing by the project's own choice.
+/// SwiftLint's error, exit 1, when every named Swift file is in the config's
+/// `excluded:`: it checked nothing by the project's own choice.
 const NO_LINTABLE: &str = "Error: No lintable files found at paths: ";
 
 /// The house rule for a SwiftLint rule id; unknown ones are R2.
@@ -82,16 +80,10 @@ impl Adapter for SwiftLint {
         if files.is_empty() {
             return None;
         }
-        let mut args: Vec<String> = ["lint", "--reporter", "json", "--quiet"]
-            .iter()
-            .map(|a| a.to_string())
-            .collect();
-        if !ctx.root.join(CONFIG).is_file() {
-            args.extend(files);
-        }
+        let options = ["lint", "--reporter", "json", "--quiet", "--force-exclude"];
         Some(Command {
             program: "swiftlint".to_string(),
-            args,
+            args: then_files(&options, files),
         })
     }
 
@@ -130,7 +122,8 @@ impl Adapter for SwiftLint {
                 (on, finding)
             })
             .unzip();
-        // Judged on every finding: exit 2 may come from a file outside the stage's.
+        // Judged on every finding; one on no stage file (SwiftLint lints only the
+        // named ones) is dropped, not reported under a path git does not know.
         let findings = EXITS.judge("swiftlint", out, findings)?;
         Ok(on
             .into_iter()
@@ -224,7 +217,7 @@ mod tests {
         assert_eq!(cmd.program, "swiftlint");
         assert_eq!(
             cmd.args.join(" "),
-            "lint --reporter json --quiet Sources/B.swift"
+            "lint --reporter json --quiet --force-exclude -- Sources/B.swift"
         );
     }
 }
