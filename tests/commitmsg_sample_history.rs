@@ -34,7 +34,7 @@ fn judge(log: &str) -> Vec<(String, Vec<String>)> {
                 author_email: None,
                 comment_char: None,
                 merge_head: false,
-                claudecode: Some("1".into()),
+                agent_session: true,
                 models: MODELS.iter().map(|m| m.to_string()).collect(),
             };
             let ids = hits(text, &commit)

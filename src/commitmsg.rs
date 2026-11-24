@@ -1,8 +1,11 @@
 //! R17 commit messages, and R9's `Cause:` line: `check` judges one commit message.
 //!
 //! The accepted model ids are an argument, read from `.house.toml` by the core; there
-//! is no regex crate (the three patterns are written out by hand below); and an
-//! identity rule: a `Co-Authored-By: Claude …` trailer needs its `Claude-Session:` line.
+//! is no regex crate (the patterns are written out by hand below); and an identity
+//! rule: a `Co-Authored-By:` line is optional, an agent's carries its model id and a
+//! person's carries none, and a commit made in an agent's session (`AGENT_MARKERS`)
+//! owes its agent's line. No session line is owed or judged: a session link outlives
+//! the session it names.
 //!
 //! R9/cause is judged on the area (the subject's text before its first colon, trimmed)
 //! and the first word after it, whether or not the subject passes R17/subject. The first
@@ -36,10 +39,25 @@ pub struct Commit {
     pub comment_char: Option<String>,
     /// Whether the file `git rev-parse --git-path MERGE_HEAD` names exists.
     pub merge_head: bool,
-    /// The `CLAUDECODE` environment variable; `None` when unset.
-    pub claudecode: Option<String>,
+    /// Whether the commit is made in an agent's session (`in_agent_session`).
+    pub agent_session: bool,
     /// The model ids a `Co-Authored-By:` line may name (`.house.toml`).
     pub models: Vec<String>,
+}
+
+/// The variable and value each agent sets in the shells its session runs, one row per
+/// agent, the same rule for each. Only markers seen set are listed: Claude Code's.
+pub const AGENT_MARKERS: &[(&str, &str)] = &[("CLAUDECODE", "1")];
+
+/// The names that are an agent's, not a person's: a `Co-Authored-By:` line whose name
+/// starts with one must give the model id.
+const AGENT_NAMES: [&str; 4] = ["claude", "codex", "antigravity", "gemini"];
+
+/// Whether `var` (an environment lookup) holds a marker of `AGENT_MARKERS`.
+pub fn in_agent_session(var: impl Fn(&str) -> Option<String>) -> bool {
+    AGENT_MARKERS
+        .iter()
+        .any(|(name, value)| var(name).as_deref() == Some(*value))
 }
 
 /// One problem found, before it becomes a `Finding`: which id, where, and what matched.
@@ -148,42 +166,44 @@ fn body(lines: &[Line<'_>], parts: Option<(&str, &str)>, found: &mut Vec<Hit>) {
 
 /// `R17/trailer` and `R17/agent`.
 fn trailers(lines: &[Line<'_>], commit: &Commit, found: &mut Vec<Hit>) {
-    let mut valid_trailer = false;
-    let mut claude_named = false;
+    let mut agent_named = false;
     for l in lines.iter().filter(|l| is_trailer(l.text)) {
-        match trailer(l.text) {
+        match co_author(l.text) {
             None => found.push(Hit::on("R17/trailer", l, l.text)),
-            Some((_, id)) if !commit.models.iter().any(|m| m == id) => {
+            Some(CoAuthor::Agent(id)) if !commit.models.iter().any(|m| m == id) => {
                 found.push(Hit::on("R17/trailer", l, id));
             }
-            Some((name, _)) => {
-                valid_trailer = true;
-                claude_named |= name == "Claude" || name.starts_with("Claude ");
-            }
+            Some(CoAuthor::Agent(_)) => agent_named = true,
+            Some(CoAuthor::Person) => {}
         }
     }
-    let session = lines.iter().any(|l| is_session(l.text));
-    // Every agent's trailer is checked above for shape and a listed model id. In a
-    // Claude Code session (CLAUDECODE=1) both lines are owed. Other agents'
-    // session markers are unverified, so only a Claude co-author owes a session line.
-    if commit.claudecode.as_deref() == Some("1") {
-        if !valid_trailer {
-            found.push(Hit::whole("R17/agent", "Co-Authored-By:"));
-        }
-        if !session {
-            found.push(Hit::whole("R17/agent", "Claude-Session:"));
-        }
-    } else if claude_named && !session {
-        found.push(Hit::whole("R17/agent", "Claude-Session:"));
+    // The same for every agent: in its session, the commit names it and its model.
+    if commit.agent_session && !agent_named {
+        found.push(Hit::whole("R17/agent", "Co-Authored-By:"));
     }
 }
 
-/// A valid `Co-Authored-By:` line gives `(name, model id)`; the pattern it replaces:
-/// `^Co-Authored-By: [A-Za-z][A-Za-z0-9 .-]* \(([a-z0-9.-]+)\) <noreply[^>\s]*@[^>\s]+>$`.
-fn trailer(line: &str) -> Option<(&str, &str)> {
+/// Who a valid `Co-Authored-By:` line names: an agent, with its model id, or a person.
+enum CoAuthor<'a> {
+    Agent(&'a str),
+    Person,
+}
+
+/// A valid `Co-Authored-By:` line. With a `(model id)` part it is an agent's, the
+/// pattern `^Co-Authored-By: [A-Za-z][A-Za-z0-9 .-]* \(([a-z0-9.-]+)\) <noreply[^>\s]*@[^>\s]+>$`;
+/// without, a person's, `Name <local@domain>`, the name not one of `AGENT_NAMES`.
+fn co_author(line: &str) -> Option<CoAuthor<'_>> {
     let rest = line.strip_prefix("Co-Authored-By: ")?.strip_suffix('>')?;
     let (head, email) = rest.rsplit_once(" <")?;
-    let (name, id) = head.strip_suffix(')')?.rsplit_once(" (")?;
+    if email
+        .chars()
+        .any(|c| c == '<' || c == '>' || c.is_whitespace())
+    {
+        return None;
+    }
+    let Some((name, id)) = head.strip_suffix(')').and_then(|h| h.rsplit_once(" (")) else {
+        return person(head, email).then_some(CoAuthor::Person);
+    };
     let mut name_chars = name.chars();
     let name_ok = name_chars.next().is_some_and(|c| c.is_ascii_alphabetic())
         && name_chars.all(|c| c.is_ascii_alphanumeric() || " .-".contains(c));
@@ -192,16 +212,22 @@ fn trailer(line: &str) -> Option<(&str, &str)> {
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || ".-".contains(c));
     let at = email.get(7..email.len().saturating_sub(1)).unwrap_or("");
-    let email_ok = email.starts_with("noreply")
-        && at.contains('@')
-        && !email.chars().any(|c| c == '>' || c.is_whitespace());
-    (name_ok && id_ok && email_ok).then_some((name, id))
+    let email_ok = email.starts_with("noreply") && at.contains('@');
+    (name_ok && id_ok && email_ok).then_some(CoAuthor::Agent(id))
 }
 
-/// `^Claude-Session: https://claude\.ai/code/session_[A-Za-z0-9]+$`.
-fn is_session(line: &str) -> bool {
-    line.strip_prefix("Claude-Session: https://claude.ai/code/session_")
-        .is_some_and(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric()))
+/// A person's name and address: a name with no brackets, not an agent's, and an
+/// address with text on both sides of its `@`.
+fn person(name: &str, email: &str) -> bool {
+    let first = name.split_whitespace().next().unwrap_or("").to_lowercase();
+    let name_ok = !name.trim().is_empty()
+        && name == name.trim()
+        && !name.contains(['<', '>', '(', ')'])
+        && !AGENT_NAMES.contains(&first.as_str());
+    let email_ok = email
+        .split_once('@')
+        .is_some_and(|(local, domain)| !local.is_empty() && !domain.is_empty());
+    name_ok && email_ok
 }
 
 /// A `Co-Authored-By:` line, its key in any case as git reads trailer keys, so a
@@ -285,12 +311,12 @@ fn texts(id: &str) -> (&'static str, &'static str) {
             "add a Cause: line saying why the fault happened, not only what was changed",
         ),
         "R17/trailer" => (
-            "Co-Authored-By line malformed or naming an unknown model",
-            "write `Co-Authored-By: <Name> (<model id>) <noreply@…>` with a model id listed in .house.toml",
+            "Co-Authored-By line malformed, naming an unknown model, or naming an agent without its model id",
+            "write `Co-Authored-By: <Name> (<model id>) <noreply@…>` for an agent, with a model id listed in .house.toml, or `Co-Authored-By: <Name> <address>` for a person",
         ),
         "R17/agent" => (
-            "agent commit without a valid Co-Authored-By or Claude-Session line",
-            "add a valid Co-Authored-By line naming the model, and the Claude-Session: https://claude.ai/code/session_… line",
+            "agent commit without a valid Co-Authored-By line naming the agent",
+            "add `Co-Authored-By: <Name> (<model id>) <noreply@…>` with a model id listed in .house.toml",
         ),
         _ => (
             "commit author is not the installed author",

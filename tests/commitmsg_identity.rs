@@ -1,10 +1,11 @@
-//! `house::commitmsg`, the identity rule: trailers and their model ids, the session
-//! line a Claude co-author owes, and the author.
+//! `house::commitmsg`, the identity rule: Co-Authored-By lines, an agent's with its
+//! model id and a person's with none, the agent line an agent session owes, and the
+//! author. No session line is owed or judged.
 
 mod commitmsg_support;
 
 use commitmsg_support::{BODY, ctx, one, seen};
-use house::commitmsg::{Commit as Context, check};
+use house::commitmsg::{AGENT_MARKERS, Commit as Context, check, in_agent_session};
 use house::finding::Place;
 
 const OPUS: &str = "Co-Authored-By: Claude Opus 5.5 (claude-opus-5-5) <noreply@anthropic.com>";
@@ -12,7 +13,7 @@ const OPUS: &str = "Co-Authored-By: Claude Opus 5.5 (claude-opus-5-5) <noreply@a
 #[test]
 fn a_trailer_naming_a_listed_model_passes() {
     let other = "Co-Authored-By: GPT Agent (gpt-6.1-sol) <noreply@openai.com>";
-    let text = format!("parser: keep the last line{BODY}\n{OPUS}\n{other}\n{SESSION}\n");
+    let text = format!("parser: keep the last line{BODY}\n{OPUS}\n{other}\n");
     assert_eq!(seen(&text, &ctx()), vec![]);
 }
 
@@ -47,60 +48,128 @@ fn a_model_id_missing_from_the_list_is_r17_trailer() {
     );
 }
 
-const SESSION: &str = "Claude-Session: https://claude.ai/code/session_01AbCdEf23";
-
 fn claude() -> Context {
     Context {
-        claudecode: Some("1".into()),
+        agent_session: true,
         ..ctx()
     }
 }
 
 #[test]
-fn a_claude_session_commit_with_its_trailer_and_session_link_passes() {
-    let text = format!("parser: keep the last line{BODY}\n{OPUS}\n{SESSION}\n");
+fn an_agent_session_commit_with_its_co_author_line_passes() {
+    let text = format!("parser: keep the last line{BODY}\n{OPUS}\n");
     assert_eq!(seen(&text, &claude()), vec![]);
 }
 
 #[test]
-fn a_claude_session_commit_missing_either_line_is_r17_agent() {
-    let text = format!("parser: keep the last line{BODY}\n{SESSION}\n");
+fn an_agent_session_commit_without_an_agent_co_author_is_r17_agent() {
+    let text = format!("parser: keep the last line{BODY}");
     assert_eq!(
         seen(&text, &claude()),
         one("R17/agent", 0, "Co-Authored-By:")
     );
-    let text = format!("parser: keep the last line{BODY}\n{OPUS}\n");
+    // A person as co-author does not stand for the agent that wrote the commit.
+    let person = "Co-Authored-By: Sam Example <sam@example.com>";
+    let text = format!("parser: keep the last line{BODY}\n{person}\n");
     assert_eq!(
         seen(&text, &claude()),
-        one("R17/agent", 0, "Claude-Session:")
-    );
-    let text = format!(
-        "parser: keep the last line{BODY}\n{OPUS}\nClaude-Session: https://claude.ai/code/session_\n"
-    );
-    assert_eq!(
-        seen(&text, &claude()),
-        one("R17/agent", 0, "Claude-Session:")
+        one("R17/agent", 0, "Co-Authored-By:")
     );
 }
 
 #[test]
 fn an_invalid_trailer_does_not_count_for_r17_agent() {
     let default = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>";
-    let text = format!("parser: keep the last line{BODY}\n{default}\n{SESSION}\n");
+    let text = format!("parser: keep the last line{BODY}\n{default}\n");
     let mut want = one("R17/agent", 0, "Co-Authored-By:");
     want.extend(one("R17/trailer", 7, default));
     assert_eq!(seen(&text, &claude()), want);
 }
 
 #[test]
-fn outside_a_claude_session_neither_line_is_required() {
+fn outside_an_agent_session_no_co_author_line_is_required() {
     let text = format!("parser: keep the last line{BODY}");
-    for marker in [None, Some("0"), Some("")] {
-        let ctx = Context {
-            claudecode: marker.map(String::from),
-            ..ctx()
-        };
-        assert_eq!(seen(&text, &ctx), vec![], "{marker:?}");
+    assert_eq!(seen(&text, &ctx()), vec![]);
+}
+
+#[test]
+fn an_agent_session_is_a_marker_set_to_its_value() {
+    let env = |set: Option<&'static str>| {
+        move |name: &str| {
+            (name == "CLAUDECODE")
+                .then_some(set)
+                .flatten()
+                .map(String::from)
+        }
+    };
+    assert!(in_agent_session(env(Some("1"))));
+    for value in [None, Some("0"), Some("")] {
+        assert!(!in_agent_session(env(value)), "{value:?}");
+    }
+    // One row per agent, each a variable and its value.
+    assert!(
+        AGENT_MARKERS
+            .iter()
+            .all(|(name, value)| !name.is_empty() && !value.is_empty())
+    );
+}
+
+// The session line is noise once the session is gone: never owed, never judged.
+#[test]
+fn no_session_line_is_owed_or_judged_in_or_out_of_a_session() {
+    for ctx in [ctx(), claude()] {
+        let text = format!("parser: keep the last line{BODY}\n{OPUS}\n");
+        assert_eq!(seen(&text, &ctx), vec![]);
+        for session in [
+            "Claude-Session: https://claude.ai/code/session_01AbCdEf23",
+            "Claude-Session: https://claude.ai/code/session_",
+            "Claude-Session: anything",
+        ] {
+            let text = format!("parser: keep the last line{BODY}\n{OPUS}\n{session}\n");
+            assert_eq!(seen(&text, &ctx), vec![], "{session}");
+        }
+    }
+}
+
+#[test]
+fn a_person_as_co_author_needs_no_model_id() {
+    for line in [
+        "Co-Authored-By: Sam Example <sam@example.com>",
+        "Co-Authored-By: Zo\u{eb} Ex\u{e1}mple <zoe@example.org>",
+        "Co-Authored-By: sam <12345+sam@users.noreply.github.com>",
+    ] {
+        let text = format!("parser: keep the last line{BODY}\n{line}\n");
+        assert_eq!(seen(&text, &ctx()), vec![], "{line}");
+        let text = format!("parser: keep the last line{BODY}\n{OPUS}\n{line}\n");
+        assert_eq!(seen(&text, &claude()), vec![], "{line}");
+    }
+}
+
+#[test]
+fn an_agent_named_without_its_model_id_is_r17_trailer() {
+    for line in [
+        "Co-Authored-By: Claude <noreply@anthropic.com>",
+        "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>",
+        "Co-Authored-By: Codex <noreply@openai.com>",
+        "Co-Authored-By: Antigravity <noreply@google.com>",
+        "Co-Authored-By: Gemini 3 <noreply@google.com>",
+        "Co-Authored-By: claude <someone@example.com>",
+    ] {
+        let text = format!("parser: keep the last line{BODY}\n{line}\n");
+        assert_eq!(seen(&text, &ctx()), one("R17/trailer", 7, line), "{line}");
+    }
+}
+
+#[test]
+fn a_person_line_without_a_name_or_an_address_is_r17_trailer() {
+    for line in [
+        "Co-Authored-By: <sam@example.com>",
+        "Co-Authored-By: Sam Example <sam.example.com>",
+        "Co-Authored-By: Sam Example sam@example.com",
+        "Co-Authored-By: Sam <sam@example.com> extra",
+    ] {
+        let text = format!("parser: keep the last line{BODY}\n{line}\n");
+        assert_eq!(seen(&text, &ctx()), one("R17/trailer", 7, line), "{line}");
     }
 }
 
@@ -195,14 +264,7 @@ fn a_repeated_bad_trailer_is_a_finding_per_line() {
 }
 
 #[test]
-fn a_claude_co_author_outside_a_session_still_owes_the_session_line() {
-    let text = format!("parser: keep the last line{BODY}\n{OPUS}\n");
-    assert_eq!(seen(&text, &ctx()), one("R17/agent", 0, "Claude-Session:"));
-    let text = format!("parser: keep the last line{BODY}\n{OPUS}\n{SESSION}\n");
-    assert_eq!(seen(&text, &ctx()), vec![]);
-    // Every agent's trailer is checked for shape and a listed model id; owing a
-    // trailer is enforced only in a Claude session (CLAUDECODE=1), and only a Claude
-    // co-author owes a session line: other agents' markers are unverified.
+fn any_agents_trailer_is_checked_for_its_model_id() {
     for line in [
         "Co-Authored-By: GPT Agent (gpt-6.1-sol) <noreply@openai.com>",
         "Co-Authored-By: Antigravity (gpt-6.1-sol) <noreply@google.com>",
@@ -210,15 +272,14 @@ fn a_claude_co_author_outside_a_session_still_owes_the_session_line() {
         let text = format!("parser: keep the last line{BODY}\n{line}\n");
         assert_eq!(seen(&text, &ctx()), vec![], "{line}");
     }
-    // An invalid Claude trailer is R17/trailer only: it names no agent.
-    let default = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>";
-    let text = format!("parser: keep the last line{BODY}\n{default}\n");
-    assert_eq!(seen(&text, &ctx()), one("R17/trailer", 7, default));
+    let unlisted = "Co-Authored-By: Codex (gpt-9-nova) <noreply@openai.com>";
+    let text = format!("parser: keep the last line{BODY}\n{unlisted}\n");
+    assert_eq!(seen(&text, &ctx()), one("R17/trailer", 7, "gpt-9-nova"));
 }
 
 #[test]
 fn the_accepted_model_ids_are_the_ones_passed_in() {
-    let text = format!("parser: keep the last line{BODY}\n{OPUS}\n{SESSION}\n");
+    let text = format!("parser: keep the last line{BODY}\n{OPUS}\n");
     let ctx = Context {
         models: vec!["claude-sonnet-5-5".into()],
         ..ctx()

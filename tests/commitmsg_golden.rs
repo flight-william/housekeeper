@@ -9,7 +9,7 @@ fn ctx() -> Context {
         author_email: None,
         comment_char: None,
         merge_head: false,
-        claudecode: None,
+        agent_session: false,
         models: vec!["claude-opus-5-5".into()],
     }
 }
@@ -40,7 +40,7 @@ fn ids_are_section_1cs_subrules_in_table_order() {
 #[test]
 fn findings_come_whole_message_first_then_by_line_in_table_order() {
     let ctx = Context {
-        claudecode: Some("1".into()),
+        agent_session: true,
         author_ident: "Sample Agent <agent@example.com> 1795271019 +0800".into(),
         ..ctx()
     };
@@ -50,7 +50,6 @@ fn findings_come_whole_message_first_then_by_line_in_table_order() {
     let want = [
         ("R17/body", 0),
         ("R17/body", 0),
-        ("R17/agent", 0),
         ("R17/agent", 0),
         ("R17/author", 0),
         ("R17/subject", 1),
@@ -66,7 +65,7 @@ const BODY: &str =
     "\n\nWhy: the gate needs it.\nProof: cargo test, 29 passed.\nUndo: git revert this commit.\n";
 const TRAILERS: &str = "\nCo-Authored-By: Claude Opus 5.5 (claude-opus-5-5) <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01AbCdEf23\n";
 
-/// `(case, merging, in a Claude session, message, findings as (id, line))`.
+/// `(case, merging, in an agent session, message, findings as (id, line))`.
 type Case = (&'static str, bool, bool, String, Vec<(&'static str, u32)>);
 
 fn cases() -> Vec<Case> {
@@ -162,11 +161,35 @@ fn section_1cs_examples_judge_as_written() {
     for (case, merging, session, text, want) in cases() {
         let ctx = Context {
             merge_head: merging,
-            claudecode: session.then(|| "1".to_string()),
+            agent_session: session,
             ..ctx()
         };
         let r = report(&text, &ctx);
         let want: Vec<(String, u32)> = want.iter().map(|(id, l)| (id.to_string(), *l)).collect();
         assert_eq!(order(&r), want, "{case}");
+    }
+}
+
+/// The co-author line is optional; an agent session owes its agent's line, and no
+/// session link.
+#[test]
+fn co_author_lines_judge_as_written() {
+    let agent = "Co-Authored-By: Claude Opus 5.5 (claude-opus-5-5) <noreply@anthropic.com>";
+    let person = "Co-Authored-By: Sam Example <sam@example.com>";
+    for (case, session, line) in [
+        ("agent record, no session line", true, agent),
+        ("a person as co-author", false, person),
+        (
+            "a person beside the agent",
+            true,
+            &format!("{agent}\n{person}"),
+        ),
+    ] {
+        let ctx = Context {
+            agent_session: session,
+            ..ctx()
+        };
+        let text = format!("house: add the commit-msg check{BODY}\n{line}\n");
+        assert_eq!(order(&report(&text, &ctx)), vec![], "{case}");
     }
 }
