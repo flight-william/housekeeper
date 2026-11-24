@@ -89,7 +89,8 @@ left for the tools; a push with no change skips them. An unknown table or key in
 "cannot check" naming both versions, and the same or a newer one runs. A house older than
 0.2.3 does not know `[house]`, so it refuses the file as an unknown table.
 
-Each tool gets the files it reads, chosen by extension. A file with no known extension is
+Each tool gets the files it reads, chosen by extension (`.sh` and `.bash` are shell scripts
+for ShellCheck, r3 and Semgrep). A file with no known extension is
 chosen by its first line: `#!/usr/bin/env python3` goes to ruff, ruff format, r3 and Semgrep,
 and `#!/bin/sh` or `#!/usr/bin/env bash` to ShellCheck, r3 and Semgrep. A zsh script, which
 ShellCheck cannot read, goes to none of them, nor does a binary file.

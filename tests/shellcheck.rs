@@ -55,3 +55,31 @@ fn a_sourced_file_beside_the_script_is_followed() {
         .collect();
     assert_eq!(found, [(Some(4), "shellcheck SC1091")], "{}", report.text());
 }
+
+/// A `*.bash` script, no shebang, is a shell script: ShellCheck reads it and the size
+/// counter measures it, as for `*.sh`.
+#[test]
+fn a_bash_script_gets_shellcheck_and_the_size_check() {
+    if !installed() {
+        return;
+    }
+    let root = repo("shellcheck-bash");
+    let body: String = (0..450).map(|i| format!("echo line{i}\n")).collect();
+    write(&root, "tools/long.bash", &format!("{body}echo $1\n"));
+    git(&root, &["add", "-A"]);
+    let adapters: Vec<Box<dyn house::adapter::Adapter>> =
+        vec![Box::new(Shellcheck), Box::new(house::adapters::r3::R3)];
+    let report = cli::check(&root, Stage::Commit, adapters);
+    assert!(report.cannots().is_empty(), "{}", report.text());
+    let found: Vec<(&str, &str)> = report
+        .findings()
+        .iter()
+        .map(|f| (f.rule.as_str(), f.tool_rule.as_str()))
+        .collect();
+    assert_eq!(
+        found,
+        [("R3", "r3 file_lines"), ("R2", "shellcheck SC2086")],
+        "{}",
+        report.text()
+    );
+}

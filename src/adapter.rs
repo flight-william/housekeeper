@@ -40,6 +40,9 @@ impl Context {
     }
 }
 
+/// The extensions that make a file a shell script, whatever its first line says.
+pub const SHELL_EXTENSIONS: [&str; 2] = [".sh", ".bash"];
+
 /// A language a file's first line can name: `#!/usr/bin/env python3`, `#!/bin/sh`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Language {

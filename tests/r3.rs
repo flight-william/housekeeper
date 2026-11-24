@@ -35,12 +35,12 @@ fn skips_without_source_files() {
 #[test]
 fn command_runs_the_script_on_source_files_only() {
     let cmd = R3
-        .command(&ctx(&["a.py", "b.md", "c.rs", "d.swift"]))
+        .command(&ctx(&["a.py", "b.md", "c.rs", "d.swift", "e.sh", "f.bash"]))
         .unwrap();
     assert_eq!(cmd.program, "python3");
     assert_eq!(cmd.args[0], "-I");
     assert!(cmd.args[1].ends_with("/r3_count.py"));
-    assert_eq!(cmd.args[2..], ["a.py", "c.rs", "d.swift"]);
+    assert_eq!(cmd.args[2..], ["a.py", "c.rs", "d.swift", "e.sh", "f.bash"]);
 }
 
 #[test]

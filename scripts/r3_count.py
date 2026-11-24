@@ -50,7 +50,7 @@ def language(rel, text):
     first = text.split("\n", 1)[0]
     if rel.endswith(".py") or (first.startswith("#!") and "python" in first):
         return "python"
-    if rel.endswith(".sh") or SHELLS.match(first):
+    if rel.endswith((".sh", ".bash")) or SHELLS.match(first):
         return "shell"
     if rel.endswith((".rs", ".swift")):
         return "source"

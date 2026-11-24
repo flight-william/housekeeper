@@ -18,7 +18,7 @@ const EXITS: Exits = Exits {
     found: &[],
 };
 
-const EXTENSIONS: [&str; 4] = [".py", ".sh", ".rs", ".swift"];
+const EXTENSIONS: [&str; 5] = [".py", ".sh", ".bash", ".rs", ".swift"];
 
 fn script_path() -> String {
     let dir = std::env::var("HOUSE_SCRIPTS_DIR")
