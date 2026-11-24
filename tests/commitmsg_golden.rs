@@ -9,7 +9,7 @@ fn ctx() -> Context {
         author_email: None,
         comment_char: None,
         merge_head: false,
-        agent_session: false,
+        session: None,
         models: vec!["claude-opus-5-5".into()],
     }
 }
@@ -40,7 +40,7 @@ fn ids_are_section_1cs_subrules_in_table_order() {
 #[test]
 fn findings_come_whole_message_first_then_by_line_in_table_order() {
     let ctx = Context {
-        agent_session: true,
+        session: Some("claude"),
         author_ident: "Sample Agent <agent@example.com> 1795271019 +0800".into(),
         ..ctx()
     };
@@ -161,7 +161,7 @@ fn section_1cs_examples_judge_as_written() {
     for (case, merging, session, text, want) in cases() {
         let ctx = Context {
             merge_head: merging,
-            agent_session: session,
+            session: session.then_some("claude"),
             ..ctx()
         };
         let r = report(&text, &ctx);
@@ -186,7 +186,7 @@ fn co_author_lines_judge_as_written() {
         ),
     ] {
         let ctx = Context {
-            agent_session: session,
+            session: session.then_some("claude"),
             ..ctx()
         };
         let text = format!("house: add the commit-msg check{BODY}\n{line}\n");

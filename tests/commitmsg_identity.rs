@@ -5,7 +5,7 @@
 mod commitmsg_support;
 
 use commitmsg_support::{BODY, ctx, one, seen};
-use house::commitmsg::{AGENT_MARKERS, Commit as Context, check, in_agent_session};
+use house::commitmsg::{AGENT_MARKERS, AGENTS, Commit as Context, check, session_agent};
 use house::finding::Place;
 
 const OPUS: &str = "Co-Authored-By: Claude Opus 5.5 (claude-opus-5-5) <noreply@anthropic.com>";
@@ -50,7 +50,7 @@ fn a_model_id_missing_from_the_list_is_r17_trailer() {
 
 fn claude() -> Context {
     Context {
-        agent_session: true,
+        session: Some("claude"),
         ..ctx()
     }
 }
@@ -102,16 +102,14 @@ fn an_agent_session_is_a_marker_set_to_its_value() {
                 .map(String::from)
         }
     };
-    assert!(in_agent_session(env(Some("1"))));
+    assert_eq!(session_agent(AGENT_MARKERS, env(Some("1"))), Some("claude"));
     for value in [None, Some("0"), Some("")] {
-        assert!(!in_agent_session(env(value)), "{value:?}");
+        assert_eq!(session_agent(AGENT_MARKERS, env(value)), None, "{value:?}");
     }
-    // One row per agent, each a variable and its value.
-    assert!(
-        AGENT_MARKERS
-            .iter()
-            .all(|(name, value)| !name.is_empty() && !value.is_empty())
-    );
+    // Each row names an agent house knows, so its session owes that agent's line.
+    for (_, _, agent) in AGENT_MARKERS {
+        assert!(AGENTS.iter().any(|a| a.name == *agent), "{agent}");
+    }
 }
 
 // The session line is noise once the session is gone: never owed, never judged.
@@ -267,7 +265,7 @@ fn a_repeated_bad_trailer_is_a_finding_per_line() {
 fn any_agents_trailer_is_checked_for_its_model_id() {
     for line in [
         "Co-Authored-By: GPT Agent (gpt-6.1-sol) <noreply@openai.com>",
-        "Co-Authored-By: Antigravity (gpt-6.1-sol) <noreply@google.com>",
+        "Co-Authored-By: Codex (gpt-6.1-sol) <noreply@openai.com>",
     ] {
         let text = format!("parser: keep the last line{BODY}\n{line}\n");
         assert_eq!(seen(&text, &ctx()), vec![], "{line}");
@@ -285,4 +283,53 @@ fn the_accepted_model_ids_are_the_ones_passed_in() {
         ..ctx()
     };
     assert_eq!(seen(&text, &ctx), one("R17/trailer", 7, "claude-opus-5-5"));
+}
+
+// A known agent's line gives one of that agent's own model ids: Claude claude-*,
+// Codex gpt-*, Antigravity and Gemini gemini-*.
+#[test]
+fn a_known_agents_line_with_another_agents_model_id_is_r17_trailer() {
+    for (line, id) in [
+        (
+            "Co-Authored-By: Antigravity (gpt-6.1-sol) <noreply@google.com>",
+            "gpt-6.1-sol",
+        ),
+        (
+            "Co-Authored-By: Codex (claude-opus-5-5) <noreply@openai.com>",
+            "claude-opus-5-5",
+        ),
+        (
+            "Co-Authored-By: Claude (gpt-6.1-sol) <noreply@anthropic.com>",
+            "gpt-6.1-sol",
+        ),
+    ] {
+        let text = format!("parser: keep the last line{BODY}\n{line}\n");
+        assert_eq!(seen(&text, &ctx()), one("R17/trailer", 7, id), "{line}");
+    }
+}
+
+// In an agent's session the owed line is that agent's: its name and one of its model
+// ids. Another agent's line, or a made-up name with a listed id, does not count.
+#[test]
+fn in_a_claude_session_only_a_claude_line_counts() {
+    for line in [
+        "Co-Authored-By: Codex (gpt-6.1-sol) <noreply@openai.com>",
+        "Co-Authored-By: Sam Example (claude-opus-5-5) <noreply@example.com>",
+        "Co-Authored-By: GPT Agent (gpt-6.1-sol) <noreply@openai.com>",
+    ] {
+        let text = format!("parser: keep the last line{BODY}\n{line}\n");
+        assert_eq!(
+            seen(&text, &claude()),
+            one("R17/agent", 0, "Co-Authored-By:"),
+            "{line}"
+        );
+    }
+    for line in [
+        OPUS,
+        "Co-Authored-By: Claude (claude-opus-5-5) <noreply@anthropic.com>",
+        "Co-Authored-By: Claude Code (claude-opus-5-5) <noreply@anthropic.com>",
+    ] {
+        let text = format!("parser: keep the last line{BODY}\n{line}\n");
+        assert_eq!(seen(&text, &claude()), vec![], "{line}");
+    }
 }

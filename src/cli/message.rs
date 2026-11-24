@@ -97,7 +97,9 @@ pub fn commit_facts(root: &Path) -> Result<commitmsg::Commit, CannotCheck> {
         author_email,
         comment_char: git_value(&["config", "--get", "core.commentChar"]),
         merge_head,
-        agent_session: commitmsg::in_agent_session(|name| std::env::var(name).ok()),
+        session: commitmsg::session_agent(commitmsg::AGENT_MARKERS, |name| {
+            std::env::var(name).ok()
+        }),
         models: cfg.commit.models,
     })
 }

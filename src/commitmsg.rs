@@ -4,7 +4,7 @@
 //! is no regex crate (the patterns are written out by hand below); and an identity
 //! rule: a `Co-Authored-By:` line is optional, an agent's carries its model id and a
 //! person's carries none, and a commit made in an agent's session (`AGENT_MARKERS`)
-//! owes its agent's line. No session line is owed or judged: a session link outlives
+//! owes that agent's line: its name and one of its own model ids (`AGENTS`). No session line is owed or judged: a session link outlives
 //! the session it names.
 //!
 //! R9/cause is judged on the area (the subject's text before its first colon, trimmed)
@@ -39,25 +39,70 @@ pub struct Commit {
     pub comment_char: Option<String>,
     /// Whether the file `git rev-parse --git-path MERGE_HEAD` names exists.
     pub merge_head: bool,
-    /// Whether the commit is made in an agent's session (`in_agent_session`).
-    pub agent_session: bool,
+    /// The agent (`Agent::name`) whose session the commit is made in, from
+    /// `session_agent`; `None` outside an agent's session.
+    pub session: Option<&'static str>,
     /// The model ids a `Co-Authored-By:` line may name (`.house.toml`).
     pub models: Vec<String>,
 }
 
-/// The variable and value each agent sets in the shells its session runs, one row per
-/// agent, the same rule for each. Only markers seen set are listed: Claude Code's.
-pub const AGENT_MARKERS: &[(&str, &str)] = &[("CLAUDECODE", "1")];
+/// An agent house knows: the name its lines carry, folded (`folded`), and the start
+/// of its model ids.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Agent {
+    pub name: &'static str,
+    pub models: &'static str,
+}
 
-/// The names that are an agent's, not a person's: a `Co-Authored-By:` line whose name
-/// starts with one must give the model id.
-const AGENT_NAMES: [&str; 4] = ["claude", "codex", "antigravity", "gemini"];
+/// The agents, each with its own model-id family.
+pub const AGENTS: &[Agent] = &[
+    Agent {
+        name: "claude",
+        models: "claude-",
+    },
+    Agent {
+        name: "codex",
+        models: "gpt-",
+    },
+    Agent {
+        name: "antigravity",
+        models: "gemini-",
+    },
+    Agent {
+        name: "gemini",
+        models: "gemini-",
+    },
+];
 
-/// Whether `var` (an environment lookup) holds a marker of `AGENT_MARKERS`.
-pub fn in_agent_session(var: impl Fn(&str) -> Option<String>) -> bool {
-    AGENT_MARKERS
+/// The variable and value each agent sets in the shells its session runs, and the
+/// agent (`Agent::name`): one row per agent, the same rule for each. Only markers seen
+/// set are listed: Claude Code's.
+pub const AGENT_MARKERS: &[(&str, &str, &str)] = &[("CLAUDECODE", "1", "claude")];
+
+/// The agent of the first row of `markers` whose variable `var` (an environment
+/// lookup) holds at its value; `None` when none does.
+pub fn session_agent(
+    markers: &[(&str, &str, &'static str)],
+    var: impl Fn(&str) -> Option<String>,
+) -> Option<&'static str> {
+    markers
         .iter()
-        .any(|(name, value)| var(name).as_deref() == Some(*value))
+        .find(|(name, value, _)| var(name).as_deref() == Some(*value))
+        .map(|(_, _, agent)| *agent)
+}
+
+/// The agent a name names: the first of `AGENTS` whose name is in it, folded.
+fn agent_named(name: &str) -> Option<&'static Agent> {
+    let name = folded(name);
+    AGENTS.iter().find(|a| name.contains(a.name))
+}
+
+/// A name as compared with agent names: lowercase letters and digits only.
+fn folded(name: &str) -> String {
+    name.to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect()
 }
 
 /// One problem found, before it becomes a `Finding`: which id, where, and what matched.
@@ -166,32 +211,39 @@ fn body(lines: &[Line<'_>], parts: Option<(&str, &str)>, found: &mut Vec<Hit>) {
 
 /// `R17/trailer` and `R17/agent`.
 fn trailers(lines: &[Line<'_>], commit: &Commit, found: &mut Vec<Hit>) {
-    let mut agent_named = false;
+    let mut owed_named = false;
     for l in lines.iter().filter(|l| is_trailer(l.text)) {
         match co_author(l.text) {
             None => found.push(Hit::on("R17/trailer", l, l.text)),
-            Some(CoAuthor::Agent(id)) if !commit.models.iter().any(|m| m == id) => {
-                found.push(Hit::on("R17/trailer", l, id));
+            Some(CoAuthor::Agent(name, id)) => {
+                let agent = agent_named(name);
+                let listed = commit.models.iter().any(|m| m == id);
+                let its_own = agent.is_none_or(|a| id.starts_with(a.models));
+                if !listed || !its_own {
+                    found.push(Hit::on("R17/trailer", l, id));
+                } else if agent.is_some_and(|a| Some(a.name) == commit.session) {
+                    owed_named = true;
+                }
             }
-            Some(CoAuthor::Agent(_)) => agent_named = true,
             Some(CoAuthor::Person) => {}
         }
     }
     // The same for every agent: in its session, the commit names it and its model.
-    if commit.agent_session && !agent_named {
+    if commit.session.is_some() && !owed_named {
         found.push(Hit::whole("R17/agent", "Co-Authored-By:"));
     }
 }
 
 /// Who a valid `Co-Authored-By:` line names: an agent, with its model id, or a person.
 enum CoAuthor<'a> {
-    Agent(&'a str),
+    /// The name and the model id.
+    Agent(&'a str, &'a str),
     Person,
 }
 
 /// A valid `Co-Authored-By:` line. With a `(model id)` part it is an agent's, the
 /// pattern `^Co-Authored-By: [A-Za-z][A-Za-z0-9 .-]* \(([a-z0-9.-]+)\) <noreply[^>\s]*@[^>\s]+>$`;
-/// without, a person's, `Name <local@domain>`, the name not one of `AGENT_NAMES`.
+/// without, a person's, `Name <local@domain>`, the name not an agent's (`AGENTS`).
 fn co_author(line: &str) -> Option<CoAuthor<'_>> {
     let rest = line.strip_prefix("Co-Authored-By: ")?.strip_suffix('>')?;
     let (head, email) = rest.rsplit_once(" <")?;
@@ -213,7 +265,7 @@ fn co_author(line: &str) -> Option<CoAuthor<'_>> {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || ".-".contains(c));
     let at = email.get(7..email.len().saturating_sub(1)).unwrap_or("");
     let email_ok = email.starts_with("noreply") && at.contains('@');
-    (name_ok && id_ok && email_ok).then_some(CoAuthor::Agent(id))
+    (name_ok && id_ok && email_ok).then_some(CoAuthor::Agent(name, id))
 }
 
 /// A person's name and address: a name with no brackets, not an agent's, and an
@@ -223,7 +275,7 @@ fn person(name: &str, email: &str) -> bool {
     let name_ok = !name.trim().is_empty()
         && name == name.trim()
         && !name.contains(['<', '>', '(', ')'])
-        && !AGENT_NAMES.contains(&first.as_str());
+        && !AGENTS.iter().any(|a| a.name == first);
     let email_ok = email
         .split_once('@')
         .is_some_and(|(local, domain)| !local.is_empty() && !domain.is_empty());

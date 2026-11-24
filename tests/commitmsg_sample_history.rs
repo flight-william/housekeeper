@@ -1,6 +1,6 @@
 //! R17 over whole histories: made-up commit messages in the format
-//! `git log --format='%h%x01%an%x01%B%x00'` prints, newest first, judged as a Claude
-//! Code session would (CLAUDECODE=1) under author `William`. sample-history-pass
+//! `git log --format='%h%x01%an%x01%B%x00'` prints, newest first, each judged in the
+//! session of the agent it names (Claude when it names none) under author `William`. sample-history-pass
 //! holds messages of every kind that pass; sample-history-old-trailer holds a range
 //! that all fails, most of it under Claude Code's old default trailer.
 
@@ -18,6 +18,17 @@ const MODELS: &[&str] = &[
     "gemini-4-argon-medium",
 ];
 
+/// The agent whose session made `text`: the one its co-author line names.
+fn session_of(text: &str) -> &'static str {
+    ["codex", "antigravity"]
+        .into_iter()
+        .find(|agent| {
+            text.to_lowercase()
+                .contains(&format!("co-authored-by: {agent}"))
+        })
+        .unwrap_or("claude")
+}
+
 /// `(short hash, failing ids)` per commit, newest first.
 fn judge(log: &str) -> Vec<(String, Vec<String>)> {
     log.split('\0')
@@ -34,7 +45,7 @@ fn judge(log: &str) -> Vec<(String, Vec<String>)> {
                 author_email: None,
                 comment_char: None,
                 merge_head: false,
-                agent_session: true,
+                session: Some(session_of(text)),
                 models: MODELS.iter().map(|m| m.to_string()).collect(),
             };
             let ids = hits(text, &commit)

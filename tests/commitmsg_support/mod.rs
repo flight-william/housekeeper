@@ -9,7 +9,7 @@ pub fn ctx() -> Context {
         author_email: None,
         comment_char: None,
         merge_head: false,
-        agent_session: false,
+        session: None,
         models: ["claude-opus-5-5", "gpt-6.1-sol"]
             .map(String::from)
             .to_vec(),
