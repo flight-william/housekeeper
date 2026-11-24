@@ -503,3 +503,13 @@ fn trailing_whitespace_on_a_co_author_line_is_not_a_finding() {
     let text = format!("parser: keep the last line{BODY}\n{agent}\n");
     assert_eq!(seen(&text, &claude()), vec![]);
 }
+
+// The known limit, as the README says: the session is the marker at its exact value,
+// which the agent's own environment sets; any other value is no session.
+#[test]
+fn a_session_is_the_marker_at_its_exact_value_a_known_limit() {
+    for value in ["true", " 1", "1 ", "yes"] {
+        let env = |name: &str| (name == "CLAUDECODE").then(|| value.to_string());
+        assert_eq!(session_agent(AGENT_MARKERS, env), None, "{value:?}");
+    }
+}

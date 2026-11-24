@@ -60,7 +60,10 @@ agent's line gives one of its own model ids: `claude-…` for Claude, `gpt-…` 
 `gemini-…` for Antigravity and Gemini. A commit made in an agent's session owes that agent's
 line, its name and one of its model ids, the same rule for every agent; another agent's line
 does not count. The session is known by a variable the agent sets in its shells, so far
-`CLAUDECODE=1` for Claude Code. No session link is asked for or checked.
+`CLAUDECODE=1` for Claude Code. No session link is asked for or checked. A known limit: the
+session is read from the environment the agent itself controls, at its exact value, and only
+by `house commit-msg`; push and a runner do not judge it again, and an agent with no marker
+listed (Codex, Antigravity, Gemini, until theirs is verified) owes no line.
 
 ## Install
 
