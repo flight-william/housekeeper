@@ -18,6 +18,7 @@ use crate::adapter::CannotCheck;
 use crate::finding::{Finding, Place};
 use crate::run::git;
 use serde::Deserialize;
+use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
 mod date;
@@ -316,16 +317,51 @@ pub fn at_rev(root: &Path, rev: &str) -> Result<Option<Vec<Excuse>>, CannotCheck
     })
 }
 
-/// The list in the working tree at `root`: `None` when there is no file.
+/// The list in the working tree at `root`: `None` when there is no file. A file the
+/// filesystem opens under the list's name but spells otherwise (`.houſe-excuses.toml`
+/// on macOS) is cannot-check: git and every review read the list by its exact name,
+/// so it would be a list no base and no owner ever sees.
 pub fn in_tree(root: &Path) -> Result<Option<Vec<Excuse>>, CannotCheck> {
     match std::fs::read_to_string(root.join(FILE)) {
-        Ok(text) => parse(&text).map(Some),
+        Ok(text) => {
+            spelled_exactly(root)?;
+            parse(&text).map(Some)
+        }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(CannotCheck {
             what: format!("{FILE} cannot be read: {e}"),
             fix: format!("make {FILE} readable"),
         }),
     }
+}
+
+/// The list's folder entry is spelled `FILE`, byte for byte.
+fn spelled_exactly(root: &Path) -> Result<(), CannotCheck> {
+    let entries = std::fs::read_dir(root).map_err(|e| CannotCheck {
+        what: format!("the folder holding {FILE} cannot be listed: {e}"),
+        fix: format!("make {} readable", root.display()),
+    })?;
+    let names: Vec<std::ffi::OsString> = entries.flatten().map(|e| e.file_name()).collect();
+    if names.iter().any(|n| n == FILE) {
+        return Ok(());
+    }
+    let id = |p: &Path| {
+        std::fs::symlink_metadata(p)
+            .ok()
+            .map(|m| (m.dev(), m.ino()))
+    };
+    let real = id(&root.join(FILE));
+    let spelled = names
+        .iter()
+        .find(|n| real.is_some() && id(&root.join(n)) == real)
+        .map_or_else(
+            || "another name".to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
+    Err(CannotCheck {
+        what: format!("the excuse list is named {spelled}, not {FILE}"),
+        fix: format!("rename it to {FILE}"),
+    })
 }
 
 fn one_line(message: &str) -> String {

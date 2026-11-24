@@ -62,7 +62,7 @@ pub fn judge_message(root: &Path, file: &Path) -> Result<Vec<Finding>, CannotChe
         .map(|c| c.path)
         .collect();
     let kept = commitmsg::kept(&text, &facts)?;
-    findings.extend(approval::check(&changed, &protected, &kept));
+    findings.extend(approval::check_in(root, &changed, &protected, &kept));
     Ok(findings)
 }
 

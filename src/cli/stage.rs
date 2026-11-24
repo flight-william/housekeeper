@@ -122,7 +122,7 @@ pub(super) fn check_from(
                 tools.push(tool);
             }
             tools.extend(lints::run(&ctx));
-            tools.extend(settings_case(&scope_changed, rules));
+            tools.extend(settings_case(&ctx.root, &scope_changed, rules));
             for test in run_tests(&ctx, &tests.0, tests.1, tests_due) {
                 tools.push(test.tool);
                 checked.failed_tests.extend(test.failed);
@@ -136,12 +136,12 @@ pub(super) fn check_from(
 
 /// The wrong-case settings names among `changed`, against the built-in protected
 /// list and the rules' `[protected] extra`; `None` when there are none.
-fn settings_case(changed: &[String], rules: &Rules) -> Option<ToolRun> {
+fn settings_case(root: &Path, changed: &[String], rules: &Rules) -> Option<ToolRun> {
     let mut protected: Vec<String> = approval::PROTECTED.iter().map(|g| g.to_string()).collect();
     if let Ok(config) = &rules.config {
         protected.extend(config.protected.extra.iter().cloned());
     }
-    let findings = approval::wrong_case(changed, &protected);
+    let findings = approval::wrong_case_in(root, changed, &protected);
     (!findings.is_empty()).then(|| ToolRun {
         name: "settings-case".into(),
         seconds: 0.0,

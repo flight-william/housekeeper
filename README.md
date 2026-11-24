@@ -139,10 +139,12 @@ none, is adoption, not growth. Its deadlines are still capped at 56 days, and it
 protected file, so the commit still needs the owner's approval line.
 
 A changed path whose name matches a protected settings file only when case is ignored, such
-as `.SEMGREPIGNORE` or `sub/Pyproject.toml`, is an R9 finding at commit and push, whatever
-the commit message says: on a case-insensitive filesystem the tool reads it as its settings,
-while CODEOWNERS matches case-sensitively and asks no owner to review it. Use the canonical
-name.
+as `.SEMGREPIGNORE`, `sub/Pyproject.toml` or `.ſwiftformat` (a long s, which macOS reads as
+`s`), or that the filesystem opens as a protected file under another spelling, is an R9
+finding at commit and push, whatever the commit message says, and needs the owner's
+approval line: on a case-insensitive filesystem the tool reads it as its settings, while
+CODEOWNERS matches case-sensitively and asks no owner to review it. Use the canonical
+name. House reads the excuse list only when it is spelled exactly `.house-excuses.toml`.
 
 ## Review the records
 
