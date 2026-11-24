@@ -53,13 +53,27 @@ R17 ✓ Commit messages are records: `area: what changed`, then Why:, Proof:, Un
 
 Other languages get only the language-free checks: R2 secrets, R7 tests, R9 approvals, R17.
 
-A commit message's `Co-Authored-By:` line is optional. An agent's names its model id, one of
+A commit message's `Co-Authored-By:` line is optional, its key read in any case as git reads
+it (GitHub writes `Co-authored-by:`), and only in the final trailer block, the `Key: value`
+lines after the last blank line, where git and GitHub read it. An agent's names its model id, one of
 `[commit] models` in `.house.toml`: `Co-Authored-By: Claude (claude-opus-5-5)
 <noreply@anthropic.com>`. A person's has none: `Co-Authored-By: Sam Example <sam@example.com>`.
-A line naming Claude, Codex, Antigravity or Gemini without a model id is refused. A commit
-made in an agent's session owes that agent's line, the same rule for every agent; the
-session is known by a variable the agent sets in its shells, so far `CLAUDECODE=1` for
-Claude Code. No session link is asked for or checked.
+A line naming Claude, Codex, Antigravity or Gemini without a model id is refused: the name is
+compared folded (NFKC, invisible characters gone, case folded, look-alike letters read as Latin,
+punctuation and spaces gone), so `ClaudeCode`, `Anthropic Claude`, `Ｃlaude` and a model id
+such as `claude-opus-4-1` or `Opus 5.5` given as a name are refused too. Outside an agent's
+session the rule cannot prove who typed a line: this guard stops a respelling, not a made-up
+human name. A known limit: a person whose name holds an agent's (Claude Monet, Gemini
+Ortiz, Claudette) is refused like the agent, and a nickname in brackets reads as an agent
+line; there is no allow-list. A known
+agent's line gives one of its own model ids: `claude-…` for Claude, `gpt-…` for Codex,
+`gemini-…` for Antigravity and Gemini. A commit made in an agent's session owes that agent's
+line, its name and one of its model ids, the same rule for every agent; another agent's line
+does not count. The session is known by a variable the agent sets in its shells, so far
+`CLAUDECODE=1` for Claude Code. No session link is asked for or checked. A known limit: the
+session is read from the environment the agent itself controls, at its exact value, and only
+by `house commit-msg`; push and a runner do not judge it again, and an agent with no marker
+listed (Codex, Antigravity, Gemini, until theirs is verified) owes no line.
 
 ## Install
 

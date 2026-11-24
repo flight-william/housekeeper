@@ -2,10 +2,11 @@
 //!
 //! The accepted model ids are an argument, read from `.house.toml` by the core; there
 //! is no regex crate (the patterns are written out by hand below); and an identity
-//! rule: a `Co-Authored-By:` line is optional, an agent's carries its model id and a
-//! person's carries none, and a commit made in an agent's session (`AGENT_MARKERS`)
-//! owes its agent's line. No session line is owed or judged: a session link outlives
-//! the session it names.
+//! rule, in `coauthor`: a `Co-Authored-By:` line is optional, an agent's carries its
+//! model id and a person's carries none, and a commit made in an agent's session
+//! (`AGENT_MARKERS`) owes that agent's line: its name and one of its own model ids
+//! (`AGENTS`). No session line is owed or judged: a session link outlives the session
+//! it names.
 //!
 //! R9/cause is judged on the area (the subject's text before its first colon, trimmed)
 //! and the first word after it, whether or not the subject passes R17/subject. The first
@@ -13,6 +14,10 @@
 
 use crate::adapter::CannotCheck;
 use crate::finding::{Finding, Place};
+
+mod coauthor;
+
+pub use coauthor::{AGENT_MARKERS, AGENTS, Agent, session_agent};
 
 /// Every id `hits` can emit, in table order (same-line findings sort in this order).
 pub const IDS: &[&str] = &[
@@ -39,25 +44,11 @@ pub struct Commit {
     pub comment_char: Option<String>,
     /// Whether the file `git rev-parse --git-path MERGE_HEAD` names exists.
     pub merge_head: bool,
-    /// Whether the commit is made in an agent's session (`in_agent_session`).
-    pub agent_session: bool,
+    /// The agent (`Agent::name`) whose session the commit is made in, from
+    /// `session_agent`; `None` outside an agent's session.
+    pub session: Option<&'static str>,
     /// The model ids a `Co-Authored-By:` line may name (`.house.toml`).
     pub models: Vec<String>,
-}
-
-/// The variable and value each agent sets in the shells its session runs, one row per
-/// agent, the same rule for each. Only markers seen set are listed: Claude Code's.
-pub const AGENT_MARKERS: &[(&str, &str)] = &[("CLAUDECODE", "1")];
-
-/// The names that are an agent's, not a person's: a `Co-Authored-By:` line whose name
-/// starts with one must give the model id.
-const AGENT_NAMES: [&str; 4] = ["claude", "codex", "antigravity", "gemini"];
-
-/// Whether `var` (an environment lookup) holds a marker of `AGENT_MARKERS`.
-pub fn in_agent_session(var: impl Fn(&str) -> Option<String>) -> bool {
-    AGENT_MARKERS
-        .iter()
-        .any(|(name, value)| var(name).as_deref() == Some(*value))
 }
 
 /// One problem found, before it becomes a `Finding`: which id, where, and what matched.
@@ -85,7 +76,7 @@ pub fn hits(text: &str, commit: &Commit) -> Result<Vec<Hit>, CannotCheck> {
     let mut found = Vec::new();
     let parts = subject(&lines, commit, &mut found);
     body(&lines, parts, &mut found);
-    trailers(&lines, commit, &mut found);
+    coauthor::trailers(&lines, commit, &mut found);
     let wrong_email = commit.author_email.as_deref().is_some_and(|e| e != email);
     if wrong_email {
         found.push(Hit::whole("R17/author", &format!("{author} <{email}>")));
@@ -162,79 +153,6 @@ fn body(lines: &[Line<'_>], parts: Option<(&str, &str)>, found: &mut Vec<Hit>) {
     if fix && !lines.iter().any(|l| labelled(l.text, "Cause:")) {
         found.push(Hit::whole("R9/cause", "Cause:"));
     }
-}
-
-/// `R17/trailer` and `R17/agent`.
-fn trailers(lines: &[Line<'_>], commit: &Commit, found: &mut Vec<Hit>) {
-    let mut agent_named = false;
-    for l in lines.iter().filter(|l| is_trailer(l.text)) {
-        match co_author(l.text) {
-            None => found.push(Hit::on("R17/trailer", l, l.text)),
-            Some(CoAuthor::Agent(id)) if !commit.models.iter().any(|m| m == id) => {
-                found.push(Hit::on("R17/trailer", l, id));
-            }
-            Some(CoAuthor::Agent(_)) => agent_named = true,
-            Some(CoAuthor::Person) => {}
-        }
-    }
-    // The same for every agent: in its session, the commit names it and its model.
-    if commit.agent_session && !agent_named {
-        found.push(Hit::whole("R17/agent", "Co-Authored-By:"));
-    }
-}
-
-/// Who a valid `Co-Authored-By:` line names: an agent, with its model id, or a person.
-enum CoAuthor<'a> {
-    Agent(&'a str),
-    Person,
-}
-
-/// A valid `Co-Authored-By:` line. With a `(model id)` part it is an agent's, the
-/// pattern `^Co-Authored-By: [A-Za-z][A-Za-z0-9 .-]* \(([a-z0-9.-]+)\) <noreply[^>\s]*@[^>\s]+>$`;
-/// without, a person's, `Name <local@domain>`, the name not one of `AGENT_NAMES`.
-fn co_author(line: &str) -> Option<CoAuthor<'_>> {
-    let rest = line.strip_prefix("Co-Authored-By: ")?.strip_suffix('>')?;
-    let (head, email) = rest.rsplit_once(" <")?;
-    if email
-        .chars()
-        .any(|c| c == '<' || c == '>' || c.is_whitespace())
-    {
-        return None;
-    }
-    let Some((name, id)) = head.strip_suffix(')').and_then(|h| h.rsplit_once(" (")) else {
-        return person(head, email).then_some(CoAuthor::Person);
-    };
-    let mut name_chars = name.chars();
-    let name_ok = name_chars.next().is_some_and(|c| c.is_ascii_alphabetic())
-        && name_chars.all(|c| c.is_ascii_alphanumeric() || " .-".contains(c));
-    let id_ok = !id.is_empty()
-        && id
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || ".-".contains(c));
-    let at = email.get(7..email.len().saturating_sub(1)).unwrap_or("");
-    let email_ok = email.starts_with("noreply") && at.contains('@');
-    (name_ok && id_ok && email_ok).then_some(CoAuthor::Agent(id))
-}
-
-/// A person's name and address: a name with no brackets, not an agent's, and an
-/// address with text on both sides of its `@`.
-fn person(name: &str, email: &str) -> bool {
-    let first = name.split_whitespace().next().unwrap_or("").to_lowercase();
-    let name_ok = !name.trim().is_empty()
-        && name == name.trim()
-        && !name.contains(['<', '>', '(', ')'])
-        && !AGENT_NAMES.contains(&first.as_str());
-    let email_ok = email
-        .split_once('@')
-        .is_some_and(|(local, domain)| !local.is_empty() && !domain.is_empty());
-    name_ok && email_ok
-}
-
-/// A `Co-Authored-By:` line, its key in any case as git reads trailer keys, so a
-/// `Co-authored-by:` line is judged (and fails the pattern) rather than ignored.
-fn is_trailer(line: &str) -> bool {
-    line.get(..15)
-        .is_some_and(|key| key.eq_ignore_ascii_case("co-authored-by:"))
 }
 
 /// The message text git will commit (`message`'s lines, joined), for the approval
