@@ -117,9 +117,12 @@ chosen by its first line: `#!/usr/bin/env python3` goes to ruff, ruff format, r3
 and `#!/bin/sh` or `#!/usr/bin/env bash` to ShellCheck, r3 and Semgrep. A zsh script, which
 ShellCheck cannot read, goes to none of them, nor does a binary file.
 
-SwiftLint keeps to the repo's own scope: with a `.swiftlint.yml` at the root, SwiftLint picks
-the files itself, by its `included:` and `excluded:`, and only its findings on the files the
-stage checks count. Without one, the stage's Swift files are named to it. ShellCheck follows
+SwiftLint gets the stage's Swift files by name, with `--force-exclude`, so a file in the
+repo's `.swiftlint.yml` `excluded:` is left out, and a stage whose Swift files are all
+excluded has nothing to fix. It never walks the whole tree, so files the stage did not touch
+are not linted. A known limit: SwiftLint (0.65.1) skips `included:` for a file named to it,
+and house reads no YAML, so a staged Swift file outside `included:` is still linted; list
+such a folder under `excluded:` to keep it out. ShellCheck follows
 the files a script sources, looked up from the script's own folder, so `. ./lib.sh` is not
 SC1091 when `lib.sh` sits beside the script.
 
