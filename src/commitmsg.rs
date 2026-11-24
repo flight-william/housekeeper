@@ -13,6 +13,7 @@
 
 use crate::adapter::CannotCheck;
 use crate::finding::{Finding, Place};
+use unicode_normalization::UnicodeNormalization;
 
 /// Every id `hits` can emit, in table order (same-line findings sort in this order).
 pub const IDS: &[&str] = &[
@@ -97,12 +98,78 @@ fn agent_named(name: &str) -> Option<&'static Agent> {
     AGENTS.iter().find(|a| name.contains(a.name))
 }
 
-/// A name as compared with agent names: lowercase letters and digits only.
+/// Names a person's line may not hold: the agents' and their makers'.
+const NOT_A_PERSON: [&str; 6] = [
+    "claude",
+    "codex",
+    "antigravity",
+    "gemini",
+    "anthropic",
+    "openai",
+];
+
+/// A name as compared with agent names, so a respelling reads as what it spells:
+/// characters that print nothing gone, NFKC (fullwidth and styled letters to plain
+/// ones), case folded, the Cyrillic and Greek letters drawn like Latin ones read as
+/// those, then letters and digits only.
 fn folded(name: &str) -> String {
-    name.to_lowercase()
+    let visible: String = name.chars().filter(|c| !invisible(*c)).collect();
+    let plain: String = visible.nfkc().collect();
+    plain
+        .to_uppercase()
+        .to_lowercase()
         .chars()
+        .map(latin_look_alike)
         .filter(|c| c.is_alphanumeric())
         .collect()
+}
+
+/// Unicode's default-ignorable characters: zero-width, joiners, direction and other
+/// format marks, variation selectors, tags. Each prints nothing inside a name.
+fn invisible(c: char) -> bool {
+    matches!(c,
+        '\u{AD}' | '\u{34F}' | '\u{61C}' | '\u{115F}' | '\u{1160}' | '\u{17B4}' | '\u{17B5}'
+        | '\u{180B}'..='\u{180F}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}'
+        | '\u{2060}'..='\u{206F}' | '\u{3164}' | '\u{FE00}'..='\u{FE0F}' | '\u{FEFF}'
+        | '\u{FFA0}' | '\u{FFF0}'..='\u{FFF8}' | '\u{1BCA0}'..='\u{1BCA3}'
+        | '\u{1D173}'..='\u{1D17A}' | '\u{E0000}'..='\u{E0FFF}')
+}
+
+/// The Latin letter a lowercase Cyrillic or Greek letter is drawn like, else itself.
+fn latin_look_alike(c: char) -> char {
+    match c {
+        'а' | 'α' => 'a',
+        'в' | 'β' => 'b',
+        'с' | 'ϲ' => 'c',
+        'ԁ' => 'd',
+        'е' | 'ε' => 'e',
+        'һ' | 'н' => 'h',
+        'і' | 'ι' | 'ӏ' => 'i',
+        'ј' => 'j',
+        'к' | 'κ' => 'k',
+        'м' => 'm',
+        'η' => 'n',
+        'о' | 'ο' | 'σ' => 'o',
+        'р' | 'ρ' => 'p',
+        'ԛ' => 'q',
+        'ѕ' => 's',
+        'т' | 'τ' => 't',
+        'υ' => 'u',
+        'ν' => 'v',
+        'ԝ' | 'ω' => 'w',
+        'х' | 'χ' => 'x',
+        'у' | 'γ' => 'y',
+        _ => c,
+    }
+}
+
+/// A name that is a model id or a model's: a word holding a digit with `-` or `.`
+/// (`claude-opus-4-1`, `GPT-6`, `Opus 5.5`).
+fn looks_like_a_model(name: &str) -> bool {
+    let plain: String = name.nfkc().collect();
+    plain
+        .split_whitespace()
+        .any(|word| word.chars().any(|c| c.is_ascii_digit()) && word.contains(['-', '.']))
 }
 
 /// One problem found, before it becomes a `Finding`: which id, where, and what matched.
@@ -268,14 +335,17 @@ fn co_author(line: &str) -> Option<CoAuthor<'_>> {
     (name_ok && id_ok && email_ok).then_some(CoAuthor::Agent(name, id))
 }
 
-/// A person's name and address: a name with no brackets, not an agent's, and an
-/// address with text on both sides of its `@`.
+/// A person's name and address: a name with no brackets, and an address with text on
+/// both sides of its `@`. As a second guard, a name that, folded (`folded`), holds an
+/// agent's or its maker's name, or looks like a model id, is not a person's: the rule
+/// cannot prove who typed a line, but an agent does not pass as a person by spelling.
 fn person(name: &str, email: &str) -> bool {
-    let first = name.split_whitespace().next().unwrap_or("").to_lowercase();
+    let fold = folded(name);
     let name_ok = !name.trim().is_empty()
         && name == name.trim()
         && !name.contains(['<', '>', '(', ')'])
-        && !AGENTS.iter().any(|a| a.name == first);
+        && !NOT_A_PERSON.iter().any(|n| fold.contains(n))
+        && !looks_like_a_model(name);
     let email_ok = email
         .split_once('@')
         .is_some_and(|(local, domain)| !local.is_empty() && !domain.is_empty());

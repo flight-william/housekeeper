@@ -333,3 +333,56 @@ fn in_a_claude_session_only_a_claude_line_counts() {
         assert_eq!(seen(&text, &claude()), vec![], "{line}");
     }
 }
+
+// An agent named as a person, in any spelling: the name is compared normalised (NFKC,
+// zero-width and format characters gone, case folded, Latin look-alikes from other
+// scripts read as Latin, punctuation and spaces gone), and refused when it holds an
+// agent's or vendor's name or looks like a model id.
+#[test]
+fn an_agent_spelled_as_a_person_is_r17_trailer() {
+    for name in [
+        "ClaudeCode",
+        "Claude-Code",
+        "Claude, Opus",
+        "Claude.ai",
+        "Anthropic Claude",
+        "OpenAI Codex",
+        "Google Gemini",
+        "claude-opus-4-1",
+        "Opus 5.5",
+        "GPT-6",
+        "Cl\u{430}ude",
+        "\u{FF23}laude",
+        "Claude\u{200B} Opus",
+        "C\u{200D}laude",
+        "\u{1D402}laude",
+        "Anthropic",
+        "Sam (via OpenAI)",
+    ] {
+        let line = format!("Co-Authored-By: {name} <noreply@example.com>");
+        let text = format!("parser: keep the last line{BODY}\n{line}\n");
+        assert_eq!(seen(&text, &ctx()), one("R17/trailer", 7, &line), "{name}");
+    }
+}
+
+// Beside a valid agent line in a session, a second line posing as a person is refused.
+#[test]
+fn an_agent_posing_as_a_person_beside_its_own_line_is_r17_trailer() {
+    let posing = "Co-Authored-By: claude-opus-4-1 <noreply@anthropic.com>";
+    let text = format!("parser: keep the last line{BODY}\n{OPUS}\n{posing}\n");
+    assert_eq!(seen(&text, &claude()), one("R17/trailer", 8, posing));
+}
+
+#[test]
+fn people_names_with_digits_or_marks_still_pass() {
+    for name in [
+        "sam42",
+        "Sam O'Example",
+        "Zo\u{eb} Ex\u{e1}mple",
+        "Sam Example Jr.",
+    ] {
+        let line = format!("Co-Authored-By: {name} <sam@example.com>");
+        let text = format!("parser: keep the last line{BODY}\n{line}\n");
+        assert_eq!(seen(&text, &ctx()), vec![], "{name}");
+    }
+}

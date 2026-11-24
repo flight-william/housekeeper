@@ -46,7 +46,12 @@ Other languages get only the language-free checks: R2 secrets, R7 tests, R9 appr
 A commit message's `Co-Authored-By:` line is optional. An agent's names its model id, one of
 `[commit] models` in `.house.toml`: `Co-Authored-By: Claude (claude-opus-5-5)
 <noreply@anthropic.com>`. A person's has none: `Co-Authored-By: Sam Example <sam@example.com>`.
-A line naming Claude, Codex, Antigravity or Gemini without a model id is refused, and a known
+A line naming Claude, Codex, Antigravity or Gemini without a model id is refused: the name is
+compared folded (NFKC, invisible characters gone, case folded, look-alike letters read as Latin,
+punctuation and spaces gone), so `ClaudeCode`, `Anthropic Claude`, `Ｃlaude` and a model id
+such as `claude-opus-4-1` or `Opus 5.5` given as a name are refused too. Outside an agent's
+session the rule cannot prove who typed a line: this guard stops a respelling, not a made-up
+human name. A known
 agent's line gives one of its own model ids: `claude-…` for Claude, `gpt-…` for Codex,
 `gemini-…` for Antigravity and Gemini. A commit made in an agent's session owes that agent's
 line, its name and one of its model ids, the same rule for every agent; another agent's line
