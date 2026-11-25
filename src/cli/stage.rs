@@ -1,5 +1,5 @@
 //! `house check --stage` and `--all`: the files through the chosen adapters, then
-//! the test step.
+//! the test step. At merge, the commit-msg checks over the range too (`merge`).
 
 use crate::adapter::{Adapter, CannotCheck, Context, Stage};
 use crate::finding::{Finding, Place};
@@ -101,6 +101,10 @@ pub(super) fn check_from(
             }
             let scope_changed = scope.changed;
             let tests_due = scope.run_tests;
+            // Before any tool or test runs: they run the pull request's own code.
+            if let (Stage::Merge, Ok(cfg)) = (stage, &rules.config) {
+                tools.push(super::merge::judge_range(root, &scope.commits, cfg));
+            }
             let ctx = Context {
                 root: root.to_path_buf(),
                 stage,
@@ -170,6 +174,7 @@ fn every_file(root: &Path, exclude: &[String]) -> Result<files::Scope, CannotChe
         changed,
         push_range: None,
         unbounded: false,
+        commits: Vec::new(),
     })
 }
 

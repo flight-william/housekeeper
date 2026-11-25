@@ -66,13 +66,24 @@ pub fn check(text: &str, commit: &Commit) -> Result<Vec<Finding>, CannotCheck> {
     Ok(hits(text, commit)?.into_iter().map(finding).collect())
 }
 
+/// `check` on a message as git stored it in a commit (`git log --format=%B`): no line
+/// is a comment and there is no scissors line, whatever `comment_char` says.
+pub fn check_stored(text: &str, commit: &Commit) -> Result<Vec<Finding>, CannotCheck> {
+    let hits = judge(message(text, None), commit)?;
+    Ok(hits.into_iter().map(finding).collect())
+}
+
 /// The hits `check` turns into findings, for tests and the record.
 pub fn hits(text: &str, commit: &Commit) -> Result<Vec<Hit>, CannotCheck> {
+    judge(message(text, Some(comment_char(commit)?)), commit)
+}
+
+/// The hits of the message's surviving `lines`.
+fn judge(lines: Vec<Line<'_>>, commit: &Commit) -> Result<Vec<Hit>, CannotCheck> {
     let Some((author, rest)) = commit.author_ident.split_once(" <") else {
         return Err(cannot("GIT_AUTHOR_IDENT has no `Name <email>`"));
     };
     let email = rest.split_once('>').map_or(rest, |(email, _)| email);
-    let lines = message(text, comment_char(commit)?);
     let mut found = Vec::new();
     let parts = subject(&lines, commit, &mut found);
     body(&lines, parts, &mut found);
@@ -158,7 +169,7 @@ fn body(lines: &[Line<'_>], parts: Option<(&str, &str)>, found: &mut Vec<Hit>) {
 /// The message text git will commit (`message`'s lines, joined), for the approval
 /// check: one clean-up for R17 and approval.
 pub fn kept(text: &str, commit: &Commit) -> Result<String, CannotCheck> {
-    let lines = message(text, comment_char(commit)?);
+    let lines = message(text, Some(comment_char(commit)?));
     Ok(lines.iter().map(|l| format!("{}\n", l.text)).collect())
 }
 
@@ -170,14 +181,15 @@ struct Line<'a> {
 
 /// The message as git will commit it: the file's lines, numbered from 1, without
 /// comment lines and without everything from git's scissors line on. Trailing blank
-/// lines go too.
-fn message(text: &str, comment: char) -> Vec<Line<'_>> {
-    let scissors = format!("{comment} ------------------------ >8 ------------------------");
+/// lines go too. With no `comment` (a stored message) every line is kept.
+fn message(text: &str, comment: Option<char>) -> Vec<Line<'_>> {
+    let scissors =
+        comment.map(|c| format!("{c} ------------------------ >8 ------------------------"));
     let mut lines: Vec<Line<'_>> = text
         .lines()
         .zip(1..)
-        .take_while(|(text, _)| *text != scissors)
-        .filter(|(text, _)| !text.starts_with(comment))
+        .take_while(|(text, _)| scissors.as_deref() != Some(*text))
+        .filter(|(text, _)| comment.is_none_or(|c| !text.starts_with(c)))
         .map(|(text, number)| Line { number, text })
         .collect();
     while lines.last().is_some_and(|l| blank(l.text)) {

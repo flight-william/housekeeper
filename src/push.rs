@@ -56,6 +56,47 @@ pub fn parse_lines(text: &str) -> Result<Vec<PushLine>, CannotCheck> {
     Ok(lines)
 }
 
+/// What merge refuses before anything runs, so it never passes with nothing judged:
+/// no ref line, a delete line (a zero local sha), a shallow repository (the commit
+/// walk would stop at its boundary without a word) and grafts (which rewrite parents).
+pub fn merge_refusal(root: &Path, text: &str) -> Result<(), CannotCheck> {
+    let lines: Vec<&str> = text.lines().filter(|l| !l.is_empty()).collect();
+    let refused = |what: String, fix: &str| {
+        Err(CannotCheck {
+            what,
+            fix: fix.into(),
+        })
+    };
+    let ref_fix = "feed the branch's line on stdin: refs/heads/<branch> <head sha> refs/heads/<branch> <base sha>";
+    if lines.is_empty() {
+        return refused(
+            "no ref line on stdin, so no commit to judge".into(),
+            ref_fix,
+        );
+    }
+    if parse_lines(text)?.len() < lines.len() {
+        return refused(
+            "a ref line deletes a branch (its local sha is zero)".into(),
+            ref_fix,
+        );
+    }
+    let shallow = git(root, &["rev-parse", "--is-shallow-repository"])?;
+    if shallow.stdout.trim() != "false" {
+        return refused(
+            "the repository is shallow: commits past its boundary would not be judged".into(),
+            "fetch the whole history: actions/checkout with fetch-depth: 0, or git fetch --unshallow",
+        );
+    }
+    let grafts = git(root, &["rev-parse", "--git-path", "info/grafts"])?;
+    if root.join(grafts.stdout.trim()).exists() {
+        return refused(
+            "the repository has grafts (info/grafts), which change the commits' parents".into(),
+            "remove .git/info/grafts, or check in a fresh clone",
+        );
+    }
+    Ok(())
+}
+
 /// What a push sends: the files to check and the commits (`<base>..<local sha>`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Push {
@@ -71,6 +112,9 @@ pub struct Push {
     /// A pushed ref has no base (a first push without origin/main): the push sends
     /// history no range bounds, the whole tree and all of HEAD's commits.
     pub unbounded: bool,
+    /// Every commit the push sends, oldest first: HEAD's commits that no ref's base
+    /// holds, all of them when the push is unbounded. What merge judges R17 on.
+    pub commits: Vec<String>,
 }
 
 /// The files a push sends (`pushed(..).files`).
@@ -93,12 +137,14 @@ pub fn pushed(root: &Path, stdin_text: &str) -> Result<Push, CannotCheck> {
             touched: false,
             range: None,
             unbounded: false,
+            commits: Vec::new(),
         });
     }
     let head = git(root, &["rev-parse", "HEAD"])?.stdout.trim().to_string();
     let mut changes = Vec::new();
     let mut range: Option<(usize, String)> = None;
     let mut unbounded = false;
+    let mut bases = Vec::new();
     for line in &lines {
         at_head(root, line, &head)?;
         let Some(base) = base(root, line)? else {
@@ -112,6 +158,7 @@ pub fn pushed(root: &Path, stdin_text: &str) -> Result<Push, CannotCheck> {
             continue;
         };
         let this = format!("{base}..{}", line.local);
+        bases.push(base);
         changes.extend(files::changes(root, &["diff", &this])?);
         let count = git(root, &["rev-list", "--count", &this])?;
         let count = count.stdout.trim().parse().unwrap_or(0);
@@ -129,13 +176,36 @@ pub fn pushed(root: &Path, stdin_text: &str) -> Result<Push, CannotCheck> {
         "changed in the working tree since the pushed commit: the tools read the working tree",
         "commit or stash the change, then push again",
     )?;
+    let commits = sent(root, &head, &bases, unbounded)?;
     Ok(Push {
+        commits,
         changed: files::not_deleted(&changes),
         touched: !changes.is_empty(),
         files,
         range: range.filter(|_| !unbounded).map(|(_, r)| r),
         unbounded,
     })
+}
+
+/// The commits `head` sends past every one of `bases`, oldest first; every commit of
+/// `head` when the push is `unbounded`. Every pushed ref is at HEAD (`at_head`), so
+/// this is the union of the refs' ranges.
+fn sent(
+    root: &Path,
+    head: &str,
+    bases: &[String],
+    unbounded: bool,
+) -> Result<Vec<String>, CannotCheck> {
+    let mut args = vec!["rev-list", "--reverse", head];
+    if !unbounded && !bases.is_empty() {
+        args.push("--not");
+        args.extend(bases.iter().map(String::as_str));
+    }
+    Ok(git(root, &args)?
+        .stdout
+        .lines()
+        .map(str::to_string)
+        .collect())
 }
 
 /// The pushed ref's commit is HEAD, or cannot-check.

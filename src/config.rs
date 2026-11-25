@@ -122,12 +122,13 @@ pub fn test_limit(config: &Config) -> Duration {
         .map_or(TEST_LIMIT, Duration::from_secs)
 }
 
-/// The test commands to run at `stage`; push falls back to `commit`, as `[tools]` does.
+/// The test commands to run at `stage`; push falls back to `commit`, as `[tools]` does,
+/// and merge runs what push runs: the old keys have no `merge`.
 pub fn tests_for(config: &Config, stage: Stage) -> &[Vec<String>] {
     let tests = &config.tests;
     let list = match stage {
         Stage::Commit => tests.commit.as_ref(),
-        Stage::Push => tests.push.as_ref().or(tests.commit.as_ref()),
+        Stage::Push | Stage::Merge => tests.push.as_ref().or(tests.commit.as_ref()),
     };
     list.map_or(&[], Vec::as_slice)
 }
@@ -226,7 +227,7 @@ pub fn select(
 ) -> (Vec<Box<dyn Adapter>>, Vec<CannotCheck>) {
     let wanted = match stage {
         Stage::Commit => config.tools.commit.as_ref(),
-        Stage::Push => config.tools.push.as_ref().or(config.tools.commit.as_ref()),
+        Stage::Push | Stage::Merge => config.tools.push.as_ref().or(config.tools.commit.as_ref()),
     };
     let Some(wanted) = wanted else {
         let defaults = all.into_iter().filter(|a| a.runs_by_default()).collect();
