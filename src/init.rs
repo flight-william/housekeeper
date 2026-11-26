@@ -168,9 +168,18 @@ fn starter_config(root: &Path, all: Vec<Box<dyn Adapter>>) -> Result<String, Can
         "swift-format" => !swiftformat,
         _ => a.runs_by_default(),
     };
+    // A JavaScript or TypeScript repo is named by its package.json or tsconfig.json,
+    // so its tools are in the list before its first code file is.
+    let node = ctx.files.iter().any(|f| {
+        let name = Path::new(f).file_name().and_then(|n| n.to_str());
+        matches!(name, Some("package.json" | "tsconfig.json"))
+    });
+    let node_tool = |a: &dyn Adapter| {
+        node && matches!(a.name(), "prettier" | "eslint" | "tsc" | "semgrep" | "r3")
+    };
     let names: Vec<String> = all
         .iter()
-        .filter(|a| starter(a.as_ref()) && a.command(&ctx).is_some())
+        .filter(|a| starter(a.as_ref()) && (node_tool(a.as_ref()) || a.command(&ctx).is_some()))
         .map(|a| format!("\"{}\"", a.name()))
         .collect();
     let text = format!(

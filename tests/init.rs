@@ -131,3 +131,46 @@ fn an_existing_codeowners_is_never_overwritten() {
 fn init_protected_is_the_approval_list_itself() {
     assert!(std::ptr::eq(&init::PROTECTED, &house::approval::PROTECTED));
 }
+
+/// The starter `[tools] commit` list `house init` writes in a repo holding `files`.
+fn starter_tools(name: &str, files: &[(&str, &str)]) -> String {
+    let repo = bare_repo(name);
+    for (path, text) in files {
+        let file = repo.join(path);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, text).unwrap();
+    }
+    common::git(&repo, &["add", "-A"]);
+    run(&repo, None);
+    let cfg = std::fs::read_to_string(repo.join(".house.toml")).unwrap();
+    house::config::parse(&cfg).unwrap();
+    cfg.lines()
+        .find(|l| l.starts_with("commit = "))
+        .unwrap()
+        .to_string()
+}
+
+#[test]
+fn a_typescript_repo_starts_with_prettier_eslint_tsc_r3_gitleaks_and_semgrep() {
+    let line = starter_tools(
+        "init-ts",
+        &[
+            ("package.json", "{}\n"),
+            ("tsconfig.json", "{}\n"),
+            ("src/app.ts", "export const a = 1;\n"),
+        ],
+    );
+    assert_eq!(
+        line,
+        r#"commit = ["prettier", "eslint", "tsc", "gitleaks", "semgrep", "r3"]"#
+    );
+}
+
+#[test]
+fn a_package_json_alone_names_the_javascript_tools_before_any_code_exists() {
+    let line = starter_tools("init-pkg", &[("package.json", "{}\n")]);
+    assert_eq!(
+        line,
+        r#"commit = ["prettier", "eslint", "tsc", "gitleaks", "semgrep", "r3"]"#
+    );
+}

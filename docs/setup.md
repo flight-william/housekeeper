@@ -26,6 +26,7 @@ with the install line.
 | Swift | `brew install swiftlint` (`swift format` ships with the toolchain); `brew install swiftformat` for a repo that names `swiftformat` in `.house.toml` |
 | Python | `brew install ruff` (coverage.py in the project's venv) |
 | shell | `brew install shellcheck` |
+| TypeScript / JavaScript | `npm install --save-dev prettier eslint typescript typescript-eslint` in the repo (house runs `node_modules/.bin/<tool>` first, else the one on PATH: `brew install prettier eslint typescript`); an `eslint.config.js` |
 
 Each size has one owner, so one long file is one finding. A file's length (R3, 400 lines) is
 house's own counter for every language, Swift included: SwiftLint's `file_length` is not
@@ -33,7 +34,8 @@ reported, whatever `.swiftlint.yml` sets it to, as long as r3 runs. A `[tools]` 
 names `swiftlint` and not `r3` keeps SwiftLint's `file_length` instead; list `r3` to have
 one limit for every language. Function and type length in Swift are
 SwiftLint's (`function_body_length`, `type_body_length`), in Rust clippy's, in Python
-house's counter.
+house's counter, in TypeScript and JavaScript ESLint's (`max-lines-per-function`, when the
+repo's config sets it). ESLint's `max-lines` gives way to r3 as SwiftLint's `file_length` does.
 
 ## Start a repo
 

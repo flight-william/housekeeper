@@ -1,11 +1,12 @@
 //! R3 size: a file over 400 lines, a Python function over 60.
+//! JavaScript and TypeScript files get the file limit; their functions are ESLint's.
 //!
 //! Runs `scripts/r3_count.py`.
 //! The script folder is `$HOUSE_SCRIPTS_DIR` when set, else this crate's `scripts`.
 //! Functions of .rs and .swift files come from clippy and SwiftLint, not here.
 
 use super::Exits;
-use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
+use crate::adapter::{Adapter, CannotCheck, Command, Context, JS_EXTENSIONS, Output};
 use crate::finding::{Finding, Measure, Place};
 use serde::Deserialize;
 
@@ -54,7 +55,11 @@ impl Adapter for R3 {
             .files
             .iter()
             .filter(|f| {
-                EXTENSIONS.iter().any(|ext| f.ends_with(ext)) || ctx.languages.contains_key(*f)
+                EXTENSIONS
+                    .iter()
+                    .chain(&JS_EXTENSIONS)
+                    .any(|ext| f.ends_with(ext))
+                    || ctx.languages.contains_key(*f)
             })
             .cloned()
             .collect();

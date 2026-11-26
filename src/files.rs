@@ -1,6 +1,6 @@
 //! Which files a stage checks: commit, the staged files; push, the files the push sends.
 
-use crate::adapter::{CannotCheck, Language, Stage};
+use crate::adapter::{CannotCheck, JS_EXTENSIONS, Language, Stage};
 use crate::approval::glob_matches;
 use crate::run::git;
 use std::collections::BTreeMap;
@@ -301,8 +301,8 @@ pub(crate) fn split_nul(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// The extensions the adapters choose files by. A file with any other name has its
-/// first line read (`languages`).
+/// The extensions the adapters choose files by, with `JS_EXTENSIONS`. A file with any
+/// other name has its first line read (`languages`).
 const KNOWN: [&str; 6] = [".py", ".pyi", ".sh", ".bash", ".rs", ".swift"];
 
 /// The longest first line read: a shebang longer than this names no language.
@@ -315,7 +315,12 @@ const FIRST_LINE_MAX: u64 = 256;
 pub fn languages(root: &Path, files: &[String]) -> BTreeMap<String, Language> {
     files
         .iter()
-        .filter(|f| !KNOWN.iter().any(|ext| f.ends_with(ext)))
+        .filter(|f| {
+            !KNOWN
+                .iter()
+                .chain(&JS_EXTENSIONS)
+                .any(|ext| f.ends_with(ext))
+        })
         .filter_map(|f| {
             let file = std::fs::File::open(root.join(f)).ok()?;
             let mut line = Vec::new();
@@ -334,7 +339,7 @@ pub fn languages(root: &Path, files: &[String]) -> BTreeMap<String, Language> {
 
 /// The language a first line names: `#!` then the interpreter, by its name, directly
 /// or through `env` (`#!/usr/bin/env python3`). python, python3, python3.13: Python;
-/// sh, bash, dash, ksh: shell. Anything else, zsh among them, is none.
+/// sh, bash, dash, ksh: shell; node: JavaScript. Anything else, zsh among them, is none.
 pub fn language_of(first_line: &str) -> Option<Language> {
     let mut words = first_line.strip_prefix("#!")?.split_whitespace();
     let name = |path: &str| path.rsplit('/').next().unwrap_or(path).to_string();
@@ -344,6 +349,7 @@ pub fn language_of(first_line: &str) -> Option<Language> {
     }
     match program.as_str() {
         "sh" | "bash" | "dash" | "ksh" => Some(Language::Shell),
+        "node" => Some(Language::Node),
         _ => {
             let version = program.strip_prefix("python")?;
             let digits = version.chars().all(|c| c.is_ascii_digit() || c == '.');

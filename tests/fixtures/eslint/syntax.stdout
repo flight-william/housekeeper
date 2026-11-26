@@ -1,0 +1,1 @@
+[{"filePath":"/private/tmp/house-fixture/tsplant/src/broken.ts","messages":[{"ruleId":null,"fatal":true,"severity":2,"message":"Parsing error: Expression expected.","line":1,"column":10}],"suppressedMessages":[],"errorCount":1,"fatalErrorCount":1,"warningCount":0,"fixableErrorCount":0,"fixableWarningCount":0,"source":"const x = ;\n","usedDeprecatedRules":[]}]

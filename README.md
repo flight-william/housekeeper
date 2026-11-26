@@ -6,7 +6,8 @@
 
 - **A list of rules, not a new checker:** each rule below maps to tools that already exist
   (ruff, cargo fmt, clippy and cargo-deny, SwiftLint, swift format or SwiftFormat,
-  ShellCheck, gitleaks, Semgrep, its own size counter, commit-message and approval checks).
+  ShellCheck, Prettier, ESLint, tsc, gitleaks, Semgrep, its own size counter, commit-message
+  and approval checks).
   house never re-implements a checker. The tools can change per language and per repo; the
   rule stays.
 - **Running the tools is the easy part.** house also answers the harder question: can I
@@ -38,20 +39,24 @@ R17 ✓ Commit messages are records: `area: what changed`, then Why:, Proof:, Un
 
 ## Languages
 
-| Rule | Python | Rust | Swift | Shell |
-|---|---|---|---|---|
-| R1 Formatted | ruff format | cargo fmt | swift format or SwiftFormat | – |
-| R2 Lint, warnings as errors | ruff | clippy, cargo-deny | SwiftLint | ShellCheck |
-| R2 No secret | gitleaks | gitleaks | gitleaks | gitleaks |
-| R3 Small | size counter; ruff PLR0915 if the repo's ruff settings select it | clippy too_many_lines, size counter | SwiftLint, size counter | size counter |
-| R4 Simple | ruff C901 if the repo's ruff settings select it | clippy too_many_arguments; cognitive_complexity –, not enabled | SwiftLint | – |
-| R7 Tested | [tests] commands, any language | ← | ← | ← |
-| R8 Deterministic tests | Semgrep, 10 rules | Semgrep, 16 rules (8 for tests/, 8 for test modules) | Semgrep, 9 rules (partial parse of #expect/#require) | – |
-| R9 Nothing silenced | Semgrep, 6 rules | Semgrep + Cargo.toml lints, 4 rules | Semgrep, 6 rules | Semgrep, 1 rule |
-| R9 Protected files need the owner's approval | any language | ← | ← | ← |
-| R17 Commit messages | any language | ← | ← | ← |
+| Rule | Python | Rust | Swift | Shell | TypeScript / JavaScript |
+|---|---|---|---|---|---|
+| R1 Formatted | ruff format | cargo fmt | swift format or SwiftFormat | – | Prettier |
+| R2 Lint, warnings as errors | ruff | clippy, cargo-deny | SwiftLint | ShellCheck | ESLint |
+| R2 Types | – | (the compiler, through clippy) | – | – | tsc, TypeScript files only |
+| R2 No secret | gitleaks | gitleaks | gitleaks | gitleaks | gitleaks |
+| R3 Small | size counter; ruff PLR0915 if the repo's ruff settings select it | clippy too_many_lines, size counter | SwiftLint, size counter | size counter | size counter; ESLint max-lines-per-function and max-statements if the repo's config sets them |
+| R4 Simple | ruff C901 if the repo's ruff settings select it | clippy too_many_arguments; cognitive_complexity –, not enabled | SwiftLint | – | ESLint complexity, max-depth, max-params and max-nested-callbacks if the repo's config sets them |
+| R7 Tested | [tests] commands, any language | ← | ← | ← | ← |
+| R8 Deterministic tests | Semgrep, 10 rules | Semgrep, 16 rules (8 for tests/, 8 for test modules) | Semgrep, 9 rules (partial parse of #expect/#require) | – | – |
+| R9 Nothing silenced | Semgrep, 6 rules | Semgrep + Cargo.toml lints, 4 rules | Semgrep, 6 rules | Semgrep, 1 rule | – |
+| R9 Protected files need the owner's approval | any language | ← | ← | ← | ← |
+| R17 Commit messages | any language | ← | ← | ← | ← |
 
 Other languages get only the language-free checks: R2 secrets, R7 tests, R9 approvals, R17.
+TypeScript and JavaScript have no Semgrep rules yet, so an `// eslint-disable` or
+`// @ts-ignore` comment is not reported (R8 and R9 are –); `house init` names `semgrep` in
+such a repo anyway, for its other files and for the rules to come.
 
 A commit message's `Co-Authored-By:` line is optional, its key read in any case as git reads
 it (GitHub writes `Co-authored-by:`), and only in the final trailer block, the `Key: value`
@@ -125,7 +130,9 @@ left for the tools; a push with no change skips them. An unknown table or key in
 Each tool gets the files it reads, chosen by extension (`.sh` and `.bash` are shell scripts
 for ShellCheck, r3 and Semgrep). A file with no known extension is
 chosen by its first line: `#!/usr/bin/env python3` goes to ruff, ruff format, r3 and Semgrep,
-and `#!/bin/sh` or `#!/usr/bin/env bash` to ShellCheck, r3 and Semgrep. A zsh script, which
+`#!/bin/sh` or `#!/usr/bin/env bash` to ShellCheck, r3 and Semgrep, and
+`#!/usr/bin/env node` to Prettier, ESLint and r3 (not tsc, which reads only its project's
+files). A zsh script, which
 ShellCheck cannot read, goes to none of them, nor does a binary file. The files follow `--`
 on each tool's command line, and a Cargo manifest or `deny.toml` path that starts with `-`
 gets `./` before it, so a file named `-x.swift` or `--output=Sources/A.swift` is checked as a
@@ -147,6 +154,38 @@ SwiftFormat instead: `swiftformat` runs only when `[tools]` lists it, as in
 one file. `house init` names it, instead of swift format, only in a repo with a `.swiftformat`
 at its root, and then writes no `.swift-format`. It runs `swiftformat --lint` on the stage's Swift
 files and reads the repo's own `.swiftformat`, its `--exclude` included.
+
+JavaScript and TypeScript code is `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` and
+`.cjs`. Each of the three tools runs the repo's own copy, `node_modules/.bin/<tool>`, as
+the repo's package scripts do, and the one on PATH when the repo has none; never `npx`,
+which downloads a tool that is missing. A missing tool is "cannot check" with its install
+line, as for ruff. A repo needs, as devDependencies, `prettier`, `eslint` and `typescript`
+(and `typescript-eslint`, for ESLint to read TypeScript), and an ESLint flat config,
+`eslint.config.js` (or `.mjs`, `.cjs`, `.ts`).
+
+- `prettier`, R1: `prettier --check` on the stage's code files, by the repo's own
+  Prettier settings and `.prettierignore`. Only code files: `.json`, `.css` and `.md` are
+  not handed to it; list `["prettier", "--check", "."]` under `[tests]` to format those too.
+  A file it cannot parse is left to ESLint and tsc, which report it.
+- `eslint`, R2: `eslint --format json --max-warnings 0`, so a warning is a finding, at
+  its file and line, by the repo's own config. A repo with no `eslint.config.*` is an R2
+  finding, not a pass, and so is a staged file no `files` pattern of the config covers
+  (ESLint lints only `.js`, `.mjs` and `.cjs` unless the config says more). A file the
+  config ignores is left out. Its size and complexity rules count as R3 and R4; its
+  `max-lines` is dropped when r3 runs, so a file's length has one owner.
+- `tsc`, R2 Types: tsc cannot check single files against a project's settings, so it
+  runs `tsc --noEmit --pretty false -p <tsconfig.json>` once per project: the nearest
+  `tsconfig.json` at or above each staged `.ts`, `.tsx`, `.mts` or `.cts` file, or a
+  staged `tsconfig.json` itself, so each package of a workspace is checked by its own. A
+  TypeScript file with no `tsconfig.json` above it runs the root one, which tsc reports
+  missing. Each error is a finding at its file and line. Limits: tsc checks the whole
+  project, and only the errors in the stage's files are reported (as for clippy), so a
+  change that breaks a caller in a file the stage did not touch is found by
+  `house check --all`, not at commit; a solution-style `tsconfig.json` (`"files": []` with
+  `references`) checks nothing, as `tsc -p` does, so put the nearest one beside the code;
+  a file the project's `include` leaves out is not checked.
+- `r3`: the 400-line file limit, as for every language. Function length is ESLint's
+  `max-lines-per-function`, when the repo's config sets it.
 
 Every `Cargo.toml` a stage sends is also read by house itself, whatever `[tools]` lists: a
 lint set to `allow` (or `expect`) in a `[lints]` or `[workspace.lints]` table silences it for

@@ -46,12 +46,21 @@ impl Context {
 /// The extensions that make a file a shell script, whatever its first line says.
 pub const SHELL_EXTENSIONS: [&str; 2] = [".sh", ".bash"];
 
+/// The extensions that make a file JavaScript or TypeScript code, for Prettier, ESLint
+/// and r3: code files only, not `.json`, `.css` or `.md`.
+pub const JS_EXTENSIONS: [&str; 8] = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
+
+/// The TypeScript ones among them: a staged one runs tsc.
+pub const TS_EXTENSIONS: [&str; 4] = [".ts", ".tsx", ".mts", ".cts"];
+
 /// A language a file's first line can name: `#!/usr/bin/env python3`, `#!/bin/sh`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Language {
     Python,
     /// sh, bash, dash or ksh: what ShellCheck reads. Not zsh.
     Shell,
+    /// `node`: JavaScript, for the JS tools (Prettier, ESLint, r3).
+    Node,
 }
 
 /// A command for the core to run, in `root`, with no shell.
