@@ -71,6 +71,9 @@ fn semgrep_finds_every_planted_silencer_and_nothing_in_clean_code() {
         "cleanup.rs",
         "exempt.rs",
         "clean.sh",
+        "clean.ts",
+        "clean.js",
+        "clean.test.ts",
     ];
     for name in clean {
         assert!(

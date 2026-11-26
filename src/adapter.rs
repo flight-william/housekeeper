@@ -46,8 +46,9 @@ impl Context {
 /// The extensions that make a file a shell script, whatever its first line says.
 pub const SHELL_EXTENSIONS: [&str; 2] = [".sh", ".bash"];
 
-/// The extensions that make a file JavaScript or TypeScript code, for Prettier, ESLint
-/// and r3: code files only, not `.json`, `.css` or `.md`. The TypeScript ones first.
+/// The extensions that make a file JavaScript or TypeScript code, for Prettier, ESLint,
+/// r3 and Semgrep, and for reading first lines (`files::languages`): code files only,
+/// not `.json`, `.css` or `.md`. The TypeScript ones first.
 pub const JS_EXTENSIONS: [&str; 8] = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
 /// The TypeScript ones: the first four of `JS_EXTENSIONS`. A staged one runs tsc.
