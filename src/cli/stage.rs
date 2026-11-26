@@ -210,6 +210,8 @@ fn same_place(a: &Finding, b: &Finding) -> bool {
 /// command already gave (`same_place`) is dropped, the first cannot-check wins,
 /// seconds add up, the exit is the first non-zero one. Findings of one command are
 /// all kept: two undefined names on one line share rule, place, line and tool rule.
+/// When every command ran, the adapter's `joined` findings over all the outputs follow.
+/// Last, however the commands ended, the adapter's `finished` cleans up after them.
 fn run_one(adapter: &dyn Adapter, ctx: &Context) -> ToolRun {
     let mut tool = ToolRun {
         name: adapter.name().to_string(),
@@ -226,14 +228,9 @@ fn run_one(adapter: &dyn Adapter, ctx: &Context) -> ToolRun {
         return tool;
     }
     let env = adapter.env(ctx);
+    let mut outs = Vec::new();
     for cmd in &commands {
-        let ran = run::run_env(
-            cmd,
-            &ctx.root,
-            adapter.brew_formula(),
-            run::HANG_GUARD,
-            &env,
-        );
+        let ran = run::run_install(cmd, &ctx.root, &adapter.install(ctx), run::HANG_GUARD, &env);
         tool.seconds += ran.seconds;
         let parsed = ran.result.and_then(|out| {
             if tool.exit.is_none_or(|e| e == 0) {
@@ -244,7 +241,9 @@ fn run_one(adapter: &dyn Adapter, ctx: &Context) -> ToolRun {
                     tool.unread.push(file);
                 }
             }
-            adapter.parse(ctx, &out)
+            let parsed = adapter.parse(ctx, &out);
+            outs.push(out);
+            parsed
         });
         match parsed {
             Ok(findings) => {
@@ -260,6 +259,14 @@ fn run_one(adapter: &dyn Adapter, ctx: &Context) -> ToolRun {
             }
         }
     }
+    if tool.cannot.is_none() {
+        for f in adapter.joined(ctx, &outs) {
+            if !tool.findings.iter().any(|e| same_place(e, &f)) {
+                tool.findings.push(f);
+            }
+        }
+    }
+    adapter.finished(ctx);
     tool
 }
 

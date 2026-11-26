@@ -124,31 +124,35 @@ fn command_takes_the_javascript_and_typescript_files_and_node_scripts() {
     );
 }
 
-/// The real script on a 401-line file of each JavaScript and TypeScript kind, a
-/// 400-line one, and a 401-line `node` script with no extension: the same 400-line
-/// file limit as every language.
+/// The real script on a 401-line file of every extension r3 hands it, taken from the
+/// Rust lists themselves (r3's `EXTENSIONS` and `JS_EXTENSIONS`), a 400-line one, and
+/// a 401-line `node` script with no extension: the script must count every one, so
+/// the lists in scripts/r3_count.py cannot fall behind them.
 #[test]
-fn real_script_counts_javascript_and_typescript_files() {
-    let dir = std::env::temp_dir().join(format!("house-r3-js-{}", std::process::id()));
+fn real_script_counts_a_file_of_every_extension_r3_hands_it() {
+    let dir = std::env::temp_dir().join(format!("house-r3-every-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let lines = |n: usize| "let a = 1;\n".repeat(n);
-    let long = [
-        "a.ts", "b.tsx", "c.mts", "d.cts", "e.js", "f.jsx", "g.mjs", "h.cjs",
-    ];
-    for name in long {
-        std::fs::write(dir.join(name), lines(401)).unwrap();
+    let lines = |n: usize| "x\n".repeat(n);
+    let long: Vec<String> = house::adapters::r3::EXTENSIONS
+        .iter()
+        .chain(&house::adapter::JS_EXTENSIONS)
+        .map(|ext| format!("f{ext}"))
+        .chain(["tool".to_string()])
+        .collect();
+    for name in &long {
+        let text = if name == "tool" {
+            format!("#!/usr/bin/env node\n{}", lines(400))
+        } else {
+            lines(401)
+        };
+        std::fs::write(dir.join(name), text).unwrap();
     }
     std::fs::write(dir.join("ok.ts"), lines(400)).unwrap();
-    std::fs::write(
-        dir.join("tool"),
-        format!("#!/usr/bin/env node\n{}", lines(400)),
-    )
-    .unwrap();
     let script = concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/r3_count.py");
     let run = std::process::Command::new("python3")
         .args(["-I", script])
-        .args(long)
-        .args(["ok.ts", "tool"])
+        .args(&long)
+        .arg("ok.ts")
         .current_dir(&dir)
         .output()
         .expect("python3 must be installed: this test runs the real scripts/r3_count.py");
@@ -160,17 +164,15 @@ fn real_script_counts_javascript_and_typescript_files() {
     let found = R3
         .parse(&ctx(&[]), &out(0, &String::from_utf8(run.stdout).unwrap()))
         .unwrap();
-    let files: Vec<String> = found
+    let mut got: Vec<String> = found
         .iter()
         .map(|f| format!("{} {}", house::reply::place_text(&f.place), f.what))
         .collect();
     let mut want: Vec<String> = long
         .iter()
-        .chain(&["tool"])
         .map(|n| format!("{n} file has 401 lines, limit is 400"))
         .collect();
+    got.sort();
     want.sort();
-    let mut files = files;
-    files.sort();
-    assert_eq!(files, want);
+    assert_eq!(got, want);
 }

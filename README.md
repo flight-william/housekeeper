@@ -45,7 +45,7 @@ R17 ✓ Commit messages are records: `area: what changed`, then Why:, Proof:, Un
 | R2 Lint, warnings as errors | ruff | clippy, cargo-deny | SwiftLint | ShellCheck | ESLint |
 | R2 Types | – | (the compiler, through clippy) | – | – | tsc, TypeScript files only |
 | R2 No secret | gitleaks | gitleaks | gitleaks | gitleaks | gitleaks |
-| R3 Small | size counter; ruff PLR0915 if the repo's ruff settings select it | clippy too_many_lines, size counter | SwiftLint, size counter | size counter | size counter; ESLint max-lines-per-function and max-statements if the repo's config sets them |
+| R3 Small | size counter; ruff PLR0915 if the repo's ruff settings select it | clippy too_many_lines, size counter | SwiftLint, size counter | size counter | size counter (files); functions only by ESLint max-lines-per-function and max-statements if the repo's config sets them (`house init` gives the rules) |
 | R4 Simple | ruff C901 if the repo's ruff settings select it | clippy too_many_arguments; cognitive_complexity –, not enabled | SwiftLint | – | ESLint complexity, max-depth, max-params and max-nested-callbacks if the repo's config sets them |
 | R7 Tested | [tests] commands, any language | ← | ← | ← | ← |
 | R8 Deterministic tests | Semgrep, 10 rules | Semgrep, 16 rules (8 for tests/, 8 for test modules) | Semgrep, 9 rules (partial parse of #expect/#require) | – | – |
@@ -156,36 +156,70 @@ at its root, and then writes no `.swift-format`. It runs `swiftformat --lint` on
 files and reads the repo's own `.swiftformat`, its `--exclude` included.
 
 JavaScript and TypeScript code is `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs` and
-`.cjs`. Each of the three tools runs the repo's own copy, `node_modules/.bin/<tool>`, as
-the repo's package scripts do, and the one on PATH when the repo has none; never `npx`,
-which downloads a tool that is missing. A missing tool is "cannot check" with its install
-line, as for ruff. A repo needs, as devDependencies, `prettier`, `eslint` and `typescript`
-(and `typescript-eslint`, for ESLint to read TypeScript), and an ESLint flat config,
-`eslint.config.js` (or `.mjs`, `.cjs`, `.ts`).
+`.cjs`. In a repo with a `package.json` at its root, each of the three tools is the repo's
+own copy, `node_modules/.bin/<tool>`, as its package scripts run it, and only that one: a
+missing one is "cannot check" with the fix `npm install (add <package> to
+devDependencies)`, never a copy found on PATH, whose version the repo did not choose. In a
+repo without a `package.json`, the copy in `node_modules/.bin` runs when it is there, else
+the one on PATH, and a missing one is "cannot check" with its `brew install` line, as for
+ruff. house never runs `npx`, which downloads a tool that is missing. A repo needs, as
+devDependencies, `prettier`, `eslint` and `typescript` (and `typescript-eslint`, for ESLint
+to read TypeScript), and an ESLint flat config, `eslint.config.js` (or `.mjs`, `.cjs`,
+`.ts`).
 
 - `prettier`, R1: `prettier --check` on the stage's code files, by the repo's own
   Prettier settings and `.prettierignore`. Only code files: `.json`, `.css` and `.md` are
   not handed to it; list `["prettier", "--check", "."]` under `[tests]` to format those too.
-  A file it cannot parse is left to ESLint and tsc, which report it.
+  A `node` script with no extension runs on its own with `--parser babel`: Prettier infers
+  no parser from `#!/usr/bin/env -S node --flags`. A file it cannot parse is left to
+  ESLint and tsc, which report it.
 - `eslint`, R2: `eslint --format json --max-warnings 0`, so a warning is a finding, at
   its file and line, by the repo's own config. A repo with no `eslint.config.*` is an R2
-  finding, not a pass, and so is a staged file no `files` pattern of the config covers
-  (ESLint lints only `.js`, `.mjs` and `.cjs` unless the config says more). A file the
-  config ignores is left out. Its size and complexity rules count as R3 and R4; its
-  `max-lines` is dropped when r3 runs, so a file's length has one owner.
+  finding, not a pass, and so is a staged file no `files` glob of the config covers:
+  ESLint lints only `.js`, `.mjs` and `.cjs` unless the config says more, so a `.ts` file
+  needs typescript-eslint, and a `node` script with no extension needs a glob of its own,
+  such as `{ files: ["bin/*"] }`. A file the config ignores is left out. An
+  `eslint-disable` comment that silences nothing is a finding
+  (`eslint unused-disable-directive`). Its size and complexity rules count as R3 and R4;
+  its `max-lines` is dropped when r3 runs, so a file's length has one owner.
 - `tsc`, R2 Types: tsc cannot check single files against a project's settings, so it
-  runs `tsc --noEmit --pretty false -p <tsconfig.json>` once per project: the nearest
-  `tsconfig.json` at or above each staged `.ts`, `.tsx`, `.mts` or `.cts` file, or a
-  staged `tsconfig.json` itself, so each package of a workspace is checked by its own. A
-  TypeScript file with no `tsconfig.json` above it runs the root one, which tsc reports
-  missing. Each error is a finding at its file and line. Limits: tsc checks the whole
-  project, and only the errors in the stage's files are reported (as for clippy), so a
-  change that breaks a caller in a file the stage did not touch is found by
-  `house check --all`, not at commit; a solution-style `tsconfig.json` (`"files": []` with
-  `references`) checks nothing, as `tsc -p` does, so put the nearest one beside the code;
-  a file the project's `include` leaves out is not checked.
-- `r3`: the 400-line file limit, as for every language. Function length is ESLint's
-  `max-lines-per-function`, when the repo's config sets it.
+  runs `tsc --noEmit --pretty false --listFiles -p <tsconfig>` once per project. The
+  projects are the nearest `tsconfig.json` at or above each staged `.ts`, `.tsx`, `.mts`
+  or `.cts` file (or a staged `tsconfig.json` itself), with the configs it references
+  in its own folder (Vite's earlier root, `include` `src` and a reference to
+  `tsconfig.node.json` for `vite.config.ts`). A reference to another folder is not
+  followed from there, so staging one app file checks the app, not every library it
+  references; the libraries' own files have their own nearest config. A solution-style
+  `tsconfig.json` (`"files": []` with `references`, as Vite's react-ts template now
+  writes it) checks nothing itself, so every project it references runs instead, and the
+  walk goes deeper only through such configs. house reads the tsconfig files as tsc
+  writes them, comments, trailing commas and a byte order mark included. An
+  `incremental` or `composite` project writes a `.tsbuildinfo` file even under
+  `--noEmit`, beside its tsconfig unless told where, so each run is given
+  `--tsBuildInfoFile` in a temporary folder outside the repo, removed when the runs are
+  done: a check leaves the working tree as it was. house does not run `tsc -b`, which
+  builds the whole graph of referenced projects, in order, and writes their outputs
+  unless told not to. Each error is a finding at its file and
+  line. Each run lists the files it checked, and a staged TypeScript file that no run
+  lists, because no project's `include` or `files` takes it in or because no
+  `tsconfig.json` is above it at all, is an R2 finding: "tsc: no project includes this
+  file". Limits: tsc checks the whole project, and only the errors in the stage's files
+  are reported (as for clippy), so a change that breaks a caller in a file the stage did
+  not touch is found by `house check --all`, not at commit. A project that references a
+  `composite` one reads that project's built declarations, so before it is built tsc
+  reports TS6305 ("Output file ... has not been built from source file ...") at each
+  import from it: that is "cannot check" (exit 2), with the fix "build the referenced
+  projects first (tsc -b)", not a finding.
+- `r3`: the 400-line file limit, as for every language. house counts no JavaScript or
+  TypeScript function: R3's 60-line function limit is ESLint's `max-lines-per-function`,
+  and only when the repo's config sets it. `house init` says so in a JavaScript or
+  TypeScript repo, and writes the rules to add into the starter `.house.toml` as a
+  comment: `rules: { "max-lines-per-function": ["error", 60], "max-lines": ["error",
+  400] }` (`max-lines` keeps the file limit in editors; house drops it when r3 runs).
+
+`house init` names the JavaScript tools (prettier, eslint, tsc, with r3 and semgrep) in a
+repo with a `tsconfig.json` or a tracked JavaScript or TypeScript file, not in one with
+only a `package.json`, which a Python or Rust repo may hold for a tool it runs.
 
 Every `Cargo.toml` a stage sends is also read by house itself, whatever `[tools]` lists: a
 lint set to `allow` (or `expect`) in a `[lints]` or `[workspace.lints]` table silences it for

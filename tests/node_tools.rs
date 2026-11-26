@@ -171,3 +171,198 @@ fn real_tsc_reports_type_errors_in_each_project() {
     }
     assert!(text.contains("[tsc TS2322]"), "{text}");
 }
+
+/// A stand-in tsc for `node_modules/.bin`: a project run that checked no file.
+const FAKE_TSC: &str = "#!/bin/sh\nexit 0\n";
+
+#[test]
+fn a_staged_typescript_file_no_project_lists_is_reported() {
+    let root = staged(
+        "node-no-project",
+        &["tsc"],
+        &[
+            ("node_modules/.bin/tsc", FAKE_TSC),
+            ("tsconfig.json", "{ \"include\": [\"src\"] }\n"),
+            ("scripts/seed.ts", "export const a = 1;\n"),
+        ],
+    );
+    let (code, text) = check(&root, Some("/usr/bin:/bin"));
+    assert_eq!(code, 1, "{text}");
+    assert!(
+        text.contains("R2 scripts/seed.ts: tsc: no project includes this file."),
+        "{text}"
+    );
+}
+
+/// Vite's react-ts layout: a solution-style root that only references its projects.
+const VITE_ROOT: &str = "{\n  \"files\": [],\n  \"references\": [\n    { \"path\": \"./tsconfig.app.json\" },\n    { \"path\": \"./tsconfig.node.json\" }\n  ]\n}\n";
+const VITE_APP: &str = "{\n  \"compilerOptions\": {\n    \"strict\": true,\n    /* Bundler mode */\n    \"moduleResolution\": \"bundler\",\n    \"module\": \"ESNext\",\n    \"noEmit\": true,\n  },\n  \"include\": [\"src\"]\n}\n";
+const VITE_NODE: &str = "{ \"compilerOptions\": { \"strict\": true, \"noEmit\": true }, \"include\": [\"vite.config.ts\"] }\n";
+
+#[test]
+fn real_tsc_follows_references_and_reports_files_no_project_holds() {
+    if !installed("tsc") {
+        return;
+    }
+    let root = staged(
+        "node-vite",
+        &["tsc"],
+        &[
+            ("tsconfig.json", VITE_ROOT),
+            ("tsconfig.app.json", VITE_APP),
+            ("tsconfig.node.json", VITE_NODE),
+            ("src/main.ts", "export const n: number = \"one\";\n"),
+            ("vite.config.ts", "export default {};\n"),
+            ("scripts/seed.ts", "export const s = 1;\n"),
+        ],
+    );
+    let (code, text) = check(&root, None);
+    assert_eq!(code, 1, "{text}");
+    assert!(text.contains("R2 src/main.ts:1: "), "{text}");
+    assert!(text.contains("[tsc TS2322]"), "{text}");
+    assert!(
+        text.contains("R2 scripts/seed.ts: tsc: no project includes this file."),
+        "{text}"
+    );
+    assert!(!text.contains("vite.config.ts"), "{text}");
+    let tracked = std::process::Command::new("git")
+        .args(["status", "--porcelain", "--ignored"])
+        .current_dir(&root)
+        .output()
+        .unwrap();
+    assert!(
+        !String::from_utf8_lossy(&tracked.stdout).contains("tsbuildinfo"),
+        "tsc wrote into the working tree"
+    );
+
+    let bare = staged(
+        "node-orphan",
+        &["tsc"],
+        &[("a.ts", "export const a = 1;\n")],
+    );
+    let (code, text) = check(&bare, None);
+    assert_eq!(code, 1, "{text}");
+    assert!(
+        text.contains("R2 a.ts: tsc: no project includes this file."),
+        "{text}"
+    );
+}
+
+#[test]
+fn real_prettier_reads_node_scripts_whatever_their_first_line() {
+    if !installed("prettier") {
+        return;
+    }
+    let root = staged(
+        "node-shebang",
+        &["prettier"],
+        &[
+            (
+                "bin/flags",
+                "#!/usr/bin/env -S node --no-warnings\nconsole.log( 1 )\n",
+            ),
+            ("bin/plain", "#!/usr/bin/env node\nconsole.log(1);\n"),
+        ],
+    );
+    let (code, text) = check(&root, None);
+    assert_eq!(code, 1, "{text}");
+    assert!(text.contains("R1 bin/flags: not formatted"), "{text}");
+    assert!(!text.contains("bin/plain"), "{text}");
+}
+
+#[test]
+fn with_a_package_json_a_missing_local_tool_is_npm_installed_not_taken_from_path() {
+    let root = staged(
+        "node-pkg-missing",
+        &["eslint", "prettier", "tsc"],
+        &[
+            ("package.json", "{ \"private\": true }\n"),
+            ("tsconfig.json", "{}\n"),
+            ("a.ts", "export const a = 1;\n"),
+        ],
+    );
+    // An eslint on PATH that would report a finding: it must not run.
+    let elsewhere = common::fresh("node-path-tools");
+    write(&elsewhere, "eslint", "#!/bin/sh\necho '[]'\nexit 1\n");
+    let path = format!("{}:/usr/bin:/bin", elsewhere.display());
+    let (code, text) = check(&root, Some(&path));
+    assert_eq!(code, 2, "{text}");
+    for (tool, package) in [
+        ("eslint", "eslint"),
+        ("prettier", "prettier"),
+        ("tsc", "typescript"),
+    ] {
+        let line = format!(
+            "node_modules/.bin/{tool} is not installed. fix: npm install (add {package} to devDependencies) [{tool}]"
+        );
+        assert!(text.contains(&line), "{line}: {text}");
+    }
+    assert!(!text.contains("brew install"), "{text}");
+}
+
+#[test]
+fn the_build_info_a_tsc_run_writes_is_gone_after_the_check() {
+    // A stand-in tsc that writes its --tsBuildInfoFile, as an incremental project
+    // does, and logs where (outside the repo).
+    let log = common::fresh("node-buildinfo-log").join("where");
+    let fake = format!(
+        "#!/bin/sh\nwhile [ $# -gt 0 ]; do\n  if [ \"$1\" = --tsBuildInfoFile ]; then\n    mkdir -p \"$(dirname \"$2\")\" && echo x > \"$2\" && echo \"$2\" >> {}\n  fi\n  shift\ndone\nexit 0\n",
+        log.display()
+    );
+    let root = staged(
+        "node-buildinfo",
+        &["tsc"],
+        &[
+            ("node_modules/.bin/tsc", &fake),
+            ("tsconfig.json", "{}\n"),
+            ("a.ts", "export const a = 1;\n"),
+        ],
+    );
+    let (code, text) = check(&root, Some("/usr/bin:/bin"));
+    assert_eq!(code, 1, "{text}");
+    let written = std::fs::read_to_string(&log).unwrap();
+    let info = std::path::Path::new(written.trim());
+    assert!(!info.starts_with(&root), "{info:?}");
+    assert!(!info.exists(), "{info:?} was left behind");
+}
+
+#[test]
+fn real_tsc_leaves_the_working_tree_clean_for_incremental_and_composite_projects() {
+    if !installed("tsc") {
+        return;
+    }
+    let root = staged(
+        "node-composite",
+        &["tsc"],
+        &[
+            (
+                "lib/tsconfig.json",
+                "{ \"compilerOptions\": { \"composite\": true, \"strict\": true }, \"include\": [\"*.ts\"] }\n",
+            ),
+            ("lib/a.ts", "export const a: number = \"one\";\n"),
+            (
+                "app/tsconfig.json",
+                "{ \"compilerOptions\": { \"incremental\": true, \"strict\": true }, \"include\": [\"*.ts\"] }\n",
+            ),
+            ("app/b.ts", "export const b = 1;\n"),
+        ],
+    );
+    let (code, text) = check(&root, None);
+    assert_eq!(code, 1, "{text}");
+    assert!(text.contains("R2 lib/a.ts:1: "), "{text}");
+    let status = Command::new("git")
+        .args([
+            "status",
+            "--porcelain",
+            "--ignored",
+            "--untracked-files=all",
+        ])
+        .current_dir(&root)
+        .output()
+        .unwrap();
+    let status = String::from_utf8_lossy(&status.stdout);
+    assert!(
+        status.lines().all(|l| l.starts_with("A ")),
+        "the check wrote into the working tree:\n{status}"
+    );
+}

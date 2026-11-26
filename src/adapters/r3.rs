@@ -19,7 +19,9 @@ const EXITS: Exits = Exits {
     found: &[],
 };
 
-const EXTENSIONS: [&str; 5] = [".py", ".sh", ".bash", ".rs", ".swift"];
+/// The extensions r3 counts, with `JS_EXTENSIONS`; scripts/r3_count.py must count each
+/// (tests/r3.rs runs it over one file per extension).
+pub const EXTENSIONS: [&str; 5] = [".py", ".sh", ".bash", ".rs", ".swift"];
 
 fn script_path() -> String {
     let dir = std::env::var("HOUSE_SCRIPTS_DIR")

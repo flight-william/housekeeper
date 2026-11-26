@@ -1,9 +1,9 @@
 //! Prettier, for JavaScript and TypeScript: `prettier --check` (R1) on the stage's code
-//! files (`JS_EXTENSIONS`) and `node` scripts, read from its text output (Prettier
+//! files (`JS_EXTENSIONS`) and, with `--parser babel`, its `node` scripts, read from its text output (Prettier
 //! 3.10.1). It reads the repo's own Prettier settings and `.prettierignore`.
 
 use super::{Exits, node, stage_file, then_files};
-use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
+use crate::adapter::{Adapter, CannotCheck, Command, Context, Language, Output};
 use crate::finding::{Finding, Place};
 
 pub struct Prettier;
@@ -25,15 +25,31 @@ impl Adapter for Prettier {
     fn brew_formula(&self) -> &'static str {
         "prettier"
     }
+    fn install(&self, ctx: &Context) -> String {
+        node::install(&ctx.root, "prettier", self.brew_formula())
+    }
     fn command(&self, ctx: &Context) -> Option<Command> {
-        let files = node::js_files(ctx);
-        if files.is_empty() {
-            return None;
-        }
-        Some(Command {
-            program: node::program(&ctx.root, "prettier"),
-            args: then_files(&["--check"], files),
+        self.commands(ctx).into_iter().next()
+    }
+    /// The code files, then the `node` scripts with `--parser babel`: Prettier infers a
+    /// parser from a file's extension or a plain `#!/usr/bin/env node`, not from
+    /// `#!/usr/bin/env -S node --flags`, and exits 2 for such a script.
+    fn commands(&self, ctx: &Context) -> Vec<Command> {
+        let (scripts, code): (Vec<String>, Vec<String>) = node::js_files(ctx)
+            .into_iter()
+            .partition(|f| ctx.first_line_is(f, Language::Node));
+        let program = node::program(&ctx.root, "prettier");
+        [
+            (code, &["--check"][..]),
+            (scripts, &["--check", "--parser", "babel"][..]),
+        ]
+        .into_iter()
+        .filter(|(files, _)| !files.is_empty())
+        .map(|(files, options)| Command {
+            program: program.clone(),
+            args: then_files(options, files),
         })
+        .collect()
     }
     fn parse(&self, ctx: &Context, out: &Output) -> Result<Vec<Finding>, CannotCheck> {
         // `[warn] <file>` on stderr names each file to format; its last `[warn]` line

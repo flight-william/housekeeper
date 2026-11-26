@@ -64,13 +64,18 @@ fn checks_the_code_files_and_node_scripts_only() {
     );
     c.languages.insert("bin/tool".into(), Language::Node);
     c.languages.insert("bin/other".into(), Language::Shell);
-    let cmd = Prettier.command(&c).unwrap();
-    assert_eq!(cmd.program, "prettier");
+    let runs: Vec<String> = Prettier
+        .commands(&c)
+        .iter()
+        .map(|cmd| format!("{} {}", cmd.program, cmd.args.join(" ")))
+        .collect();
+    // A script named by its first line gets a parser: Prettier infers none from
+    // `#!/usr/bin/env -S node --flags`, and exits 2.
     assert_eq!(
-        cmd.args,
+        runs,
         [
-            "--check", "--", "a.ts", "b.tsx", "c.mts", "d.cts", "e.js", "f.jsx", "g.mjs", "h.cjs",
-            "bin/tool"
+            "prettier --check -- a.ts b.tsx c.mts d.cts e.js f.jsx g.mjs h.cjs",
+            "prettier --check --parser babel -- bin/tool"
         ]
     );
 }

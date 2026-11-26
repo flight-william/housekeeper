@@ -38,7 +38,7 @@ pub struct Ran {
 
 /// Run `cmd` in `root`. A program not on PATH gives "not installed" with the brew line.
 pub fn run(cmd: &Command, root: &Path, brew_formula: &str, guard: Duration) -> Ran {
-    timed(cmd, root, brew_formula, guard, false, &[])
+    timed(cmd, root, &brew(brew_formula), guard, false, &[])
 }
 
 /// `run`, with `env` set in the command's environment after the GIT_* are stripped.
@@ -49,25 +49,42 @@ pub fn run_env(
     guard: Duration,
     env: &[(String, String)],
 ) -> Ran {
-    timed(cmd, root, brew_formula, guard, false, env)
+    timed(cmd, root, &brew(brew_formula), guard, false, env)
+}
+
+/// `run_env`, with `install` as the fix when the program is not installed, such as
+/// "npm install (add eslint to devDependencies)" (`Adapter::install`).
+pub fn run_install(
+    cmd: &Command,
+    root: &Path,
+    install: &str,
+    guard: Duration,
+    env: &[(String, String)],
+) -> Ran {
+    timed(cmd, root, install, guard, false, env)
+}
+
+/// The fix for a program not installed that Homebrew installs.
+fn brew(formula: &str) -> String {
+    format!("brew install {formula}")
 }
 
 /// `run`, with the command in a process group of its own; at the guard the whole
 /// group is stopped, not the command alone.
 pub fn run_group(cmd: &Command, root: &Path, brew_formula: &str, guard: Duration) -> Ran {
-    timed(cmd, root, brew_formula, guard, true, &[])
+    timed(cmd, root, &brew(brew_formula), guard, true, &[])
 }
 
 fn timed(
     cmd: &Command,
     root: &Path,
-    brew_formula: &str,
+    install: &str,
     guard: Duration,
     group: bool,
     env: &[(String, String)],
 ) -> Ran {
     let start = Instant::now();
-    let (result, stopped_output) = match run_inner(cmd, root, brew_formula, guard, group, env) {
+    let (result, stopped_output) = match run_inner(cmd, root, install, guard, group, env) {
         Ok(out) => (Ok(out), None),
         Err(Stop::Failed(c)) => (Err(c), None),
         Err(Stop::Hung(c, [stdout, stderr])) => {
@@ -141,7 +158,7 @@ const STOPPED_READ: Duration = Duration::from_secs(1);
 fn run_inner(
     cmd: &Command,
     root: &Path,
-    brew_formula: &str,
+    install: &str,
     guard: Duration,
     group: bool,
     env: &[(String, String)],
@@ -166,7 +183,7 @@ fn run_inner(
         Stop::Failed(match e.kind() {
             ErrorKind::NotFound => CannotCheck {
                 what: format!("{} is not installed", cmd.program),
-                fix: format!("brew install {brew_formula}"),
+                fix: install.to_string(),
             },
             _ => CannotCheck {
                 what: format!("{} could not start: {e}", cmd.program),

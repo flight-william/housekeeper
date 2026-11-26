@@ -47,11 +47,11 @@ impl Context {
 pub const SHELL_EXTENSIONS: [&str; 2] = [".sh", ".bash"];
 
 /// The extensions that make a file JavaScript or TypeScript code, for Prettier, ESLint
-/// and r3: code files only, not `.json`, `.css` or `.md`.
+/// and r3: code files only, not `.json`, `.css` or `.md`. The TypeScript ones first.
 pub const JS_EXTENSIONS: [&str; 8] = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
-/// The TypeScript ones among them: a staged one runs tsc.
-pub const TS_EXTENSIONS: [&str; 4] = [".ts", ".tsx", ".mts", ".cts"];
+/// The TypeScript ones: the first four of `JS_EXTENSIONS`. A staged one runs tsc.
+pub const TS_EXTENSIONS: &[&str] = JS_EXTENSIONS.split_at(4).0;
 
 /// A language a file's first line can name: `#!/usr/bin/env python3`, `#!/bin/sh`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,6 +97,12 @@ pub trait Adapter {
     /// The Homebrew formula that installs `program`.
     fn brew_formula(&self) -> &'static str;
 
+    /// The fix when `program` is not installed: `brew install <brew_formula>`, unless
+    /// the tool comes from the repo itself (the JS tools in a repo with package.json).
+    fn install(&self, _ctx: &Context) -> String {
+        format!("brew install {}", self.brew_formula())
+    }
+
     /// Whether it runs when `.house.toml` lists no tools for the stage, and is named in
     /// `house init`'s starter list. `false` for a tool a repo chooses instead of
     /// another (SwiftFormat beside Apple's swift format): it then runs only by name.
@@ -130,6 +136,17 @@ pub trait Adapter {
     /// Read the tool's result. Findings are problems (house exit 1); a tool that exits
     /// non-zero because it found problems gives findings, not `CannotCheck`.
     fn parse(&self, ctx: &Context, out: &Output) -> Result<Vec<Finding>, CannotCheck>;
+
+    /// Findings that need every command's output at once, after each was parsed
+    /// (tsc: a staged file that no project lists). Asked only when every command ran;
+    /// none by default.
+    fn joined(&self, _ctx: &Context, _outs: &[Output]) -> Vec<Finding> {
+        Vec::new()
+    }
+
+    /// Called once after the adapter's commands, however they ended: drop what its
+    /// runs left outside the repo (tsc's build info). Nothing by default.
+    fn finished(&self, _ctx: &Context) {}
 
     /// Files in `out` the tool could not read because of its own limit, not the file's
     /// fault (Semgrep's parser misses valid Swift): counted, never findings. A parse

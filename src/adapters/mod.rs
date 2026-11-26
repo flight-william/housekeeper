@@ -1,7 +1,7 @@
 //! One file per tool, each behind the one Adapter interface (src/adapter.rs).
 
-use crate::adapter::{Adapter, CannotCheck, Output};
-use crate::finding::Finding;
+use crate::adapter::{Adapter, CannotCheck, Context, Output};
+use crate::finding::{Finding, Place};
 use crate::run::first_line;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
@@ -96,6 +96,17 @@ pub(crate) fn stage_file(root: &Path, files: &[String], path: &str) -> Option<St
         .iter()
         .find(|f| id(&root.join(f)) == Some(wanted))
         .cloned()
+}
+
+/// Only the findings in files the run was asked about (`ctx.files`: staged at
+/// commit, pushed at push). cargo and tsc check whole projects, so without this a
+/// commit of one file reported every other file's old problems too.
+pub(crate) fn listed(ctx: &Context, findings: Vec<Finding>) -> Vec<Finding> {
+    let asked = |f: &Finding| match &f.place {
+        Place::File(file) => ctx.files.contains(file),
+        _ => true,
+    };
+    findings.into_iter().filter(asked).collect()
 }
 
 /// A tool's documented exit codes; each adapter keeps its table in its own file.

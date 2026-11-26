@@ -8,9 +8,9 @@ mod common;
 
 use house::adapter::{Adapter, Stage};
 use house::adapters::{
-    cargo_deny::CargoDeny, cargo_fmt::CargoFmt, clippy::Clippy, r3::R3, ruff::Ruff,
-    ruff::RuffFormat, semgrep::Semgrep, shellcheck::Shellcheck, swift_format::SwiftFormat,
-    swiftformat::Swiftformat, swiftlint::SwiftLint,
+    cargo_deny::CargoDeny, cargo_fmt::CargoFmt, clippy::Clippy, eslint::Eslint, prettier::Prettier,
+    r3::R3, ruff::Ruff, ruff::RuffFormat, semgrep::Semgrep, shellcheck::Shellcheck,
+    swift_format::SwiftFormat, swiftformat::Swiftformat, swiftlint::SwiftLint, tsc::Tsc,
 };
 use house::cli;
 use house::reply::Report;
@@ -244,4 +244,46 @@ fn cargo_deny_checks_a_workspace_in_a_folder_named_like_an_option() {
     }
     let root = dash_crate("dash-cargo-deny");
     assert!(rust_findings(&root, Box::new(CargoDeny)).is_empty());
+}
+
+#[test]
+fn prettier_checks_files_named_like_options() {
+    if !installed("prettier", &["--version"]) {
+        return;
+    }
+    // `--write` would make Prettier rewrite the files it checks.
+    let staged = names("ts", &["--write", "--log-level=silent"]);
+    let root = repo("dash-prettier", "ts", &[], &staged, "const a = 1\n");
+    linted_as_files(&root, Box::new(Prettier), &staged);
+}
+
+#[test]
+fn eslint_lints_files_named_like_options() {
+    if !installed("eslint", &["--version"]) {
+        return;
+    }
+    // `--fix` would make ESLint rewrite the files; `--output-file` would write its report.
+    let staged = names("js", &["--fix", "--output-file=Sources/A"]);
+    let config = "export default [{ rules: { \"no-unused-vars\": \"error\" } }];\n";
+    let setup = [("eslint.config.mjs", config)];
+    let root = repo("dash-eslint", "js", &setup, &staged, "const unused = 1;\n");
+    linted_as_files(&root, Box::new(Eslint), &staged);
+}
+
+#[test]
+fn tsc_checks_a_project_in_a_folder_named_like_an_option() {
+    if !installed("tsc", &["--version"]) {
+        return;
+    }
+    let staged: Vec<String> = names("ts", &["--build"])
+        .iter()
+        .map(|n| format!("-ws/{n}"))
+        .collect();
+    let setup = [(
+        "-ws/tsconfig.json",
+        "{ \"compilerOptions\": { \"strict\": true } }\n",
+    )];
+    let wrong = "export const n: number = \"one\";\n";
+    let root = repo("dash-tsc", "ts", &setup, &staged, wrong);
+    linted_as_files(&root, Box::new(Tsc), &staged);
 }

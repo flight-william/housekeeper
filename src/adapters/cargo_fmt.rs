@@ -1,6 +1,6 @@
 //! R1 for Rust: `cargo fmt --check`, one finding per "Diff in <path>:<line>:" block.
 
-use super::{Exits, path_value};
+use super::{Exits, listed, path_value};
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
 use crate::finding::{Finding, Place};
 use std::path::Path;
@@ -100,17 +100,6 @@ fn excludes(workspace: &toml::Table, inside: &Path) -> bool {
     list.iter()
         .filter_map(toml::Value::as_str)
         .any(|e| inside.starts_with(e.trim_start_matches("./").trim_end_matches('/')))
-}
-
-/// Only the findings in files the run was asked about (`ctx.files`: staged at
-/// commit, pushed at push). cargo checks whole workspaces, so without this a
-/// commit of one file reported every other file's old problems too.
-pub(crate) fn listed(ctx: &Context, findings: Vec<Finding>) -> Vec<Finding> {
-    let asked = |f: &Finding| match &f.place {
-        Place::File(file) => ctx.files.contains(file),
-        _ => true,
-    };
-    findings.into_iter().filter(asked).collect()
 }
 
 /// A path the tool printed, made relative to the repo root with `/` separators.

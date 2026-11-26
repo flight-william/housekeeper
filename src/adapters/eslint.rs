@@ -28,6 +28,9 @@ const NO_CONFIG: &str = "ESLint couldn't find an eslint.config";
 /// ruff's `--force-exclude`. Not a finding.
 const IGNORED: &str = "File ignored because of a matching ignore pattern";
 
+/// ESLint's warning for an `eslint-disable` comment that silences nothing.
+const UNUSED_DIRECTIVE: &str = "Unused eslint-disable directive";
+
 /// ESLint's warning for a file no `files` pattern of the config covers: the file is
 /// not linted at all, so it is a finding.
 const UNCONFIGURED: &str = "File ignored because no matching configuration was supplied";
@@ -41,6 +44,9 @@ impl Adapter for Eslint {
     }
     fn brew_formula(&self) -> &'static str {
         "eslint"
+    }
+    fn install(&self, ctx: &Context) -> String {
+        node::install(&ctx.root, "eslint", self.brew_formula())
     }
     fn yields_to(&self) -> &'static [(&'static str, &'static str)] {
         &[(MAX_LINES, "r3")]
@@ -134,10 +140,16 @@ fn finding(place: Place, m: Message) -> Finding {
             "fix the syntax error".to_string(),
             "eslint parse-error".to_string(),
         ),
+        None if m.message.starts_with(UNUSED_DIRECTIVE) => (
+            "R2",
+            sentence(&m.message),
+            "remove the unused eslint-disable comment".to_string(),
+            "eslint unused-disable-directive".to_string(),
+        ),
         None if m.message.starts_with(UNCONFIGURED) => (
             "R2",
             "ESLint has no configuration for this file".to_string(),
-            "add a files pattern for it to the repo's eslint.config, or ignore it there"
+            "add a files glob that matches it to eslint.config (a node script with no extension needs one, such as \"bin/*\"), or ignore it there"
                 .to_string(),
             "eslint no-matching-config".to_string(),
         ),

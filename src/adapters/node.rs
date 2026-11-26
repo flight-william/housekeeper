@@ -15,13 +15,30 @@ pub(crate) fn js_files(ctx: &Context) -> Vec<String> {
         .collect()
 }
 
-/// The repo's own `node_modules/.bin/<tool>`, absolute, as its package scripts run it;
-/// else `tool`, looked up on PATH. Never `npx`, which downloads a missing tool.
+/// Whether the repo is a Node package: a `package.json` at its root.
+fn package(root: &Path) -> bool {
+    root.join("package.json").is_file()
+}
+
+/// The repo's own `node_modules/.bin/<tool>`, absolute, as its package scripts run it:
+/// always in a repo with a package.json, whose tools are its devDependencies, else
+/// when it is there. Otherwise `tool`, looked up on PATH. Never `npx`, which
+/// downloads a missing tool.
 pub(crate) fn program(root: &Path, tool: &str) -> String {
     let local = root.join("node_modules/.bin").join(tool);
-    if local.is_file() {
+    if package(root) || local.is_file() {
         local.to_string_lossy().into_owned()
     } else {
         tool.to_string()
+    }
+}
+
+/// The fix for a missing tool: in a Node package, install its devDependencies (adding
+/// `npm_package` if it is not one); else `brew install <formula>`.
+pub(crate) fn install(root: &Path, npm_package: &str, formula: &str) -> String {
+    if package(root) {
+        format!("npm install (add {npm_package} to devDependencies)")
+    } else {
+        format!("brew install {formula}")
     }
 }

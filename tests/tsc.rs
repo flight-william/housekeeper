@@ -1,26 +1,17 @@
 //! The tsc adapter on output captured from TypeScript 6.0.3 run on
 //! tests/fixtures/typescript/ planted at /tmp/house-fixture/tsplant
-//! (tests/fixtures/tsc/: planted and syntax exit 2, clean exit 0, no_tsconfig exit 1).
+//! (tests/fixtures/tsc/: planted and syntax exit 2, clean exit 0, no_tsconfig exit 1;
+//! unbuilt, exit 2, at /tmp/house-fixture/tsmono). Its projects: tests/tsc_projects.rs.
 
-#[path = "common/temp.rs"]
-mod common;
+mod tsc_support;
 
-use house::adapter::{Adapter, Context, Output, Stage};
+use house::adapter::{Adapter, Context, Output};
 use house::adapters::tsc::Tsc;
-use house::finding::Place;
-use std::path::{Path, PathBuf};
+use house::finding::{Finding, Place};
+use std::path::Path;
+use tsc_support::{ctx_at, projects, tree_with};
 
 const ROOT: &str = "/private/tmp/house-fixture/tsplant";
-
-fn ctx_at(root: &Path, files: &[&str]) -> Context {
-    Context {
-        root: root.to_path_buf(),
-        stage: Stage::Commit,
-        files: files.iter().map(|f| f.to_string()).collect(),
-        push_range: None,
-        languages: Default::default(),
-    }
-}
 
 fn ctx(files: &[&str]) -> Context {
     ctx_at(Path::new(ROOT), files)
@@ -36,104 +27,33 @@ fn fixture(name: &str, exit: i32) -> Output {
     }
 }
 
-/// A folder holding an empty file at each of `paths`.
-fn tree(name: &str, paths: &[&str]) -> PathBuf {
-    let root = common::fresh(name);
-    for p in paths {
-        let file = root.join(p);
-        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-        std::fs::write(file, "{}\n").unwrap();
-    }
-    root
-}
-
-fn projects(c: &Context) -> Vec<String> {
-    Tsc.commands(c)
+/// Each finding as `rule place: what [tool rule]`.
+fn lines(found: &[Finding]) -> Vec<String> {
+    found
         .iter()
-        .map(|cmd| cmd.args.join(" "))
+        .map(|f| {
+            format!(
+                "{} {}: {} [{}]",
+                f.rule,
+                house::reply::place_text(&f.place),
+                f.what,
+                f.tool_rule
+            )
+        })
         .collect()
 }
 
 #[test]
-fn runs_once_per_nearest_tsconfig_of_the_staged_typescript_files() {
-    let root = tree(
-        "tsc-projects",
-        &["tsconfig.json", "packages/a/tsconfig.json"],
-    );
-    let c = ctx_at(
-        &root,
-        &[
-            "src/x.ts",
-            "packages/a/src/y.tsx",
-            "packages/a/z.mts",
-            "src/w.cts",
-            "README.md",
-        ],
-    );
+fn a_typescript_file_under_no_tsconfig_is_in_no_project() {
+    let root = tree_with("tsc-missing", &[]);
+    let c = ctx_at(&root, &["a.ts"]);
+    // No project to run: tsc --version still proves tsc is there, and the file is
+    // reported, not passed.
+    assert_eq!(projects(&c), ["--version"]);
+    let found = Tsc.joined(&c, &[fixture("version", 0)]);
     assert_eq!(
-        projects(&c),
-        [
-            "--noEmit --pretty false -p tsconfig.json",
-            "--noEmit --pretty false -p packages/a/tsconfig.json"
-        ]
-    );
-    assert_eq!(Tsc.commands(&c)[0].program, "tsc");
-}
-
-#[test]
-fn skips_without_typescript_files() {
-    let root = tree("tsc-none", &["tsconfig.json"]);
-    assert!(
-        Tsc.commands(&ctx_at(&root, &["a.js", "b.jsx", "c.md"]))
-            .is_empty()
-    );
-    assert!(Tsc.command(&ctx_at(&root, &["a.js"])).is_none());
-}
-
-#[test]
-fn a_staged_tsconfig_runs_its_project() {
-    let root = tree("tsc-config", &["web/tsconfig.json"]);
-    assert_eq!(
-        projects(&ctx_at(&root, &["web/tsconfig.json"])),
-        ["--noEmit --pretty false -p web/tsconfig.json"]
-    );
-}
-
-#[test]
-fn a_typescript_file_with_no_tsconfig_runs_the_root_one_which_tsc_reports_missing() {
-    let root = tree("tsc-missing", &[]);
-    assert_eq!(
-        projects(&ctx_at(&root, &["a.ts"])),
-        ["--noEmit --pretty false -p tsconfig.json"]
-    );
-    let found = Tsc
-        .parse(&ctx(&["a.ts"]), &fixture("no_tsconfig", 1))
-        .unwrap();
-    assert_eq!(found.len(), 1);
-    assert_eq!(found[0].place, Place::Repo);
-    assert_eq!(found[0].tool_rule, "tsc TS5058");
-    assert_eq!(
-        found[0].what,
-        "The specified path does not exist: 'missing/tsconfig.json'"
-    );
-}
-
-#[test]
-fn a_tsconfig_path_like_an_option_gets_dot_slash() {
-    let root = tree("tsc-dash", &["-w/tsconfig.json"]);
-    assert_eq!(
-        projects(&ctx_at(&root, &["-w/a.ts"])),
-        ["--noEmit --pretty false -p ./-w/tsconfig.json"]
-    );
-}
-
-#[test]
-fn prefers_the_repos_own_node_modules_copy() {
-    let root = tree("tsc-local", &["tsconfig.json", "node_modules/.bin/tsc"]);
-    let cmd = Tsc.command(&ctx_at(&root, &["a.ts"])).unwrap();
-    assert_eq!(
-        PathBuf::from(cmd.program),
-        root.join("node_modules/.bin/tsc")
+        lines(&found),
+        ["R2 a.ts: tsc: no project includes this file [tsc no-project]"]
     );
 }
 
@@ -186,4 +106,57 @@ fn a_failure_with_nothing_readable_cannot_check() {
     };
     let err = Tsc.parse(&ctx(&["a.ts"]), &out).unwrap_err();
     assert!(err.what.contains("tsc exited 3"), "{}", err.what);
+}
+
+#[test]
+fn a_staged_file_no_project_lists_is_an_r2_finding() {
+    // tests/fixtures/typescript/tsconfig.json includes only src/.
+    let c = ctx(&["src/bad.ts", "scripts/seed.ts", "src/clean.ts"]);
+    let found = Tsc.joined(&c, &[fixture("planted", 2)]);
+    assert_eq!(
+        lines(&found),
+        ["R2 scripts/seed.ts: tsc: no project includes this file [tsc no-project]"]
+    );
+    assert_eq!(
+        found[0].fix,
+        "add it to the include or files of a tsconfig.json, or to a project one references"
+    );
+}
+
+#[test]
+fn a_file_any_one_project_lists_is_included() {
+    // The clean run lists src/clean.ts (src/bad.ts was gone when it was captured).
+    let c = ctx(&["src/clean.ts"]);
+    let other = Output {
+        exit: 0,
+        stdout: String::new(),
+        stderr: String::new(),
+    };
+    assert!(Tsc.joined(&c, &[other, fixture("clean", 0)]).is_empty());
+}
+
+#[test]
+fn the_listed_files_are_not_findings() {
+    let found = Tsc
+        .parse(&ctx(&["src/clean.ts"]), &fixture("clean", 0))
+        .unwrap();
+    assert!(found.is_empty(), "{found:?}");
+}
+
+#[test]
+fn an_unbuilt_referenced_project_cannot_check_rather_than_a_finding() {
+    // tests/fixtures/tsc/unbuilt: app references a composite lib whose output was never
+    // built, so tsc reports TS6305 at app's import; captured at /tmp/house-fixture/tsmono.
+    let c = ctx_at(
+        Path::new("/private/tmp/house-fixture/tsmono"),
+        &["app/src/main.ts"],
+    );
+    let err = Tsc.parse(&c, &fixture("unbuilt", 2)).unwrap_err();
+    assert!(
+        err.what
+            .starts_with("tsc: a referenced project has not been built: Output file"),
+        "{}",
+        err.what
+    );
+    assert_eq!(err.fix, "build the referenced projects first (tsc -b)");
 }

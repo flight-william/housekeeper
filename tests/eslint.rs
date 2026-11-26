@@ -1,6 +1,6 @@
 //! The eslint adapter on output captured from ESLint 10.15.0 (with typescript-eslint)
 //! run on tests/fixtures/typescript/ planted at /tmp/house-fixture/tsplant
-//! (tests/fixtures/eslint/: planted, syntax and ignored exit 1, clean exit 0,
+//! (tests/fixtures/eslint/: planted, syntax, ignored and directive exit 1, clean exit 0,
 //! no_config exit 2).
 
 #[path = "common/temp.rs"]
@@ -99,6 +99,12 @@ fn errors_and_warnings_are_r2_findings_at_their_line() {
     assert_eq!(found[0].what, "'unused' is assigned a value but never used");
     assert_eq!(found[0].fix, "correct the code at this line");
     assert_eq!(found[2].what, "ESLint has no configuration for this file");
+    // ESLint lints .js, .mjs and .cjs by default: a node script with no extension, or a
+    // .ts file without typescript-eslint, needs a files glob in the config.
+    assert_eq!(
+        found[2].fix,
+        "add a files glob that matches it to eslint.config (a node script with no extension needs one, such as \"bin/*\"), or ignore it there"
+    );
 }
 
 #[test]
@@ -178,4 +184,16 @@ fn output_it_cannot_read_cannot_check() {
     };
     let err = Eslint.parse(&ctx(&["src/a.ts"]), &out).unwrap_err();
     assert!(err.what.contains("eslint exited 2"), "{}", err.what);
+}
+
+#[test]
+fn an_unused_disable_directive_is_named_as_one() {
+    let found = Eslint
+        .parse(&ctx(&["src/directive.ts"]), &fixture("directive", 1))
+        .unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].rule, "R2");
+    assert_eq!(found[0].line, Some(1));
+    assert_eq!(found[0].tool_rule, "eslint unused-disable-directive");
+    assert_eq!(found[0].fix, "remove the unused eslint-disable comment");
 }
