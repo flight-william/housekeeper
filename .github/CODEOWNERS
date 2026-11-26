@@ -24,3 +24,11 @@
 **/deny.toml @flight-william
 **/.cargo/config.toml @flight-william
 **/.cargo/config @flight-william
+**/package.json @flight-william
+**/eslint.config.* @flight-william
+**/.eslintrc* @flight-william
+**/.eslintignore @flight-william
+**/tsconfig*.json @flight-william
+**/.prettierrc* @flight-william
+**/prettier.config.* @flight-william
+**/.prettierignore @flight-william

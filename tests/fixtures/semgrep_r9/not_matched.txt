@@ -43,3 +43,7 @@ r9-rust-allow rust/src/clean.rs: pub const SAMPLE: &str = "#[allow(dead_code)] f
 r9-rust-ignore rust/src/clean.rs: // #[allow(dead_code)] and #[ignore] here are words in a comment.
 r9-rust-let-underscore-in-test-mod rust/src/clean.rs: let _ = std::fs::remove_file(&self.0);
 r9-rust-let-underscore-in-tests-dir rust/tests/cleanup.rs: let _ = self.0.kill();
+r9-ts-ignore typescript/clean.ts: export const notes = "// @ts-ignore and /* @ts-expect-error */";
+r9-js-eslint-disable javascript/clean.js: export const notes = "// eslint-disable-next-line no-console";
+r9-js-test-skip typescript/clean.test.ts: it("skips rows", () => expect(page.skip(1)).toEqual([2, 3]));
+r9-js-test-only typescript/clean.test.ts: it("names one row", () => expect(page.only(0)).toBe(1));

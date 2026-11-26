@@ -132,6 +132,41 @@ fn swiftformat_settings_are_protected_in_any_folder() {
     }
 }
 
+/// ESLint, tsc and Prettier settings, in every spelling the tools read, in any folder:
+/// each can turn its tool off for the files below it, and package.json can hold the
+/// ESLint and Prettier settings itself (`eslintConfig`, `prettier`).
+#[test]
+fn typescript_tool_settings_are_protected_in_any_folder() {
+    for path in [
+        "package.json",
+        "web/package.json",
+        "eslint.config.js",
+        "eslint.config.mjs",
+        "web/eslint.config.ts",
+        ".eslintrc",
+        "web/.eslintrc.json",
+        ".eslintrc.cjs",
+        ".eslintignore",
+        "tsconfig.json",
+        "web/tsconfig.json",
+        "tsconfig.build.json",
+        ".prettierrc",
+        "web/.prettierrc.yaml",
+        "prettier.config.mjs",
+        ".prettierignore",
+    ] {
+        assert_eq!(check(&s(&[path]), &protected(), "m").len(), 1, "{path}");
+    }
+    for path in [
+        "src/eslint.ts",
+        "src/tsconfig.ts",
+        "docs/prettier.md",
+        "package-lock.json",
+    ] {
+        assert!(check(&s(&[path]), &protected(), "m").is_empty(), "{path}");
+    }
+}
+
 /// The Rust tools' settings at the repo root, where cargo-deny, clippy and rustfmt
 /// read them first: `**/` matches zero folders too.
 #[test]

@@ -42,6 +42,14 @@ pub static PROTECTED: &[&str] = &[
     "**/deny.toml",
     "**/.cargo/config.toml",
     "**/.cargo/config",
+    "**/package.json",
+    "**/eslint.config.*",
+    "**/.eslintrc*",
+    "**/.eslintignore",
+    "**/tsconfig*.json",
+    "**/.prettierrc*",
+    "**/prettier.config.*",
+    "**/.prettierignore",
 ];
 
 /// `PROTECTED` and the globs `.house.toml` adds under `[protected] extra`.

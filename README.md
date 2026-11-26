@@ -49,14 +49,23 @@ R17 ✓ Commit messages are records: `area: what changed`, then Why:, Proof:, Un
 | R4 Simple | ruff C901 if the repo's ruff settings select it | clippy too_many_arguments; cognitive_complexity –, not enabled | SwiftLint | – | ESLint complexity, max-depth, max-params and max-nested-callbacks if the repo's config sets them |
 | R7 Tested | [tests] commands, any language | ← | ← | ← | ← |
 | R8 Deterministic tests | Semgrep, 10 rules | Semgrep, 16 rules (8 for tests/, 8 for test modules) | Semgrep, 9 rules (partial parse of #expect/#require) | – | – |
-| R9 Nothing silenced | Semgrep, 6 rules | Semgrep + Cargo.toml lints, 4 rules | Semgrep, 6 rules | Semgrep, 1 rule | – |
+| R9 Nothing silenced | Semgrep, 6 rules | Semgrep + Cargo.toml lints, 4 rules | Semgrep, 6 rules | Semgrep, 1 rule | Semgrep, 4 rules |
 | R9 Protected files need the owner's approval | any language | ← | ← | ← | ← |
 | R17 Commit messages | any language | ← | ← | ← | ← |
 
 Other languages get only the language-free checks: R2 secrets, R7 tests, R9 approvals, R17.
-TypeScript and JavaScript have no Semgrep rules yet, so an `// eslint-disable` or
-`// @ts-ignore` comment is not reported (R8 and R9 are –); `house init` names `semgrep` in
-such a repo anyway, for its other files and for the rules to come.
+TypeScript and JavaScript files go to Semgrep for R9: an `eslint-disable` comment (all three
+forms), a `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck` comment, a skipped test
+(`it.skip`, `describe.skip`, `test.skip.each`, `it.skipIf`, `xit`, `xtest`, `xdescribe`) and
+a focused one (`.only`, `fit`, `fdescribe`) are findings; the same text inside a string is
+not. Only the Jest, Vitest and Mocha names count (`it`, `test`, `describe`, `context`,
+`suite`), so `.skip` on another object is left alone, and Node's `{ skip: true }` test
+option and a `// prettier-ignore` comment are not reported. They have no R8 rules yet.
+Their tools' settings are protected files in any folder: `package.json` (it can hold
+`eslintConfig` and `prettier`), `eslint.config.*`, `.eslintrc*`, `.eslintignore`,
+`tsconfig*.json`, `.prettierrc*`, `prettier.config.*` and `.prettierignore`. So a change to
+`package.json`, a dependency bump included, needs the owner's approval line, as a change to
+`pyproject.toml` does.
 
 A commit message's `Co-Authored-By:` line is optional, its key read in any case as git reads
 it (GitHub writes `Co-authored-by:`), and only in the final trailer block, the `Key: value`

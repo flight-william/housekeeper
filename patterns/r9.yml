@@ -104,6 +104,69 @@ rules:
     # heredoc that only mentions one does not start with it.
     pattern-regex: '(?m)^[ \t]*#[ \t]*shellcheck[ \t]+disable\b'
 
+  # ---- TypeScript and JavaScript ----
+  # In these languages '"..."' is any string: single, double or template quotes.
+  - id: r9-ts-ignore
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: "a `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck` comment silences tsc"
+    metadata:
+      fix: "remove the comment and fix the type error"
+    patterns:
+      - pattern-regex: '(//|/\*)\s*@ts-(ignore|expect-error|nocheck)\b'
+      - pattern-not-inside: '"..."'
+
+  - id: r9-js-eslint-disable
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: "an `eslint-disable` comment silences ESLint"
+    metadata:
+      fix: "remove the eslint-disable comment and fix what ESLint reports"
+    # eslint-disable, eslint-disable-line and eslint-disable-next-line, in a line
+    # or a block comment. ESLint's inline rule settings (`/* eslint rule: "off" */`)
+    # are not matched.
+    patterns:
+      - pattern-regex: '(//|/\*)\s*eslint-disable(-next-line|-line)?\b'
+      - pattern-not-inside: '"..."'
+
+  - id: r9-js-test-skip
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: "a `.skip` or `x`-prefixed test turns a test off"
+    metadata:
+      fix: "remove the skip and make the test pass"
+    # Jest, Vitest and Mocha names only: `.skip` on another object is not matched.
+    # Node's test runner options (`{ skip: true }`) are not matched.
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: $T.skip(...)
+              - pattern: $T.skip.each(...)
+              - pattern: $T.skipIf(...)
+          - metavariable-regex:
+              metavariable: $T
+              regex: ^(it|test|describe|context|suite)$
+      - pattern: xit(...)
+      - pattern: xtest(...)
+      - pattern: xdescribe(...)
+
+  - id: r9-js-test-only
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: "a `.only` or `f`-prefixed test turns every other test in the file off"
+    metadata:
+      fix: "remove the only so the whole suite runs"
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: $T.only(...)
+              - pattern: $T.only.each(...)
+          - metavariable-regex:
+              metavariable: $T
+              regex: ^(it|test|describe|context|suite)$
+      - pattern: fit(...)
+      - pattern: fdescribe(...)
+
   # ---- Swift ----
   - id: r9-swift-swiftlint-disable
     languages: [swift]

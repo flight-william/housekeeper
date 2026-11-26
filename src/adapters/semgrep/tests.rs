@@ -84,6 +84,35 @@ fn command_passes_the_pattern_file_and_only_the_concerned_files() {
 }
 
 #[test]
+fn typescript_and_javascript_files_are_targets() {
+    let files = ctx(&[
+        "src/a.ts",
+        "src/b.tsx",
+        "src/c.mts",
+        "src/d.cts",
+        "src/e.js",
+        "src/f.jsx",
+        "src/g.mjs",
+        "src/h.cjs",
+        "package.json",
+        "tsconfig.json",
+    ]);
+    assert_eq!(
+        targets(&files, ""),
+        [
+            "src/a.ts",
+            "src/b.tsx",
+            "src/c.mts",
+            "src/d.cts",
+            "src/e.js",
+            "src/f.jsx",
+            "src/g.mjs",
+            "src/h.cjs"
+        ]
+    );
+}
+
+#[test]
 fn fixture_files_are_never_targets() {
     let files = ctx(&[
         "tests/fixtures/semgrep/planted/tests/clock.rs",

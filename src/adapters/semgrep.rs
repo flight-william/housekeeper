@@ -4,7 +4,7 @@
 //! that variable is set, else the `patterns/` of this crate, baked in at build time.
 
 use super::Exits;
-use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
+use crate::adapter::{Adapter, CannotCheck, Command, Context, JS_EXTENSIONS, Output};
 use crate::finding::{Finding, Place};
 use report::{Problem, Report};
 
@@ -14,6 +14,7 @@ mod tests;
 
 pub struct Semgrep;
 
+/// The extensions Semgrep scans, with `JS_EXTENSIONS`.
 const EXTENSIONS: [&str; 5] = [".py", ".swift", ".rs", ".sh", ".bash"];
 
 /// Semgrep exits 0 after a scan (with or without results), 1 with results only
@@ -47,7 +48,13 @@ fn targets(ctx: &Context, semgrepignore: &str) -> Vec<String> {
         .collect();
     ctx.files
         .iter()
-        .filter(|f| EXTENSIONS.iter().any(|ext| f.ends_with(ext)) || ctx.languages.contains_key(*f))
+        .filter(|f| {
+            EXTENSIONS
+                .iter()
+                .chain(&JS_EXTENSIONS)
+                .any(|ext| f.ends_with(ext))
+                || ctx.languages.contains_key(*f)
+        })
         .filter(|f| !ignored.iter().any(|prefix| f.starts_with(prefix)))
         .cloned()
         .collect()
