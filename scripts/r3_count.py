@@ -2,9 +2,9 @@
 
 Usage: python3 -I r3_count.py <file>...   (paths relative to the current folder)
 Prints one JSON line per violation: {file, kind: "file"|"function", name, lines, limit}.
-Function lengths come from Python's ast; .rs and .swift get file length only
-(their functions come from clippy and SwiftLint). A file that does not parse
-yields no function lines; ruff reports it.
+Function lengths come from Python's ast; .rs, .swift and JavaScript/TypeScript
+files get file length only (their functions come from clippy, SwiftLint and
+ESLint). A file that does not parse yields no function lines; ruff reports it.
 """
 
 import ast
@@ -15,6 +15,8 @@ import sys
 FILE_LIMIT = 400
 FUNCTION_LIMIT = 60
 SHELLS = re.compile(r"^#!.*\b(sh|bash|zsh|dash|ksh)\b")
+NODE = re.compile(r"^#!.*\bnode\b")
+SOURCE = (".rs", ".swift", ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs")
 
 
 def functions(text):
@@ -46,13 +48,13 @@ def functions(text):
 
 
 def language(rel, text):
-    """'python', 'shell' or 'source' (.rs, .swift) for the code the limits apply to."""
+    """'python', 'shell' or 'source' (.rs, .swift, JS/TS) for the code the limits apply to."""
     first = text.split("\n", 1)[0]
     if rel.endswith(".py") or (first.startswith("#!") and "python" in first):
         return "python"
     if rel.endswith((".sh", ".bash")) or SHELLS.match(first):
         return "shell"
-    if rel.endswith((".rs", ".swift")):
+    if rel.endswith(SOURCE) or NODE.match(first):
         return "source"
     return None
 

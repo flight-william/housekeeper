@@ -2,7 +2,7 @@
 //! `.house.toml` naming the tools the repo's files need, and the tool settings that
 //! fit the code it finds (`settings`).
 
-use crate::adapter::{Adapter, CannotCheck, Context, Stage};
+use crate::adapter::{Adapter, CannotCheck, Context, JS_EXTENSIONS, Stage};
 use crate::config;
 use crate::files::{languages, repo_root, tracked};
 use crate::run::git;
@@ -66,7 +66,7 @@ pub fn init_with_owner(
 ) -> Result<Vec<String>, CannotCheck> {
     let root = repo_root(cwd)?;
     let mut said = hooks(&root)?;
-    said.push(starter_config(&root, all)?);
+    said.extend(starter_config(&root, all)?);
     said.extend(settings::swift_format(&root)?);
     said.push(codeowners(&root, owner)?);
     Ok(said)
@@ -144,13 +144,36 @@ fn codeowners(root: &Path, owner: Option<&str>) -> Result<String, CannotCheck> {
     Ok(format!("house init: wrote {CODEOWNERS_PATH} for {handle}"))
 }
 
-fn starter_config(root: &Path, all: Vec<Box<dyn Adapter>>) -> Result<String, CannotCheck> {
+/// The ESLint rules that hold a JavaScript or TypeScript function and file to house's
+/// R3 limits (60 and 400 lines, as scripts/r3_count.py counts the other languages).
+pub const ESLINT_R3_RULES: &str =
+    r#"rules: { "max-lines-per-function": ["error", 60], "max-lines": ["error", 400] }"#;
+
+/// In a JavaScript or TypeScript repo, the starter's note on R3 (its comment lines in
+/// `.house.toml`) and the line init prints: house counts no JS/TS function, ESLint does
+/// when the repo's config asks it to.
+fn eslint_size_note(node: bool) -> Option<(String, String)> {
+    node.then(|| {
+        let comment = format!(
+            "\n# TypeScript and JavaScript: R3 function length is ESLint's, set in eslint.config at\n\
+             # the house limits: {ESLINT_R3_RULES}\n\
+             # r3 owns file length and drops ESLint's max-lines when it runs; max-lines keeps\n\
+             # the limit in editors.\n"
+        );
+        let said = format!(
+            "house init: R3 function length in TypeScript and JavaScript is ESLint's; add to eslint.config: {ESLINT_R3_RULES}"
+        );
+        (comment, said)
+    })
+}
+
+fn starter_config(root: &Path, all: Vec<Box<dyn Adapter>>) -> Result<Vec<String>, CannotCheck> {
     let path = root.join(config::FILE);
     if path.exists() {
-        return Ok(format!(
+        return Ok(vec![format!(
             "house init: {} already exists; left as it is",
             config::FILE
-        ));
+        )]);
     }
     let files = tracked(root)?;
     let ctx = Context {
@@ -168,24 +191,40 @@ fn starter_config(root: &Path, all: Vec<Box<dyn Adapter>>) -> Result<String, Can
         "swift-format" => !swiftformat,
         _ => a.runs_by_default(),
     };
+    // A JavaScript or TypeScript repo: a tsconfig.json (so its tools are listed before
+    // its first code file is) or a JS/TS file. Not a package.json alone: a Python or
+    // Rust repo may hold one for a tool it runs.
+    let node = ctx.files.iter().any(|f| {
+        Path::new(f).file_name() == Some("tsconfig.json".as_ref())
+            || JS_EXTENSIONS.iter().any(|ext| f.ends_with(ext))
+    });
+    let node_tool = |a: &dyn Adapter| {
+        node && matches!(a.name(), "prettier" | "eslint" | "tsc" | "semgrep" | "r3")
+    };
     let names: Vec<String> = all
         .iter()
-        .filter(|a| starter(a.as_ref()) && a.command(&ctx).is_some())
+        .filter(|a| starter(a.as_ref()) && (node_tool(a.as_ref()) || a.command(&ctx).is_some()))
         .map(|a| format!("\"{}\"", a.name()))
         .collect();
+    let note = eslint_size_note(node);
     let text = format!(
         "# house: the tools each stage runs, by adapter name.\n\
          # Without a list, every tool runs and skips itself when no file concerns it.\n\
          [tools]\n\
-         commit = [{}]\n",
-        names.join(", ")
+         commit = [{}]\n{}",
+        names.join(", "),
+        note.as_ref().map_or("", |(comment, _)| comment.as_str())
     );
     std::fs::write(&path, text).map_err(|e| io_cannot(&path, e))?;
-    Ok(format!(
+    let wrote = format!(
         "house init: wrote {} with tools [{}]",
         config::FILE,
         names.join(", ")
-    ))
+    );
+    Ok([wrote]
+        .into_iter()
+        .chain(note.map(|(_, said)| said))
+        .collect())
 }
 
 fn make_executable(path: &Path) -> Result<(), CannotCheck> {

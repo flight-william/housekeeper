@@ -117,7 +117,7 @@ fn a_first_line_names_its_language_by_the_interpreter() {
         ("#! /bin/sh -e", shell),
         ("#!/bin/zsh", None),
         ("#!/usr/bin/env zsh", None),
-        ("#!/usr/bin/env node", None),
+        ("#!/usr/bin/env node", Some(Language::Node)),
         ("#!/usr/bin/pythonista", None),
         ("import os", None),
         ("", None),

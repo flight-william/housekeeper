@@ -1,0 +1,3 @@
+[warn] src/bad.ts
+[warn] src/tool
+[warn] Code style issues found in 2 files. Run Prettier with --write to fix.

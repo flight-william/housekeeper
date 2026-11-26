@@ -1,8 +1,8 @@
 //! R2, R3, R4 for Rust: clippy's JSON messages, one finding per lint.
 //! The thresholds (60 lines, 6 arguments) live in the project's `clippy.toml`.
 
-use super::cargo_fmt::{listed, manifests, relative};
-use super::{Exits, path_value};
+use super::cargo_fmt::{manifests, relative};
+use super::{Exits, listed, path_value};
 use crate::adapter::{Adapter, CannotCheck, Command, Context, Output};
 use crate::finding::{Finding, Measure, Place};
 use serde_json::Value;

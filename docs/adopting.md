@@ -79,7 +79,8 @@ exclude = ["Generated/", "vendor/", "third_party/"]
 ```
 
 Then, if the project was never formatted, format it once, in a commit of its own with
-nothing else in it (`swift format --in-place --recursive .`, `ruff format`, `cargo fmt`),
+nothing else in it (`swift format --in-place --recursive .`, `ruff format`, `cargo fmt`,
+`node_modules/.bin/prettier --write .`),
 and run its tests on that commit. Do this **before** you count the excuse list. Layout
 findings are fixed by the tool in seconds; excusing them only builds a list of thousands of
 entries that cannot meet a 56-day deadline. The format commit touches many files, so pick a

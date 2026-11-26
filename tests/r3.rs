@@ -107,3 +107,72 @@ fn real_script_matches_the_fixture() {
     w.sort();
     assert_eq!(g, w);
 }
+
+#[test]
+fn command_takes_the_javascript_and_typescript_files_and_node_scripts() {
+    let mut c = ctx(&[
+        "a.ts", "b.tsx", "c.mts", "d.cts", "e.js", "f.jsx", "g.mjs", "h.cjs", "x.json", "bin/tool",
+    ]);
+    c.languages
+        .insert("bin/tool".into(), house::adapter::Language::Node);
+    let cmd = R3.command(&c).unwrap();
+    assert_eq!(
+        cmd.args[2..],
+        [
+            "a.ts", "b.tsx", "c.mts", "d.cts", "e.js", "f.jsx", "g.mjs", "h.cjs", "bin/tool"
+        ]
+    );
+}
+
+/// The real script on a 401-line file of every extension r3 hands it, taken from the
+/// Rust lists themselves (r3's `EXTENSIONS` and `JS_EXTENSIONS`), a 400-line one, and
+/// a 401-line `node` script with no extension: the script must count every one, so
+/// the lists in scripts/r3_count.py cannot fall behind them.
+#[test]
+fn real_script_counts_a_file_of_every_extension_r3_hands_it() {
+    let dir = std::env::temp_dir().join(format!("house-r3-every-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let lines = |n: usize| "x\n".repeat(n);
+    let long: Vec<String> = house::adapters::r3::EXTENSIONS
+        .iter()
+        .chain(&house::adapter::JS_EXTENSIONS)
+        .map(|ext| format!("f{ext}"))
+        .chain(["tool".to_string()])
+        .collect();
+    for name in &long {
+        let text = if name == "tool" {
+            format!("#!/usr/bin/env node\n{}", lines(400))
+        } else {
+            lines(401)
+        };
+        std::fs::write(dir.join(name), text).unwrap();
+    }
+    std::fs::write(dir.join("ok.ts"), lines(400)).unwrap();
+    let script = concat!(env!("CARGO_MANIFEST_DIR"), "/scripts/r3_count.py");
+    let run = std::process::Command::new("python3")
+        .args(["-I", script])
+        .args(&long)
+        .arg("ok.ts")
+        .current_dir(&dir)
+        .output()
+        .expect("python3 must be installed: this test runs the real scripts/r3_count.py");
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let found = R3
+        .parse(&ctx(&[]), &out(0, &String::from_utf8(run.stdout).unwrap()))
+        .unwrap();
+    let mut got: Vec<String> = found
+        .iter()
+        .map(|f| format!("{} {}", house::reply::place_text(&f.place), f.what))
+        .collect();
+    let mut want: Vec<String> = long
+        .iter()
+        .map(|n| format!("{n} file has 401 lines, limit is 400"))
+        .collect();
+    got.sort();
+    want.sort();
+    assert_eq!(got, want);
+}

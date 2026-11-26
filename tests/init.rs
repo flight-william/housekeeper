@@ -131,3 +131,115 @@ fn an_existing_codeowners_is_never_overwritten() {
 fn init_protected_is_the_approval_list_itself() {
     assert!(std::ptr::eq(&init::PROTECTED, &house::approval::PROTECTED));
 }
+
+/// The starter `[tools] commit` list `house init` writes in a repo holding `files`.
+fn starter_tools(name: &str, files: &[(&str, &str)]) -> String {
+    let repo = bare_repo(name);
+    for (path, text) in files {
+        let file = repo.join(path);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, text).unwrap();
+    }
+    common::git(&repo, &["add", "-A"]);
+    run(&repo, None);
+    let cfg = std::fs::read_to_string(repo.join(".house.toml")).unwrap();
+    house::config::parse(&cfg).unwrap();
+    cfg.lines()
+        .find(|l| l.starts_with("commit = "))
+        .unwrap()
+        .to_string()
+}
+
+#[test]
+fn a_typescript_repo_starts_with_prettier_eslint_tsc_r3_gitleaks_and_semgrep() {
+    let line = starter_tools(
+        "init-ts",
+        &[
+            ("package.json", "{}\n"),
+            ("tsconfig.json", "{}\n"),
+            ("src/app.ts", "export const a = 1;\n"),
+        ],
+    );
+    assert_eq!(
+        line,
+        r#"commit = ["prettier", "eslint", "tsc", "gitleaks", "semgrep", "r3"]"#
+    );
+}
+
+#[test]
+fn a_tsconfig_names_the_javascript_tools_before_any_code_exists() {
+    let line = starter_tools("init-tsconfig", &[("tsconfig.json", "{}\n")]);
+    assert_eq!(
+        line,
+        r#"commit = ["prettier", "eslint", "tsc", "gitleaks", "semgrep", "r3"]"#
+    );
+}
+
+#[test]
+fn a_javascript_file_names_the_javascript_tools() {
+    let line = starter_tools(
+        "init-js",
+        &[
+            ("package.json", "{}\n"),
+            ("tools/build.mjs", "export {};\n"),
+        ],
+    );
+    assert_eq!(
+        line,
+        r#"commit = ["prettier", "eslint", "tsc", "gitleaks", "semgrep", "r3"]"#
+    );
+}
+
+#[test]
+fn a_package_json_alone_is_not_a_javascript_repo() {
+    // A Python or Rust repo may hold a package.json for a tool it runs.
+    let line = starter_tools(
+        "init-pkg",
+        &[("package.json", "{}\n"), ("main.py", "x = 1\n")],
+    );
+    assert_eq!(
+        line,
+        r#"commit = ["ruff", "ruff-format", "gitleaks", "semgrep", "r3"]"#
+    );
+}
+
+/// What `house init` printed and the `.house.toml` it wrote, in a repo holding `files`.
+fn init_said(name: &str, files: &[(&str, &str)]) -> (Vec<String>, String) {
+    let repo = bare_repo(name);
+    for (path, text) in files {
+        let file = repo.join(path);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, text).unwrap();
+    }
+    common::git(&repo, &["add", "-A"]);
+    let said = run(&repo, None);
+    let cfg = std::fs::read_to_string(repo.join(".house.toml")).unwrap();
+    (said, cfg)
+}
+
+/// The ESLint rules that hold a JS/TS function and file to house's R3 limits.
+const R3_RULES: &str =
+    r#"rules: { "max-lines-per-function": ["error", 60], "max-lines": ["error", 400] }"#;
+
+#[test]
+fn a_typescript_repo_is_told_to_set_eslints_size_rules_at_the_house_limits() {
+    let (said, cfg) = init_said(
+        "init-ts-r3",
+        &[("tsconfig.json", "{}\n"), ("a.ts", "export {};\n")],
+    );
+    assert!(cfg.contains(R3_RULES), "{cfg}");
+    house::config::parse(&cfg).unwrap();
+    assert!(
+        said.iter().any(|l| l
+            .contains("R3 function length in TypeScript and JavaScript is ESLint's")
+            && l.contains(R3_RULES)),
+        "{said:?}"
+    );
+}
+
+#[test]
+fn a_python_repo_is_not_told_about_eslint() {
+    let (said, cfg) = init_said("init-py-r3", &[("main.py", "x = 1\n")]);
+    assert!(!cfg.contains("max-lines"), "{cfg}");
+    assert!(!said.iter().any(|l| l.contains("ESLint")), "{said:?}");
+}

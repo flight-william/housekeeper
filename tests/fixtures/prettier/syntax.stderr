@@ -1,0 +1,5 @@
+[error] src/broken.ts: SyntaxError: Expression expected. (1:11)
+[error] > 1 | const x = ;
+[error]     |           ^
+[error]   2 |
+[warn] src/bad.ts
