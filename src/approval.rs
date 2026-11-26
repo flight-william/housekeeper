@@ -15,7 +15,9 @@ use std::path::Path;
 /// `.ſwiftformat` and `.ruff.toml` to the same file). The tools' settings count by name in any folder,
 /// since each tool reads the nearest one. The one definition: `house init` writes
 /// these, with `.house.toml`'s `[protected] extra`, into CODEOWNERS through
-/// `init::PROTECTED`, a re-export of this static.
+/// `init::PROTECTED`, a re-export of this static. The JavaScript tools' settings are
+/// listed by the extensions the tools load, so a note named like one is not protected;
+/// ESLint's are the flat config only, the one kind house runs.
 pub static PROTECTED: &[&str] = &[
     ".house.toml",
     ".house-excuses.toml",
@@ -43,12 +45,32 @@ pub static PROTECTED: &[&str] = &[
     "**/.cargo/config.toml",
     "**/.cargo/config",
     "**/package.json",
-    "**/eslint.config.*",
-    "**/.eslintrc*",
-    "**/.eslintignore",
-    "**/tsconfig*.json",
-    "**/.prettierrc*",
-    "**/prettier.config.*",
+    "**/eslint.config.js",
+    "**/eslint.config.mjs",
+    "**/eslint.config.cjs",
+    "**/eslint.config.ts",
+    "**/eslint.config.mts",
+    "**/eslint.config.cts",
+    "**/tsconfig.json",
+    "**/tsconfig.*.json",
+    "**/.prettierrc",
+    "**/.prettierrc.json",
+    "**/.prettierrc.yaml",
+    "**/.prettierrc.yml",
+    "**/.prettierrc.json5",
+    "**/.prettierrc.toml",
+    "**/.prettierrc.js",
+    "**/.prettierrc.mjs",
+    "**/.prettierrc.cjs",
+    "**/.prettierrc.ts",
+    "**/.prettierrc.mts",
+    "**/.prettierrc.cts",
+    "**/prettier.config.js",
+    "**/prettier.config.mjs",
+    "**/prettier.config.cjs",
+    "**/prettier.config.ts",
+    "**/prettier.config.mts",
+    "**/prettier.config.cts",
     "**/.prettierignore",
 ];
 

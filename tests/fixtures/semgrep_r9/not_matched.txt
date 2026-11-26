@@ -47,3 +47,4 @@ r9-ts-ignore typescript/clean.ts: export const notes = "// @ts-ignore and /* @ts
 r9-js-eslint-disable javascript/clean.js: export const notes = "// eslint-disable-next-line no-console";
 r9-js-test-skip typescript/clean.test.ts: it("skips rows", () => expect(page.skip(1)).toEqual([2, 3]));
 r9-js-test-only typescript/clean.test.ts: it("names one row", () => expect(page.only(0)).toBe(1));
+r9-js-test-skip typescript/chained.test.tsx: it.concurrent("runs", () => <div>ok</div>);

@@ -112,8 +112,10 @@ rules:
     message: "a `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck` comment silences tsc"
     metadata:
       fix: "remove the comment and fix the type error"
+    # As tsc reads it: after `//` or `/*`, any run of `/`, `*` and spaces (`/** @ts-ignore */`),
+    # or a line of a block comment that starts with `*` (` * @ts-ignore */`).
     patterns:
-      - pattern-regex: '(//|/\*)\s*@ts-(ignore|expect-error|nocheck)\b'
+      - pattern-regex: '(?m)(//|/\*|^[ \t]*\*)[/* \t]*@ts-(ignore|expect-error|nocheck)\b'
       - pattern-not-inside: '"..."'
 
   - id: r9-js-eslint-disable
@@ -135,20 +137,21 @@ rules:
     message: "a `.skip` or `x`-prefixed test turns a test off"
     metadata:
       fix: "remove the skip and make the test pass"
-    # Jest, Vitest and Mocha names only: `.skip` on another object is not matched.
-    # Node's test runner options (`{ skip: true }`) are not matched.
+    # A call whose callee is a Jest, Vitest or Mocha test name followed by a chain
+    # that holds skip or skipIf, in any order (`it.concurrent.skip`, `test.skip.each`,
+    # `test.skip.failing`), so `.skip` on another object is not matched. Node's test
+    # runner options (`{ skip: true }`) are not matched.
     pattern-either:
       - patterns:
-          - pattern-either:
-              - pattern: $T.skip(...)
-              - pattern: $T.skip.each(...)
-              - pattern: $T.skipIf(...)
+          - pattern: $F(...)
           - metavariable-regex:
-              metavariable: $T
-              regex: ^(it|test|describe|context|suite)$
+              metavariable: $F
+              regex: ^(it|test|describe|context|suite|specify)(\.\w+)*\.(skip|skipIf)(\.\w+)*$
       - pattern: xit(...)
       - pattern: xtest(...)
       - pattern: xdescribe(...)
+      - pattern: xcontext(...)
+      - pattern: xspecify(...)
 
   - id: r9-js-test-only
     languages: [typescript, javascript]
@@ -156,14 +159,13 @@ rules:
     message: "a `.only` or `f`-prefixed test turns every other test in the file off"
     metadata:
       fix: "remove the only so the whole suite runs"
+    # The same test names and chains as r9-js-test-skip, holding only.
     pattern-either:
       - patterns:
-          - pattern-either:
-              - pattern: $T.only(...)
-              - pattern: $T.only.each(...)
+          - pattern: $F(...)
           - metavariable-regex:
-              metavariable: $T
-              regex: ^(it|test|describe|context|suite)$
+              metavariable: $F
+              regex: ^(it|test|describe|context|suite|specify)(\.\w+)*\.only(\.\w+)*$
       - pattern: fit(...)
       - pattern: fdescribe(...)
 

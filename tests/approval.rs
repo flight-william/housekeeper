@@ -1,6 +1,6 @@
 //! The approval check: protected paths need the owner's line.
 
-use house::approval::{PROTECTED, check, glob_matches};
+use house::approval::{PROTECTED, check, glob_matches, wrong_case};
 use house::finding::Place;
 
 fn s(v: &[&str]) -> Vec<String> {
@@ -132,9 +132,9 @@ fn swiftformat_settings_are_protected_in_any_folder() {
     }
 }
 
-/// ESLint, tsc and Prettier settings, in every spelling the tools read, in any folder:
-/// each can turn its tool off for the files below it, and package.json can hold the
-/// ESLint and Prettier settings itself (`eslintConfig`, `prettier`).
+/// ESLint, tsc and Prettier settings, by the names the tools load, in any folder: each
+/// can turn its tool off for the files below it, and package.json can hold the ESLint and
+/// Prettier settings itself (`eslintConfig`, `prettier`).
 #[test]
 fn typescript_tool_settings_are_protected_in_any_folder() {
     for path in [
@@ -142,29 +142,59 @@ fn typescript_tool_settings_are_protected_in_any_folder() {
         "web/package.json",
         "eslint.config.js",
         "eslint.config.mjs",
+        "eslint.config.cjs",
         "web/eslint.config.ts",
-        ".eslintrc",
-        "web/.eslintrc.json",
-        ".eslintrc.cjs",
-        ".eslintignore",
+        "eslint.config.mts",
+        "eslint.config.cts",
         "tsconfig.json",
         "web/tsconfig.json",
         "tsconfig.build.json",
         ".prettierrc",
+        ".prettierrc.json",
         "web/.prettierrc.yaml",
+        ".prettierrc.yml",
+        ".prettierrc.json5",
+        ".prettierrc.toml",
+        ".prettierrc.js",
+        ".prettierrc.mjs",
+        ".prettierrc.cjs",
+        ".prettierrc.ts",
+        ".prettierrc.mts",
+        ".prettierrc.cts",
+        "prettier.config.js",
         "prettier.config.mjs",
+        "prettier.config.cjs",
+        "prettier.config.ts",
+        "prettier.config.mts",
+        "prettier.config.cts",
         ".prettierignore",
     ] {
         assert_eq!(check(&s(&[path]), &protected(), "m").len(), 1, "{path}");
     }
+    // Names no tool of the lane loads: notes, schemas, and the eslintrc files that a
+    // flat-config ESLint (the only kind house runs) never reads.
     for path in [
         "src/eslint.ts",
         "src/tsconfig.ts",
         "docs/prettier.md",
         "package-lock.json",
+        "docs/prettier.config.md",
+        "eslint.config.json",
+        "tsconfig-notes.txt",
+        ".eslintrc",
+        ".eslintrc.json",
+        ".eslintignore",
     ] {
         assert!(check(&s(&[path]), &protected(), "m").is_empty(), "{path}");
     }
+}
+
+/// A file that only looks like a tool's settings in another case is not a settings-case
+/// finding, which no approval line clears.
+#[test]
+fn typescript_look_alikes_in_another_case_are_not_settings_case_findings() {
+    let changed = s(&["docs/Prettier.config.md", "web/TSConfig-Notes.json"]);
+    assert!(wrong_case(&changed, &protected()).is_empty());
 }
 
 /// The Rust tools' settings at the repo root, where cargo-deny, clippy and rustfmt

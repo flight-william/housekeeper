@@ -54,18 +54,28 @@ R17 ✓ Commit messages are records: `area: what changed`, then Why:, Proof:, Un
 | R17 Commit messages | any language | ← | ← | ← | ← |
 
 Other languages get only the language-free checks: R2 secrets, R7 tests, R9 approvals, R17.
-TypeScript and JavaScript files go to Semgrep for R9: an `eslint-disable` comment (all three
-forms), a `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck` comment, a skipped test
-(`it.skip`, `describe.skip`, `test.skip.each`, `it.skipIf`, `xit`, `xtest`, `xdescribe`) and
-a focused one (`.only`, `fit`, `fdescribe`) are findings; the same text inside a string is
-not. Only the Jest, Vitest and Mocha names count (`it`, `test`, `describe`, `context`,
-`suite`), so `.skip` on another object is left alone, and Node's `{ skip: true }` test
-option and a `// prettier-ignore` comment are not reported. They have no R8 rules yet.
-Their tools' settings are protected files in any folder: `package.json` (it can hold
-`eslintConfig` and `prettier`), `eslint.config.*`, `.eslintrc*`, `.eslintignore`,
-`tsconfig*.json`, `.prettierrc*`, `prettier.config.*` and `.prettierignore`. So a change to
-`package.json`, a dependency bump included, needs the owner's approval line, as a change to
-`pyproject.toml` does.
+TypeScript and JavaScript files go to Semgrep for R9, and these are findings:
+- an `eslint-disable` comment, in all three forms;
+- a `@ts-ignore`, `@ts-expect-error` or `@ts-nocheck` comment, as tsc reads it
+  (`/** @ts-ignore */` and a block comment's ` * @ts-ignore */` line count);
+- a skipped test: a call on `it`, `test`, `describe`, `context`, `suite` or `specify`
+  whose chain holds `skip` or `skipIf` (`it.skip`, `it.concurrent.skip`, `test.skip.each`,
+  `test.skip.failing`), or `xit`, `xtest`, `xdescribe`, `xcontext`, `xspecify`;
+- a focused test: the same names with `only` in the chain, or `fit`, `fdescribe`.
+
+The same text inside a string is not a finding; inside JSX text it is. `.skip` on another
+object is left alone, and Node's `{ skip: true }` test option and a `// prettier-ignore`
+comment are not reported. They have no R8 rules yet.
+
+Their tools' settings are protected files in any folder, by the names the tools load:
+`package.json` (it can hold `eslintConfig` and `prettier`), `eslint.config.*`,
+`prettier.config.*` and `.prettierrc.*` with a js, mjs, cjs, ts, mts or cts extension
+(`.prettierrc` also bare and as json, yaml, yml, json5 or toml), `tsconfig.json`,
+`tsconfig.*.json` and `.prettierignore`. A `.eslintrc*` or `.eslintignore` is not: house runs
+ESLint only with a flat `eslint.config.*`, which reads neither. A change to `package.json`,
+a dependency bump included, needs the owner's approval line, as a change to `pyproject.toml`
+does. A repo adopted before 0.5.0 keeps its CODEOWNERS (`house init` leaves an existing one
+alone); add these lines to it by hand.
 
 A commit message's `Co-Authored-By:` line is optional, its key read in any case as git reads
 it (GitHub writes `Co-authored-by:`), and only in the final trailer block, the `Key: value`
